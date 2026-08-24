@@ -1,4 +1,5 @@
 /// <reference types="vitest" />
+import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { viteSingleFile } from 'vite-plugin-singlefile'
@@ -13,6 +14,7 @@ export default defineConfig({
     outDir: '../dist',
     emptyOutDir: true,
     rollupOptions: {
+      input: fileURLToPath(new URL('./balance.html', import.meta.url)),
       output: { inlineDynamicImports: true },
     },
   },

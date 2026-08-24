@@ -7,7 +7,7 @@
 
 <main>
   <header>
-    <p class="eyebrow">MF-RepSal — refonte en cours</p>
+    <p class="eyebrow">Balance — refonte en cours</p>
     <h1>Répartiteur de <em>répétitions</em></h1>
     <p class="hint">
       Scaffold Svelte + TypeScript + Vite. Le prototype hérité reste à la racine du
