@@ -5,6 +5,8 @@
   import type { Inscriptions } from './domain/model'
   import { Lieu, Session, libellePersonne } from './domain/model'
   import { attribuerSalles } from './engine/allocate-rooms'
+  import type { IdContrainte } from './engine/contraintes'
+  import { REGISTRE_TOUT, registrePersonnalise } from './engine/contraintes'
   import { repartir } from './engine/solver'
   import type { Assignation, Probleme } from './engine/types'
   import { couverture, verifier } from './engine/verify'
@@ -84,6 +86,25 @@
   let solution = $state<Solution | null>(null)
   let calculEnCours = $state(false)
   let vue = $state<'groupes' | 'salles' | 'musiciens'>('groupes')
+  let contraintesActives = $state<Record<IdContrainte, boolean>>({
+    'personne-unique-moment': true,
+    'salle-unique-groupe': true,
+    'jauge-salle': true,
+    'personne-indispo': true,
+    'avant-butoir': true,
+    'salle-hors-creneau': true,
+    'creneaux-consecutifs': true,
+  })
+
+  const LIBELLE_CONTRAINTE: Record<IdContrainte, string> = {
+    'personne-unique-moment': 'Une personne à un seul endroit à la fois',
+    'salle-unique-groupe': 'Une salle à un seul groupe à la fois',
+    'jauge-salle': 'Effectif ≤ jauge de la salle',
+    'personne-indispo': 'Respect des indisponibilités déclarées',
+    'avant-butoir': 'Répétitions avant la date butoir',
+    'salle-hors-creneau': 'Salle attribuée ouverte au créneau',
+    'creneaux-consecutifs': 'Pas deux répétitions accolées pour un même groupe',
+  }
 
   const creneaux = $derived.by(() => {
     try {
@@ -133,9 +154,13 @@
     calculEnCours = true
     await new Promise((r) => setTimeout(r, 20))
     const t0 = performance.now()
-    const { placement } = repartir(session, lieu, inscriptions, creneaux, { seed: 42 })
+    const ids = (Object.entries(contraintesActives) as [IdContrainte, boolean][])
+      .filter(([, v]) => v)
+      .map(([k]) => k)
+    const registre = registrePersonnalise(ids)
+    const { placement } = repartir(session, lieu, inscriptions, creneaux, { seed: 42, registre })
     const assignations = attribuerSalles(placement, lieu, inscriptions, creneaux)
-    const problemes = verifier(session, lieu, inscriptions, creneaux, assignations)
+    const problemes = verifier(session, lieu, inscriptions, creneaux, assignations, registre)
     const cov = couverture(session, inscriptions, assignations)
     solution = { assignations, problemes, couverture: cov, duree_ms: Math.round(performance.now() - t0) }
     calculEnCours = false
@@ -209,6 +234,27 @@
     session.grille.splice(i, 1)
     solution = null
   }
+
+  /* --- Édition Inscriptions --------------------------------------------- */
+
+  function ajouterGroupe() {
+    inscriptions.groupes.push({
+      id: `groupe-${Date.now().toString(36)}`,
+      titre: 'Nouveau morceau',
+      auteur: '',
+      style: '',
+      tonalite: '',
+      responsable_id: '',
+      membres: [],
+      postes_cherches: [],
+    })
+    solution = null
+  }
+  function supprimerGroupe(i: number) {
+    if (!confirm(`Supprimer « ${inscriptions.groupes[i].titre} » ?`)) return
+    inscriptions.groupes.splice(i, 1)
+    solution = null
+  }
 </script>
 
 <main>
@@ -250,6 +296,47 @@
       </div>
     {/if}
   </section>
+
+  <details class="sheet">
+    <summary>
+      <p class="eyebrow">Étape 1b · Inscriptions</p>
+      <h2>{inscriptions.groupes.length} groupes, {inscriptions.personnes.length} musiciens</h2>
+      <p class="hint">
+        Édition inline titre / responsable / style / tonalité. Les membres se saisissent
+        via le classeur Excel importé — édition détaillée pupitre par pupitre à venir.
+      </p>
+    </summary>
+    <div class="body">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:30px">N°</th>
+            <th>Titre</th>
+            <th style="width:130px">Responsable</th>
+            <th style="width:110px">Style</th>
+            <th style="width:70px">Tona</th>
+            <th style="width:65px">Effectif</th>
+            <th style="width:40px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each inscriptions.groupes as g, i}
+            {@const effectif = new Set(g.membres.map((m) => m.personne_id)).size}
+            <tr>
+              <td class="mono">{i + 1}</td>
+              <td><input bind:value={g.titre} /></td>
+              <td><input bind:value={g.responsable_id} /></td>
+              <td><input bind:value={g.style} /></td>
+              <td><input bind:value={g.tonalite} /></td>
+              <td class="center mono">{effectif}</td>
+              <td class="center"><button class="mini" onclick={() => supprimerGroupe(i)}>×</button></td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+      <button class="ghost" onclick={ajouterGroupe}>+ Ajouter un groupe</button>
+    </div>
+  </details>
 
   <details class="sheet" open>
     <summary>
@@ -339,6 +426,26 @@
         </tbody>
       </table>
       <button class="ghost" onclick={ajouterRegle}>+ Ajouter une règle</button>
+    </div>
+  </details>
+
+  <details class="sheet">
+    <summary>
+      <p class="eyebrow">Étape 2c · Contraintes</p>
+      <h2>Règles activées</h2>
+      <p class="hint">
+        {Object.values(contraintesActives).filter(Boolean).length} / {REGISTRE_TOUT.length}
+        contraintes actives. Désactive une règle pour tester ce qui bloque.
+      </p>
+    </summary>
+    <div class="body">
+      {#each REGISTRE_TOUT as id}
+        <label class="check">
+          <input type="checkbox" bind:checked={contraintesActives[id]} />
+          <span>{LIBELLE_CONTRAINTE[id]}</span>
+          <code>{id}</code>
+        </label>
+      {/each}
     </div>
   </details>
 
@@ -740,6 +847,30 @@
   button.mini:hover { background: #f8e6e3; }
   td.center { text-align: center; }
   td input { padding: 5px 7px; font-size: 12.5px; }
+  label.check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    text-transform: none;
+    font-family: var(--sans);
+    font-size: 14px;
+    color: var(--ink);
+    font-weight: 400;
+    letter-spacing: 0;
+    border-bottom: 1px solid var(--paper-edge);
+    cursor: pointer;
+  }
+  label.check:last-child { border-bottom: none; }
+  label.check input[type='checkbox'] { width: auto; margin: 0; }
+  label.check code {
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-soft);
+    background: transparent;
+    padding: 0;
+  }
 
   /* Impression : conserver la seule vue résultat active, sans formulaires.
      Chaque tableau ne se coupe pas en milieu de ligne. */
