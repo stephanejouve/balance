@@ -97,6 +97,10 @@
   /** Ordre du conducteur, éditable par drag-drop. Recalculé quand solution change. */
   let ordreConducteur = $state<EtapeConcert[]>([])
   let dragIdx = $state<number | null>(null)
+  /** Minutage du conducteur du spectacle. */
+  let cdDebut = $state('18:30')
+  let cdDureeMorceau = $state(6)
+  let cdDureeChange = $state(3)
   /** Case libre survolée dans la carte : affiche les groupes candidats. */
   let inspecteCase = $state<{ creneauId: string; salleId: string } | null>(null)
   /** Seuil de charge par musicien et par jour au-delà duquel on alerte. */
@@ -247,6 +251,29 @@
     const r = ordonnerConcert(inscriptions.groupes)
     ordreConducteur = r.etapes
   }
+
+  /** Minutage : heure de chaque étape et durée totale du spectacle. */
+  interface EtapeMinutee extends EtapeConcert {
+    heure_debut: string
+    heure_fin: string
+    duree_min: number
+  }
+  const conducteurMinuté = $derived.by<{ etapes: EtapeMinutee[]; duree_totale_min: number; heure_fin: string }>(() => {
+    const [dh, dm] = cdDebut.split(':').map(Number)
+    let t = dh * 60 + dm
+    const debut = t
+    const hhmm = (m: number): string =>
+      `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+    const etapes: EtapeMinutee[] = []
+    ordreConducteur.forEach((e, i) => {
+      // Temps de changement entre morceaux (sauf pour le premier)
+      if (i > 0) t += cdDureeChange
+      const heure_debut = hhmm(t)
+      t += cdDureeMorceau
+      etapes.push({ ...e, heure_debut, heure_fin: hhmm(t), duree_min: cdDureeMorceau })
+    })
+    return { etapes, duree_totale_min: t - debut, heure_fin: hhmm(t) }
+  })
 
   function dropOrdre(idxCible: number) {
     if (dragIdx == null || dragIdx === idxCible) return
@@ -1484,16 +1511,33 @@
         {@const stats = statsConducteur(ordreConducteur)}
         <div class="toolbar" style="margin-bottom:14px">
           <button class="ghost" onclick={reordonnerAuto}>Recalculer l'ordre optimal</button>
+          <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;font-size:12.5px;letter-spacing:0;font-weight:400">
+            <span>Début</span>
+            <input type="time" bind:value={cdDebut} style="width:100px" />
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;font-size:12.5px;letter-spacing:0;font-weight:400">
+            <span>Durée / morceau</span>
+            <input type="number" min="1" max="30" bind:value={cdDureeMorceau} style="width:60px" />
+            <span class="mono">min</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;font-size:12.5px;letter-spacing:0;font-weight:400">
+            <span>Changement plateau</span>
+            <input type="number" min="0" max="15" bind:value={cdDureeChange} style="width:60px" />
+            <span class="mono">min</span>
+          </label>
           <span class="grow"></span>
-          <span class="mono ink-soft">{stats.mouvements} mouvement(s) de plateau</span>
+          <span class="mono ink-soft">
+            {stats.mouvements} mouvement(s) · fin
+            <b>{conducteurMinuté.heure_fin}</b>
+            ({Math.floor(conducteurMinuté.duree_totale_min / 60)}h{String(conducteurMinuté.duree_totale_min % 60).padStart(2, '0')})
+          </span>
         </div>
         <p class="hint">
-          Glisse-dépose les lignes pour réordonner à la main. Le compteur de mouvements
-          se met à jour en direct.
+          Glisse-dépose les lignes pour réordonner à la main. Chaque étape affiche son
+          heure de début. Les changements de plateau sont intercalés automatiquement.
         </p>
         <ol class="conducteur">
-          {#each ordreConducteur as etape, i (etape.groupe_id)}
-            {@const g = groupesParId.get(etape.groupe_id)}
+          {#each conducteurMinuté.etapes as etape, i (etape.groupe_id)}
             <li
               draggable="true"
               ondragstart={() => (dragIdx = i)}
@@ -1502,6 +1546,7 @@
               class:dragging={dragIdx === i}
             >
               <span class="num">{i + 1}</span>
+              <span class="heure mono">{etape.heure_debut}</span>
               <span class="corps">
                 <b>{etape.titre}</b>
                 {#if etape.style}<span class="badge">{etape.style}</span>{/if}
@@ -1985,6 +2030,15 @@
     color: var(--ochre);
     width: 30px;
     text-align: center;
+  }
+  ol.conducteur .heure {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+    min-width: 55px;
+    padding: 2px 6px;
+    background: white;
+    border-radius: 2px;
   }
   ol.conducteur .corps { flex: 1; display: flex; align-items: center; gap: 10px; }
   ol.conducteur .mouvements { font-size: 12px; white-space: nowrap; }
