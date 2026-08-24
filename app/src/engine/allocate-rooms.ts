@@ -21,6 +21,12 @@ const SEUIL_GRAND_GROUPE = 6
 
 export interface AttribuerOptions {
   seuil_grand_groupe?: number
+  /**
+   * Assignations pré-existantes (salle incluse) à préserver telles quelles.
+   * Ces couples (groupe, créneau, salle) ne sont pas recalculés — la salle
+   * qu'elles occupent est aussi retirée du pool disponible sur leur créneau.
+   */
+  figees?: readonly Assignation[]
 }
 
 export function attribuerSalles(
@@ -43,7 +49,13 @@ export function attribuerSalles(
   }
 
   const parCreneau = new Map<string, string[]>()
+  const figeesKey = new Set((options.figees ?? []).map((f) => `${f.groupe_id}|${f.creneau_id}`))
+  const figeesParCreneauSalle = new Set(
+    (options.figees ?? []).map((f) => `${f.creneau_id}|${f.salle_id}`),
+  )
   for (const p of placement) {
+    // Les figées sortent du calcul (elles ont déjà leur salle)
+    if (figeesKey.has(`${p.groupe_id}|${p.creneau_id}`)) continue
     if (!parCreneau.has(p.creneau_id)) parCreneau.set(p.creneau_id, [])
     parCreneau.get(p.creneau_id)!.push(p.groupe_id)
   }
@@ -56,7 +68,15 @@ export function attribuerSalles(
   const dejaVues = new Map<string, Set<string>>()
   const dernier = new Map<string, Dernier>()
 
-  const assignations: Assignation[] = []
+  const assignations: Assignation[] = [...(options.figees ?? [])]
+  // Pré-remplit dernier[] avec les figées pour préserver enchaînement
+  for (const f of options.figees ?? []) {
+    const c = creneauxParId.get(f.creneau_id)
+    if (!c) continue
+    dernier.set(f.groupe_id, { date: c.date, fin: c.fin, salle: f.salle_id })
+    if (!dejaVues.has(f.groupe_id)) dejaVues.set(f.groupe_id, new Set())
+    dejaVues.get(f.groupe_id)!.add(f.salle_id)
+  }
 
   const cids = [...parCreneau.keys()].sort((a, b) => {
     const ca = creneauxParId.get(a)
@@ -71,6 +91,7 @@ export function attribuerSalles(
     const restant = new Set(
       creneau.salles.filter((sid) => {
         if (!sallesActives.has(sid)) return false
+        if (figeesParCreneauSalle.has(`${cid}|${sid}`)) return false // salle prise par une figée
         const s = sallesParId.get(sid)
         if (!s) return true
         const restr = salleRestreinte(s, creneau)

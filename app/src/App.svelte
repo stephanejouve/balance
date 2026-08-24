@@ -89,6 +89,8 @@
   let solution = $state<Solution | null>(null)
   let calculEnCours = $state(false)
   let vue = $state<'groupes' | 'salles' | 'musiciens'>('groupes')
+  /** Clés `groupe_id|creneau_id` des assignations à préserver lors des recalculs. */
+  let figeesKeys = $state(new Set<string>())
   let contraintesActives = $state<Record<IdContrainte, boolean>>({
     'personne-unique-moment': true,
     'salle-unique-groupe': true,
@@ -170,11 +172,17 @@
       .filter(([, v]) => v)
       .map(([k]) => k)
     const registre = registrePersonnalise(ids)
+    // Récupère les assignations figées depuis la solution précédente
+    const figees = (solution?.assignations ?? []).filter((a) => figeesKeys.has(`${a.groupe_id}|${a.creneau_id}`))
     // Enrichit les indispos des personnes avec les séances des imposés,
     // pour que le solveur les évite automatiquement.
     const inscEnrichies = enrichirIndispos(inscriptions)
-    const { placement } = repartir(session, lieu, inscEnrichies, creneaux, { seed: 42, registre })
-    const assignations = attribuerSalles(placement, lieu, inscEnrichies, creneaux)
+    const { placement } = repartir(session, lieu, inscEnrichies, creneaux, {
+      seed: 42,
+      registre,
+      figees,
+    })
+    const assignations = attribuerSalles(placement, lieu, inscEnrichies, creneaux, { figees })
     const problemes = verifier(session, lieu, inscEnrichies, creneaux, assignations, registre)
     const cov = couverture(session, inscEnrichies, assignations)
     const diagnostics = diagnostiquer(session, inscriptions, creneaux, placement)
@@ -397,6 +405,25 @@
   function supprimerSeance(imposeIdx: number, seanceIdx: number) {
     inscriptions.imposes[imposeIdx].seances.splice(seanceIdx, 1)
     solution = null
+  }
+
+  /* --- Ajustement manuel : figer/dégeler une répé ------------------------ */
+
+  function keyFigee(a: Assignation): string {
+    return `${a.groupe_id}|${a.creneau_id}`
+  }
+  function estFigee(a: Assignation): boolean {
+    return figeesKeys.has(keyFigee(a))
+  }
+  function toggleFigee(a: Assignation) {
+    const k = keyFigee(a)
+    const next = new Set(figeesKeys)
+    if (next.has(k)) next.delete(k)
+    else next.add(k)
+    figeesKeys = next
+  }
+  function toutDegeler() {
+    figeesKeys = new Set()
   }
 </script>
 
@@ -802,12 +829,22 @@
         <button class:actif={vue === 'salles'} onclick={() => (vue = 'salles')}>Par salle</button>
         <button class:actif={vue === 'musiciens'} onclick={() => (vue = 'musiciens')}>Par musicien</button>
         <span class="grow"></span>
+        {#if figeesKeys.size > 0}
+          <span class="mono ink-soft">{figeesKeys.size} figée{figeesKeys.size > 1 ? 's' : ''}</span>
+          <button class="ghost" onclick={toutDegeler}>Tout dégeler</button>
+        {/if}
         <button class="ghost" onclick={exporterGroupes}>CSV groupes</button>
         <button class="ghost" onclick={exporterSalles}>CSV salles</button>
         <button class="ghost" onclick={exporterMusiciens}>CSV musiciens</button>
         <button class="ghost" onclick={exporterXlsx}>Classeur .xlsx</button>
         <button class="ghost" onclick={() => window.print()}>Imprimer</button>
       </div>
+      {#if figeesKeys.size > 0}
+        <p class="hint">
+          Une répétition figée (cadenas ochre plein) sera préservée lors des relances —
+          le solveur calcule autour. Clique sur le cadenas pour dégeler.
+        </p>
+      {/if}
 
       {#if vue === 'groupes'}
         <table>
@@ -830,9 +867,16 @@
                 <td>{g.responsable_id}</td>
                 <td>
                   {#each cs as { a, c }}
-                    <span class="chip">
+                    <span class="chip" class:figee={estFigee(a)}>
                       {c!.date.slice(5).replace('-', '/')} · {c!.debut}
                       <em>{sallesParId.get(a.salle_id)?.nom ?? a.salle_id}</em>
+                      <button
+                        class="lock"
+                        class:on={estFigee(a)}
+                        onclick={() => toggleFigee(a)}
+                        title={estFigee(a) ? 'Dégeler' : 'Figer cette répétition'}
+                        aria-label={estFigee(a) ? 'Dégeler' : 'Figer'}
+                      ></button>
                     </span>
                   {/each}
                   {#if cs.length === 0}
@@ -851,6 +895,7 @@
               <th>Créneau</th>
               <th>Groupe</th>
               <th>Responsable</th>
+              <th style="width:40px"></th>
             </tr>
           </thead>
           <tbody>
@@ -861,11 +906,22 @@
                 {@const ass = solution.assignations.find((a) => a.creneau_id === c.id && a.salle_id === salle.id)}
                 {@const g = ass ? groupesParId.get(ass.groupe_id) : undefined}
                 {@const resp = g ? personnesParId.get(g.responsable_id) : undefined}
-                <tr class:libre={!ass}>
+                <tr class:libre={!ass} class:figee={ass && estFigee(ass)}>
                   <td>{salle.nom}</td>
                   <td class="mono">{c.date.slice(5).replace('-', '/')} · {c.debut}–{c.fin}</td>
                   <td>{g ? g.titre : '—'}</td>
                   <td>{resp ? libellePersonne(resp) : g?.responsable_id ?? ''}</td>
+                  <td class="center">
+                    {#if ass}
+                      <button
+                        class="lock"
+                        class:on={estFigee(ass)}
+                        onclick={() => toggleFigee(ass)}
+                        title={estFigee(ass) ? 'Dégeler' : 'Figer cette répétition'}
+                        aria-label={estFigee(ass) ? 'Dégeler' : 'Figer'}
+                      ></button>
+                    {/if}
+                  </td>
                 </tr>
               {/each}
             {/each}
@@ -1083,6 +1139,35 @@
     font-size: 11px;
     margin-left: 6px;
   }
+  .chip.figee {
+    background: #fbf2df;
+    border-color: #e6d2a6;
+    border-left-color: var(--ochre);
+  }
+  /* Cadenas SVG minimaliste — inline en background-image pour rester léger */
+  button.lock {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    margin-left: 6px;
+    background: transparent;
+    border: none;
+    vertical-align: -3px;
+    cursor: pointer;
+    opacity: 0.4;
+    transition: opacity 0.15s;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 14px 14px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235B6660' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='4' y='11' width='16' height='10' rx='2'/><path d='M8 11V7a4 4 0 0 1 8 0'/></svg>");
+  }
+  button.lock:hover { opacity: 0.9; }
+  button.lock.on {
+    opacity: 1;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23C8871F' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='4' y='11' width='16' height='10' rx='2' fill='%23FBF2DF'/><path d='M8 11V7a4 4 0 0 1 8 0v4'/></svg>");
+  }
+  tr.figee td { background: #fbf2df; }
   .rouge { color: var(--rouge); font-style: italic; }
   .mono { font-family: var(--mono); font-size: 12px; }
 

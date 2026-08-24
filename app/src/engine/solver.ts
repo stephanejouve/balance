@@ -55,11 +55,23 @@ export function coterDifficulte(
  * etc.) et scoring des candidats. Le seed rend la sortie reproductible.
  */
 
+export interface FigeeItem {
+  groupe_id: string
+  creneau_id: string
+}
+
 export interface RepartirOptions {
   seed?: number
   maxEssais?: number
   /** Registre des contraintes actives. Défaut : toutes actives. */
   registre?: RegistreContraintes
+  /**
+   * Assignations à préserver : le solveur pose ces couples (groupe,
+   * créneau) au démarrage de chaque essai et calcule le reste autour.
+   * Sert à l'ajustement manuel (brief §4) : ce qui est figé n'est plus
+   * touché lors des recalculs.
+   */
+  figees?: readonly FigeeItem[]
 }
 
 export interface PlacementItem {
@@ -318,6 +330,14 @@ export function repartir(
       joursGroupe: new Map(),
     }
     groupes.forEach((g) => e.plan.set(g.id, []))
+
+    // Pré-pose des assignations figées (ajustement manuel).
+    for (const f of options.figees ?? []) {
+      const g = groupes.find((x) => x.id === f.groupe_id)
+      const c = creneauxParId.get(f.creneau_id)
+      if (!g || !c) continue
+      poser(c, g, e)
+    }
 
     for (let tour = 0; tour < cible; tour++) {
       // Essai 0 : ordre par difficulté décroissante (les plus contraints
