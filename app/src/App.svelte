@@ -10,6 +10,7 @@
   import { analyserInfaisabilite, diagnostiquer } from './engine/diagnostic'
   import { enrichirIndispos } from './engine/imposes'
   import { ciblesValides } from './engine/manuel'
+  import { suggererRenforts } from './engine/renforts'
   import { repartir } from './engine/solver'
   import type { Assignation, Probleme } from './engine/types'
   import { couverture, verifier } from './engine/verify'
@@ -971,6 +972,30 @@
                 <td><b>{g.titre}</b></td>
                 <td>{g.responsable_id}</td>
                 <td>
+                  {#if g.postes_cherches.length > 0}
+                    {@const suggestions = suggererRenforts(g, inscriptions, creneaux, solution.assignations)}
+                    <details class="renforts">
+                      <summary>
+                        <span class="badge">cherche {g.postes_cherches.join(', ')}</span>
+                        <span class="mono ink-soft">{suggestions.length} candidat(s)</span>
+                      </summary>
+                      {#if suggestions.length > 0}
+                        <div class="chips" style="margin-top:6px">
+                          {#each suggestions.slice(0, 10) as s}
+                            <span class="chip" title="{s.creneaux_compatibles}/{s.creneaux_du_groupe} créneaux compatibles">
+                              {s.nom}
+                              <em>{s.pupitres_dispo.join(', ')}</em>
+                              <em>{s.creneaux_compatibles}/{s.creneaux_du_groupe}</em>
+                            </span>
+                          {/each}
+                        </div>
+                      {:else}
+                        <p class="hint" style="margin:6px 0 0;font-size:12px">
+                          Personne d'autre ne joue les pupitres cherchés et n'est libre sur ces créneaux.
+                        </p>
+                      {/if}
+                    </details>
+                  {/if}
                   {#each cs as { a, c }}
                     <span class="chip" class:figee={estFigee(a)}>
                       {c!.date.slice(5).replace('-', '/')} · {c!.debut}
@@ -1431,6 +1456,35 @@
   }
   table.carte td.taux { text-align: right; color: var(--ink-soft); }
   table.carte td.taux.hot { color: var(--rouge); font-weight: 600; }
+  details.renforts {
+    display: inline-block;
+    margin: 0 0 8px;
+    padding: 4px 8px;
+    background: rgba(200, 135, 31, 0.08);
+    border-radius: 3px;
+  }
+  details.renforts summary {
+    list-style: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+  }
+  details.renforts summary::-webkit-details-marker { display: none; }
+  .badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    background: #f8eeda;
+    color: #8a5c11;
+    border: 1px solid #e6d2a6;
+    border-radius: 2px;
+    font-weight: 600;
+  }
   .candidats {
     margin-top: 16px;
     padding: 12px 15px;
