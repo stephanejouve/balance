@@ -163,6 +163,62 @@
     erreurImport = ''
     solution = null
   }
+  function nouvelleSessionVide() {
+    if (
+      !confirm(
+        "Repartir de zéro ? Le lieu, la session et toutes les inscriptions actuelles seront remplacés par un modèle vide.",
+      )
+    )
+      return
+    // Lieu : 1 salle générique
+    Object.assign(lieu, {
+      id: 'nouveau-lieu',
+      nom: 'Nouveau lieu',
+      pupitres: ['chant', 'piano', 'basse', 'batterie', 'guitare', 'vents'],
+    })
+    lieu.salles.splice(0, lieu.salles.length, {
+      id: 'salle-1',
+      nom: 'Salle 1',
+      jauge: 8,
+      equipement: [],
+      restrictions: [],
+      actif: true,
+    })
+    // Session : cette semaine, grille type
+    const today = new Date()
+    const iso = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const dansXjours = (n: number) => {
+      const d = new Date(today)
+      d.setDate(d.getDate() + n)
+      return iso(d)
+    }
+    Object.assign(session, {
+      id: 'nouvelle-session',
+      nom: 'Nouvelle session',
+      lieu_id: 'nouveau-lieu',
+      date_debut: iso(today),
+      date_fin: dansXjours(6),
+      date_butoir: dansXjours(6),
+      butoir_heure: '23:59',
+      repetitions_visees: 3,
+      repetitions_min: 2,
+      plafond_morceaux: 13,
+    })
+    session.grille.splice(
+      0,
+      session.grille.length,
+      { jours: [], debut: '09:00', fin: '12:00', pas_minutes: 60, salles: [], bloque: false },
+      { jours: [], debut: '14:00', fin: '18:00', pas_minutes: 60, salles: [], bloque: false },
+    )
+    // Inscriptions vides
+    inscriptions = { session_id: 'nouvelle-session', personnes: [], groupes: [], imposes: [] }
+    sourceLabel = 'nouvelle session (vide)'
+    warningsImport = []
+    erreurImport = ''
+    solution = null
+    figeesKeys = new Set()
+  }
 
   async function importerFichier(e: Event) {
     const cible = e.target as HTMLInputElement
@@ -691,6 +747,7 @@
       ou du jeu de démonstration.
     </p>
     <div class="toolbar">
+      <button class="ghost" onclick={nouvelleSessionVide}>Nouvelle session vide</button>
       <button class="ghost" onclick={utiliserDemo}>Recharger la démo</button>
       <label class="fake-btn">
         Importer .xlsx…
