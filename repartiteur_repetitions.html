@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Répartiteur de répétitions — Session 5</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --board:#26332C; --board-deep:#1B2520; --paper:#FAF9F4; --paper-edge:#E8E5DA;
+  --ink:#1A211D; --ink-soft:#5B6660; --ochre:#C8871F; --craie:#9FC6D8;
+  --rouge:#A83B2E; --vert:#4A7C59; --tape:rgba(255,255,255,.34);
+  --serif:'Instrument Serif',Georgia,serif;
+  --sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--board);color:var(--paper);font-family:var(--sans);font-size:15px;line-height:1.55;
+  background-image:radial-gradient(ellipse at 30% 0%,rgba(255,255,255,.05),transparent 60%);min-height:100vh}
+.wrap{max-width:1180px;margin:0 auto;padding:36px 20px 80px}
+header.top{margin-bottom:34px;border-bottom:1px solid rgba(255,255,255,.16);padding-bottom:22px}
+h1{font-family:var(--serif);font-size:clamp(34px,5vw,54px);line-height:1.02;margin:0 0 8px;font-weight:400;letter-spacing:-.01em}
+h1 em{font-style:italic;color:var(--ochre)}
+.sub{color:rgba(250,249,244,.7);max-width:60ch;margin:0}
+.stats{display:flex;flex-wrap:wrap;gap:26px;margin-top:20px;font-family:var(--mono);font-size:12px;
+  text-transform:uppercase;letter-spacing:.09em;color:var(--craie)}
+.stats b{display:block;font-family:var(--serif);font-size:27px;letter-spacing:0;color:var(--paper);text-transform:none}
+.sheet{background:var(--paper);color:var(--ink);border-radius:2px;padding:26px 28px 30px;margin:0 0 30px;position:relative;
+  box-shadow:0 14px 34px rgba(0,0,0,.34)}
+.sheet::before,.sheet::after{content:"";position:absolute;top:-11px;width:86px;height:23px;background:var(--tape);
+  border-left:1px solid rgba(255,255,255,.2);border-right:1px solid rgba(255,255,255,.2);transform:rotate(-1.4deg)}
+.sheet::before{left:26px}
+.sheet::after{right:26px;transform:rotate(1.6deg)}
+.sheet h2{font-family:var(--serif);font-weight:400;font-size:27px;margin:0 0 4px;letter-spacing:-.01em}
+.sheet .hint{color:var(--ink-soft);font-size:13.5px;margin:0 0 20px;max-width:74ch}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--ochre);
+  margin:0 0 6px;font-weight:600}
+label{display:block;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-soft);margin-bottom:5px;font-weight:600}
+input,textarea,select{width:100%;padding:9px 11px;border:1px solid #CFCBBE;border-radius:2px;background:#fff;
+  font-family:var(--sans);font-size:14.5px;color:var(--ink)}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--ochre);outline-offset:-1px;border-color:var(--ochre)}
+textarea{resize:vertical;min-height:56px;line-height:1.5}
+.grid{display:grid;gap:14px}
+.g5{grid-template-columns:1.25fr 1fr .65fr .85fr 1.15fr 1.15fr}
+.g2{grid-template-columns:1fr 1fr}
+@media(max-width:860px){.g5,.g2{grid-template-columns:1fr}}
+button{font-family:var(--sans);font-weight:600;font-size:14px;padding:10px 20px;border-radius:2px;cursor:pointer;
+  border:1px solid var(--ink);background:var(--ink);color:var(--paper);transition:transform .08s,background .15s}
+button:hover{background:#000}
+button:active{transform:translateY(1px)}
+button.ghost{background:transparent;color:var(--ink)}
+button.ghost:hover{background:#EFEDE4}
+button.big{font-size:16px;padding:15px 34px;background:var(--ochre);border-color:var(--ochre);color:#231703}
+button.big:hover{background:#B0741A}
+button.mini{padding:4px 10px;font-size:12px;font-weight:500}
+button:focus-visible{outline:3px solid var(--craie);outline-offset:2px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-soft);font-weight:600;padding:8px 9px;border-bottom:1.5px solid var(--ink)}
+td{padding:9px;border-bottom:1px solid var(--paper-edge);vertical-align:top}
+tr.imp td{background:#F3F1E8}
+.code{font-family:var(--mono);font-size:12.5px;font-weight:600}
+.tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;padding:2px 7px;
+  border-radius:2px;text-transform:uppercase;font-weight:600}
+.tag.v{background:#E3EEE6;color:var(--vert);border:1px solid #BBD5C3}
+.tag.r{background:#F6E3E0;color:var(--rouge);border:1px solid #E3BDB7}
+.tag.o{background:#F8EEDA;color:#8A5C11;border:1px solid #E6D2A6}
+.chip{display:inline-block;background:#EDEBE1;border:1px solid var(--paper-edge);border-radius:2px;
+  padding:1px 7px;margin:2px 3px 2px 0;font-size:12.5px}
+.chip.dup{background:#F8EEDA;border-color:#E6D2A6;font-weight:600}
+.msg{padding:12px 15px;border-left:3px solid;margin:14px 0;font-size:14px;border-radius:0 2px 2px 0}
+.msg.ok{background:#E8F1EA;border-color:var(--vert)}
+.msg.err{background:#F8E6E3;border-color:var(--rouge)}
+.msg.warn{background:#FBF2DF;border-color:var(--ochre)}
+.day{margin:0 0 22px}
+.dayhead{font-family:var(--serif);font-size:21px;border-bottom:1.5px solid var(--ink);padding-bottom:4px;margin:0 0 10px}
+.slotline{display:grid;grid-template-columns:132px 1fr;gap:14px;padding:8px 0;border-bottom:1px solid var(--paper-edge)}
+.slottime{font-family:var(--mono);font-size:12.5px;color:var(--ink-soft);font-weight:600}
+.booking{display:inline-block;background:#EDF3F6;border:1px solid #C9DCE5;border-left:3px solid var(--craie);
+  padding:4px 9px;margin:0 6px 5px 0;border-radius:0 2px 2px 0;font-size:13px}
+.booking b{font-weight:600}
+.booking .rm{font-family:var(--mono);font-size:11px;color:var(--ink-soft);display:block}
+.free{color:var(--ink-soft);font-size:12.5px;font-style:italic}
+.bar{height:7px;background:#E6E3D8;border-radius:4px;overflow:hidden;min-width:80px}
+.bar span{display:block;height:100%;background:var(--vert)}
+.bar.hot span{background:var(--ochre)}
+.bar.max span{background:var(--rouge)}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.right{margin-left:auto}
+details{margin-top:14px}
+summary{cursor:pointer;font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink-soft);font-weight:600}
+@media print{body{background:#fff;color:#000}.sheet{box-shadow:none;break-inside:avoid}
+ body.impression-ciblee header.top{display:block;border:none;margin:0 0 10pt;padding:0}
+ body.impression-ciblee header.top h1{font-size:17pt}
+ body.impression-ciblee header.top .sub,body.impression-ciblee header.top .stats{display:none}
+ body.impression-ciblee .saisie{display:none}
+ body.impression-ciblee #result .hors-impression{display:none!important}
+ .bloc{break-inside:auto}.bloc h2{break-after:avoid}
+ .day{break-inside:avoid}
+ .sheet::before,.sheet::after{display:none}.noprint{display:none!important}header.top{border-color:#000}
+ h1,.stats b{color:#000}.sub,.stats{color:#333}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body><div class="wrap">
+<header class="top">
+  <p class="eyebrow">Musiques Festives · Session 5 · 23 → 28 août 2026</p>
+  <h1>Qui répète <em>où</em>, et <em>quand</em></h1>
+  <p class="sub">Tu saisis les groupes tels qu'ils s'inscrivent. L'outil cherche une répartition
+  où personne n'est convoqué à deux endroits en même temps et où aucune salle n'est réservée deux fois.</p>
+  <div class="stats">
+    <div><b id="stSlots">21</b>créneaux utilisables</div>
+    <div><b id="stPlaces">68</b>places-salles</div>
+    <div><b id="stVertes">46</b>sans risque</div>
+    <div><b id="stGroupes">0</b>groupes volontaires</div>
+    <div><b id="stMusiciens">0</b>musiciens connus</div>
+    <div><b id="stMorceaux">0</b>morceaux / 13 max</div>
+  </div>
+</header>
+
+<section class="sheet saisie" style="display:none">
+  <p class="eyebrow">Étape 1</p>
+  <h2>Les 12 morceaux imposés</h2>
+  <p class="hint">Leurs répétitions sont déjà fixées par le planning officiel. Note ici <b>qui</b> joue dans
+  chacun : c'est ce qui permet de savoir quand ces musiciens sont déjà pris. Sépare les noms par des virgules.
+  Un morceau sans membre est simplement ignoré.</p>
+  <div id="imposes"></div>
+  <details><summary>Pourquoi 4 vagues ?</summary>
+    <p class="hint" style="margin-top:10px">Les 12 morceaux tournent par groupes de 3 aux mêmes horaires. Une
+    personne peut donc porter jusqu'à 4 imposés — un par vague — sans conflit, mais jamais deux de la même vague.
+    L'outil le vérifie et te le signale.</p>
+    <div id="vagueInfo"></div>
+  </details>
+</section>
+
+<section class="sheet saisie">
+  <p class="eyebrow">Étape 1</p>
+  <h2>Les morceaux et leurs groupes</h2>
+  <p class="hint">Le tableau de la feuille d'inscription, éditable. Clique dans une case, corrige,
+  la modification est prise en compte immédiatement. Les mêmes musiciens peuvent figurer sur
+  plusieurs morceaux, c'est prévu.</p>
+  <div id="tableau"></div>
+  <div class="toolbar" style="margin-top:14px">
+    <button id="addLigne">Ajouter une ligne</button>
+    <span id="addMsg" style="font-size:13px;color:var(--ink-soft)"></span>
+  </div>
+</section>
+
+<section class="sheet noprint" style="text-align:center">
+  <p class="eyebrow">Étape 2</p>
+  <h2 style="margin-bottom:6px">Lancer la répartition</h2>
+  <p class="hint" style="margin:0 auto 16px;text-align:center;max-width:56ch">Pour quelle scène ces groupes
+  se préparent-ils&nbsp;? Toutes les répétitions seront placées <b>avant</b> cette date.</p>
+  <div style="max-width:420px;margin:0 auto 20px;text-align:left">
+    <label for="echeance">Échéance</label>
+    <select id="echeance">
+      <option value="202608261800" selected>Apéro-concert — mercredi 26 à 18:30</option>
+      <option value="202608282100">Grand concert — vendredi 28 à 21:00</option>
+      <option value="999999999999">Aucune — toute la semaine</option>
+    </select>
+    <p class="hint" id="echInfo" style="margin:8px 0 0"></p>
+  </div>
+  <button class="big" id="solveBtn">Répartir les répétitions</button>
+  <p class="hint" style="margin:14px auto 0;text-align:center">L'outil essaie des milliers de combinaisons et
+  garde la meilleure. Relance-le autant de fois que tu veux, il repart de zéro.</p>
+</section>
+
+<div id="result"></div>
+
+<section class="sheet noprint">
+  <h2>Modifier les données directement</h2>
+  <p class="hint">Pour une correction rapide — un nom mal orthographié, un instrument, un poste pourvu.
+  Charge l'état actuel, modifie le texte, applique. Rien n'est écrasé tant que le contenu n'est pas valide.</p>
+  <div class="toolbar" style="margin-bottom:10px">
+    <button class="ghost" id="jsonCharger">Charger l'état actuel</button>
+    <button id="jsonAppliquer">Appliquer les modifications</button>
+    <span id="jsonMsg" style="font-size:13px"></span>
+  </div>
+  <textarea id="jsonZone" spellcheck="false" style="min-height:340px;font-family:var(--mono);
+    font-size:12.5px;line-height:1.45;white-space:pre;overflow-wrap:normal;overflow-x:auto"
+    placeholder="Clique sur « Charger l'état actuel »"></textarea>
+  <details><summary>Structure attendue</summary>
+    <pre style="background:#EFEDE4;padding:10px;border-radius:2px;font-size:12px;overflow-x:auto">{
+ "groupes": [
+  { "nom": "05 · Oye como va", "resp": "Sergio", "ton": "A-", "style": "Latin",
+    "m1": "Oye como va / Tito Puente", "m2": "",
+    "membres": ["Jocelyne (chant)", "Sergio (piano)", "Colette (contrebasse)"],
+    "cherche": "guitare, vents" }
+ ],
+ "membresImposes": { "Lady Bird": ["Marie D. (chant)"] }
+}</pre>
+    <p class="hint" style="margin-top:8px"><b>membres</b> : un nom par entrée, instrument entre
+    parenthèses. <b>cherche</b> : les pupitres non pourvus, séparés par des virgules, ou "".
+    <b>membresImposes</b> : qui joue dans chacun des 12 morceaux du stage.</p>
+  </details>
+</section>
+
+<section class="sheet noprint">
+  <h2>Sauvegarder</h2>
+  <p class="hint">Rien n'est conservé si tu fermes la page. Exporte avant de partir.</p>
+  <div class="toolbar">
+    <button class="ghost" id="expJson">Enregistrer le travail (.json)</button>
+    <button class="ghost" id="impBtn">Recharger un fichier .json</button>
+    <input type="file" id="impFile" accept=".json" style="display:none">
+    <button class="ghost" id="expRoutes">Feuilles de route (.csv)</button>
+    <button class="ghost" id="expSalles">Occupation par salle (.csv)</button>
+    <button class="ghost right" onclick="imprimer('salles')">Imprimer le planning des salles</button>
+  </div>
+  <p id="ioMsg" style="font-size:13px;color:var(--ink-soft);margin:10px 0 0"></p>
+</section>
+</div>
+<script>
+
+const SLOTS_ALL=[{"jour": "Lun 24", "jourLong": "lundi", "heure": "09:00 - 10:00", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608240900, "jourKey": 20260824, "vague": null, "id": "C01", "prio": 16}, {"jour": "Lun 24", "jourLong": "lundi", "heure": "13:30 - 14:30", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608241330, "jourKey": 20260824, "vague": null, "id": "C02", "prio": 16}, {"jour": "Lun 24", "jourLong": "lundi", "heure": "16:30 - 17:30", "salles": ["XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608241630, "jourKey": 20260824, "vague": null, "id": "C03", "prio": 16}, {"jour": "Lun 24", "jourLong": "lundi", "heure": "17:30 - 18:30", "salles": ["XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608241730, "jourKey": 20260824, "vague": null, "id": "C04", "prio": 16}, {"jour": "Lun 24", "jourLong": "lundi", "heure": "18:30 - 19:30", "salles": ["XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608241830, "jourKey": 20260824, "vague": null, "id": "C05", "prio": 16}, {"jour": "Lun 24", "jourLong": "lundi", "heure": "19:30 - 20:30", "salles": ["XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608241930, "jourKey": 20260824, "vague": null, "id": "C06", "prio": 16}, {"jour": "Lun 24", "jourLong": "lundi", "heure": "22:00 - 23:00", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608242200, "jourKey": 20260824, "vague": null, "id": "C07", "prio": 16}, {"jour": "Lun 24", "jourLong": "lundi", "heure": "23:00 - 24:00", "salles": ["Le Garage", "XVème", "Les Clapiers"], "key": 202608242300, "jourKey": 20260824, "vague": null, "id": "C08", "prio": 16}, {"jour": "Mar 25", "jourLong": "mardi", "heure": "09:00 - 10:00", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608250900, "jourKey": 20260825, "vague": null, "id": "C09", "prio": 16}, {"jour": "Mar 25", "jourLong": "mardi", "heure": "13:30 - 14:30", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608251330, "jourKey": 20260825, "vague": null, "id": "C10", "prio": 16}, {"jour": "Mar 25", "jourLong": "mardi", "heure": "22:00 - 23:00", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608252200, "jourKey": 20260825, "vague": null, "id": "C11", "prio": 16}, {"jour": "Mar 25", "jourLong": "mardi", "heure": "23:00 - 24:00", "salles": ["Le Garage", "XVème", "Les Clapiers"], "key": 202608252300, "jourKey": 20260825, "vague": null, "id": "C12", "prio": 16}, {"jour": "Mer 26", "jourLong": "mercredi", "heure": "09:00 - 09:30", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608260900, "jourKey": 20260826, "vague": null, "duree": 30, "id": "C13", "prio": -16}, {"jour": "Mer 26", "jourLong": "mercredi", "heure": "09:30 - 10:00", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608260930, "jourKey": 20260826, "vague": null, "duree": 30, "id": "C14", "prio": -16}, {"jour": "Mer 26", "jourLong": "mercredi", "heure": "13:30 - 14:00", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608261330, "jourKey": 20260826, "vague": null, "duree": 30, "id": "C15", "prio": 0}, {"jour": "Mer 26", "jourLong": "mercredi", "heure": "14:00 - 14:30", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608261400, "jourKey": 20260826, "vague": null, "duree": 30, "id": "C16", "prio": 0}, {"jour": "Jeu 27", "jourLong": "jeudi", "heure": "09:00 - 10:00", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608270900, "jourKey": 20260827, "vague": null, "id": "C17"}, {"jour": "Jeu 27", "jourLong": "jeudi", "heure": "13:30 - 14:30", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608271330, "jourKey": 20260827, "vague": null, "id": "C18"}, {"jour": "Jeu 27", "jourLong": "jeudi", "heure": "14:30 - 15:30", "salles": ["La Chênaie"], "key": 202608271430, "jourKey": 20260827, "vague": 3, "id": "C19"}, {"jour": "Jeu 27", "jourLong": "jeudi", "heure": "16:30 - 17:30", "salles": ["L'Espérance"], "key": 202608271630, "jourKey": 20260827, "vague": 2, "id": "C20"}, {"jour": "Jeu 27", "jourLong": "jeudi", "heure": "18:00 - 19:00", "salles": ["XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608271800, "jourKey": 20260827, "vague": null, "id": "C21"}, {"jour": "Jeu 27", "jourLong": "jeudi", "heure": "21:00 - 22:00", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608272100, "jourKey": 20260827, "vague": null, "id": "C22"}, {"jour": "Jeu 27", "jourLong": "jeudi", "heure": "22:00 - 23:00", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608272200, "jourKey": 20260827, "vague": null, "id": "C23"}, {"jour": "Jeu 27", "jourLong": "jeudi", "heure": "23:00 - 24:00", "salles": ["Le Garage", "XVème", "Les Clapiers"], "key": 202608272300, "jourKey": 20260827, "vague": null, "id": "C24"}, {"jour": "Ven 28", "jourLong": "vendredi", "heure": "09:00 - 10:00", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608280900, "jourKey": 20260828, "vague": null, "id": "C25"}, {"jour": "Ven 28", "jourLong": "vendredi", "heure": "10:00 - 11:00", "salles": ["L'Espérance", "La Chênaie"], "key": 202608281000, "jourKey": 20260828, "vague": 0, "id": "C26"}, {"jour": "Ven 28", "jourLong": "vendredi", "heure": "11:15 - 12:15", "salles": ["L'Espérance", "La Chênaie"], "key": 202608281115, "jourKey": 20260828, "vague": 1, "id": "C27"}, {"jour": "Ven 28", "jourLong": "vendredi", "heure": "13:30 - 14:30", "salles": ["Le Garage", "XVème", "Les Clapiers", "L'Espérance", "La Chênaie"], "key": 202608281330, "jourKey": 20260828, "vague": null, "id": "C28"}, {"jour": "Ven 28", "jourLong": "vendredi", "heure": "14:30 - 15:30", "salles": ["L'Espérance", "La Chênaie"], "key": 202608281430, "jourKey": 20260828, "vague": 3, "id": "C29"}, {"jour": "Ven 28", "jourLong": "vendredi", "heure": "15:45 - 16:45", "salles": ["XVème", "L'Espérance", "La Chênaie"], "key": 202608281545, "jourKey": 20260828, "vague": 2, "id": "C30"}];
+const VAGUES=[{"keys": [202608231430, 202608251630, 202608281000], "morceaux": ["Lady Bird", "On That Morning", "Woman"]}, {"keys": [202608241430, 202608261630, 202608281115], "morceaux": ["Have You Met Miss Jones", "La Ballade de Jim", "Where or When"]}, {"keys": [202608251430, 202608271630, 202608281545], "morceaux": ["Débranche", "Fotografia", "Top of My Head"]}, {"keys": [202608261430, 202608271430, 202608281430], "morceaux": ["Avant Toi", "Capitaine Abandonné", "Just a Song Before I Go"]}];
+const IMPOSES=[{"morceau": "Lady Bird", "vague": 0, "seances": [{"key": 202608231430, "lib": "Dim 23 · 14:30 - 16:00 · XVème · Thierry"}, {"key": 202608251630, "lib": "Mar 25 · 16:30 - 18:00 · Les Clapiers · Thierry"}, {"key": 202608281000, "lib": "Ven 28 · 10:00 - 11:15 · XVème"}]}, {"morceau": "On That Morning", "vague": 0, "seances": [{"key": 202608231430, "lib": "Dim 23 · 14:30 - 16:00 · Le Garage · Bertrand"}, {"key": 202608251630, "lib": "Mar 25 · 16:30 - 18:00 · XVème · Bertrand"}, {"key": 202608281000, "lib": "Ven 28 · 10:00 - 11:15 · Les Clapiers"}]}, {"morceau": "Woman", "vague": 0, "seances": [{"key": 202608231430, "lib": "Dim 23 · 14:30 - 16:00 · Les Clapiers · François"}, {"key": 202608251630, "lib": "Mar 25 · 16:30 - 18:00 · Le Garage · François"}, {"key": 202608281000, "lib": "Ven 28 · 10:00 - 11:15 · Le Garage"}]}, {"morceau": "Have You Met Miss Jones", "vague": 1, "seances": [{"key": 202608241430, "lib": "Lun 24 · 14:30 - 16:00 · Le Garage · Pierre"}, {"key": 202608261630, "lib": "Mer 26 · 16:30 - 18:00 · XVème · Pierre"}, {"key": 202608281115, "lib": "Ven 28 · 11:15 - 12:30 · Les Clapiers"}]}, {"morceau": "La Ballade de Jim", "vague": 1, "seances": [{"key": 202608241430, "lib": "Lun 24 · 14:30 - 16:00 · XVème · Cyrille"}, {"key": 202608261630, "lib": "Mer 26 · 16:30 - 18:00 · La Chênaie · Cyrille"}, {"key": 202608281115, "lib": "Ven 28 · 11:15 - 12:30 · XVème"}]}, {"morceau": "Where or When", "vague": 1, "seances": [{"key": 202608241430, "lib": "Lun 24 · 14:30 - 16:00 · Les Clapiers · Corinne"}, {"key": 202608261630, "lib": "Mer 26 · 16:30 - 18:00 · Les Clapiers · Corinne"}, {"key": 202608281115, "lib": "Ven 28 · 11:15 - 12:30 · Le Garage"}]}, {"morceau": "Débranche", "vague": 2, "seances": [{"key": 202608251430, "lib": "Mar 25 · 14:30 - 16:00 · XVème · Cyrille"}, {"key": 202608271630, "lib": "Jeu 27 · 16:30 - 18:00 · Les Clapiers · Cyrille"}, {"key": 202608281545, "lib": "Ven 28 · 15:45 - 17:00 · Le Garage"}]}, {"morceau": "Fotografia", "vague": 2, "seances": [{"key": 202608251430, "lib": "Mar 25 · 14:30 - 16:00 · Les Clapiers · François"}, {"key": 202608271630, "lib": "Jeu 27 · 16:30 - 18:00 · Le Garage · François"}, {"key": 202608281545, "lib": "Ven 28 · 15:45 - 17:00 · L'Étang"}]}, {"morceau": "Top of My Head", "vague": 2, "seances": [{"key": 202608251430, "lib": "Mar 25 · 14:30 - 16:00 · Le Garage · Thierry"}, {"key": 202608271630, "lib": "Jeu 27 · 16:30 - 18:00 · XVème · Thierry"}, {"key": 202608281545, "lib": "Ven 28 · 15:45 - 17:00 · Les Clapiers"}]}, {"morceau": "Avant Toi", "vague": 3, "seances": [{"key": 202608261430, "lib": "Mer 26 · 14:30 - 16:00 · Le Garage · Corinne"}, {"key": 202608271430, "lib": "Jeu 27 · 14:30 - 16:00 · XVème · Corinne"}, {"key": 202608281430, "lib": "Ven 28 · 14:30 - 15:45 · Les Clapiers"}]}, {"morceau": "Capitaine Abandonné", "vague": 3, "seances": [{"key": 202608261430, "lib": "Mer 26 · 14:30 - 16:00 · XVème · Pierre"}, {"key": 202608271430, "lib": "Jeu 27 · 14:30 - 16:00 · Les Clapiers · Pierre"}, {"key": 202608281430, "lib": "Ven 28 · 14:30 - 15:45 · Le Garage"}]}, {"morceau": "Just a Song Before I Go", "vague": 3, "seances": [{"key": 202608261430, "lib": "Mer 26 · 14:30 - 16:00 · Les Clapiers · Bertrand"}, {"key": 202608271430, "lib": "Jeu 27 · 14:30 - 16:00 · Le Garage · Bertrand"}, {"key": 202608281430, "lib": "Ven 28 · 14:30 - 15:45 · XVème"}]}];
+
+/* ---------- état ---------- */
+let ECHEANCE = 202608261800;
+let SLOTS = SLOTS_ALL.filter(s => s.key < ECHEANCE);
+function majEcheance(v){
+  ECHEANCE = +v;
+  SLOTS = SLOTS_ALL.filter(s => s.key < ECHEANCE);
+  const pl = SLOTS.reduce((n,s)=>n+s.salles.length,0);
+  const vt = SLOTS.filter(s=>s.vague===null).reduce((n,s)=>n+s.salles.length,0);
+  $('stSlots').textContent = SLOTS.length;
+  $('stPlaces').textContent = pl;
+  $('stVertes').textContent = vt;
+  const perdus = SLOTS_ALL.length - SLOTS.length;
+  $('echInfo').innerHTML = `${SLOTS.length} créneaux utilisables, ${pl} places-salles `
+    + `(dont ${vt} sans imposé en parallèle).`
+    + (perdus ? ` <b>${perdus} créneaux écartés</b> car postérieurs à la scène.` : '');
+  $('result').innerHTML = '';
+}
+let groupes = [];            // {nom,resp,ton,m1,m2,membres:[]}
+let membresImposes = {};     // morceau -> [noms]
+let solution = null;
+let indispos = [];            // [{noms:[...], heures:['09:00'], motif:'...'}]
+let identitesConnues = [];    // noms whitelisté : ni doublon d'instrument ni homonyme à signaler
+/* instrs peut être : undefined, string, Array, Set. Une indispo avec `roles` ne
+   s'applique que si au moins un instrument déclaré de la personne dans le groupe
+   figure dans cette liste. Sans `roles` : indispo totale (rétrocompat). */
+function normInstrs(instrs){
+  if (!instrs) return [];
+  const raw = typeof instrs === 'string' ? [instrs] : [...instrs];
+  return raw.filter(Boolean).map(s => String(s).toLowerCase());
+}
+function heuresBloquees(k, instrs){
+  const out = new Set();
+  const ins = normInstrs(instrs);
+  indispos.forEach(r => {
+    if (!(r.noms||[]).some(n => cle(n) === k)) return;
+    if (r.roles && r.roles.length){
+      const roles = r.roles.map(s => String(s).toLowerCase());
+      if (!ins.length || !ins.some(i => roles.includes(i))) return;
+    }
+    (r.heures||[]).forEach(x => out.add(x));
+  });
+  return out;
+}
+function slotBloque(slot, k, instrs){
+  const hb = heuresBloquees(k, instrs);
+  if (!hb.size) return false;
+  const deb = slot.heure.split(' - ')[0];
+  return hb.has(deb);
+}
+const norm = s => s.trim().replace(/\s+/g,' ');
+/* Une parenthèse contient soit un INSTRUMENT, soit une initiale qui distingue deux
+   homonymes — « Pierre (SIG) » et « Pierre (L) » sont deux personnes différentes.
+   Seuls les instruments reconnus sont détachés du nom. */
+const MOTS_INSTR = /^(chant|voix|choeur|ch(oe|œ)ur|piano|clavier|orgue|basse|contrebasse|batterie|percussion|cajon|guitare|banjo|ukul|mandoline|vents?|sax|saxo|clarinette|fl(û|u)te|trompette|trombone|bugle|cor|tuba|harmonica|accord(é|e)on|violon|violoncelle|alto|harpe)/i;
+const estInstrument = x => MOTS_INSTR.test(norm(String(x)));
+const detache = s => { const m = String(s).match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+  return (m && estInstrument(m[2])) ? {nom: norm(m[1]), ins: norm(m[2])}
+                                    : {nom: norm(String(s)), ins: ''}; };
+const cle  = s => detache(s).nom.toLowerCase();
+const sansInstr = s => detache(s).nom;
+const instrDe = s => detache(s).ins;
+const split = t => t.split(/[,;\n]/).map(norm).filter(Boolean);
+
+
+const estBatteur = i => /batter|drum|fut/i.test(i||'');
+const estGaucher = i => /gauch|\bg\b|left|\bl\b/i.test(i||'');
+/* Toutes les mentions d'un nom, avec l'instrument déclaré à chaque fois.
+   Deux instruments incompatibles sur un même nom = très probablement deux personnes. */
+function mentions(){
+  const m = {};
+  const add = (x, ou) => { const k = cle(x);
+    (m[k] = m[k] || {nom:sansInstr(x), instr:new Set(), ou:new Set(), parGroupe:new Map()});
+    const i = instrDe(x);
+    if (i){ m[k].instr.add(i.toLowerCase());
+            if (!m[k].parGroupe.has(ou)) m[k].parGroupe.set(ou, new Set());
+            m[k].parGroupe.get(ou).add(i.toLowerCase()); }
+    m[k].ou.add(ou); };
+  Object.entries(membresImposes).forEach(([mo,l]) => (l||[]).forEach(x => add(x, mo)));
+  groupes.forEach(g => g.membres.forEach(x => add(x, g.nom)));
+  return m;
+}
+function estIdentiteConnue(nom){
+  const k = cle(nom);
+  return identitesConnues.some(n => cle(n) === k);
+}
+function alertesIdentite(){
+  const out = [], prenomsSeuls = [];
+  const M = mentions();
+  Object.values(M).forEach(p => {
+    if (estIdentiteConnue(p.nom)) return;                // whitelist : rien à signaler
+    // deux instruments réunis dans un même groupe = personne polyvalente, pas homonyme
+    let polyvalent = false;
+    p.parGroupe.forEach(set => { if (set.size === p.instr.size && p.instr.size > 1) polyvalent = true; });
+    if (p.instr.size > 1 && !polyvalent)
+      out.push({type:'instr', nom:p.nom, detail:[...p.instr].join(' / '), ou:[...p.ou]});
+    else if (!/[\s.\-]/.test(p.nom) && p.ou.size > 1) prenomsSeuls.push(p.nom);
+  });
+  if (prenomsSeuls.length) out.push({type:'prenoms', noms:prenomsSeuls});
+  return out;
+}
+function instrumentsConnus(){
+  const m = {};
+  groupes.forEach(g => g.membres.forEach(x => { const i = instrDe(x); if (i) m[cle(sansInstr(x))] = i; }));
+  Object.values(membresImposes).forEach(l => (l||[]).forEach(x => {
+    const i = instrDe(x); if (i) m[cle(sansInstr(x))] = i; }));
+  return m;
+}
+
+const PLAFOND_MORCEAUX = 13;
+function nbMorceaux(){ return groupes.reduce((n,g) => n + [g.m1,g.m2].filter(Boolean).length, 0); }
+
+/* Cote la difficulté d'un groupe AVANT tout calcul : de quoi arbitrer une demande au comptoir. */
+function coter(membres, exclureIndex){
+  const noms = [...new Set(membres.map(cle))].filter(Boolean);
+  if (!noms.length) return null;
+  const vg = {}; noms.forEach(k => vg[k] = vaguesDe(k));
+  const insDe = new Map();
+  membres.forEach(m => {
+    const k = cle(m), i = instrDe(m).toLowerCase();
+    if (!insDe.has(k)) insDe.set(k, new Set());
+    if (i) insDe.get(k).add(i);
+  });
+  const ouverts = SLOTS.filter(s =>
+      (s.vague === null || !noms.some(k => vg[k] && vg[k].has(s.vague)))
+      && !noms.some(k => slotBloque(s, k, insDe.get(k))));
+  const places = ouverts.reduce((n,s) => n + s.salles.length, 0);
+  const total  = SLOTS.reduce((n,s) => n + s.salles.length, 0);
+  let partages = 0;
+  groupes.forEach((g,i) => { if (i !== exclureIndex && g.membres.some(m => noms.includes(cle(m)))) partages++; });
+  const charges = noms.filter(k => (vg[k]||new Set()).size >= 3).length;
+  const note = Math.max(0, Math.round((total ? places/total : 0) * 100 - partages*7 - charges*4));
+  let label, cl;
+  if (ouverts.length < 3)      { label = 'Impossible'; cl = 'r'; }
+  else if (note >= 68)         { label = 'Facile';     cl = 'v'; }
+  else if (note >= 45)         { label = 'Faisable';   cl = 'v'; }
+  else if (note >= 26)         { label = 'Tendu';      cl = 'o'; }
+  else                         { label = 'Difficile';  cl = 'r'; }
+  return {note, label, cl, ouverts:ouverts.length, slots:SLOTS.length, places, total, partages, charges};
+}
+
+const GRANDES = new Set(['Le Garage','XVème','Les Clapiers']);
+const SEUIL_GRAND = 6;                       // à partir de 6 musiciens, il faut de la place
+
+/* ---------- personnes ---------- */
+function vaguesDe(nom){                       // vagues où la personne a un imposé
+  const k = cle(nom), out = new Set();
+  IMPOSES.forEach(im => {
+    if ((membresImposes[im.morceau]||[]).some(n => cle(n)===k)) out.add(im.vague);
+  });
+  return out;
+}
+function tousMusiciens(){
+  const m = new Map();
+  IMPOSES.forEach(im => (membresImposes[im.morceau]||[]).forEach(n => m.set(cle(n), sansInstr(n))));
+  groupes.forEach(g => g.membres.forEach(n => m.set(cle(n), sansInstr(n))));
+  return [...m.values()].sort((a,b)=>a.localeCompare(b,'fr'));
+}
+function doublonsVague(){                      // même personne 2× dans une vague
+  const out = [];
+  tousMusiciens().forEach(n => {
+    const k = cle(n);
+    VAGUES.forEach((v,vi) => {
+      const ms = v.morceaux.filter(m => (membresImposes[m]||[]).some(x => cle(x)===k));
+      if (ms.length > 1) out.push({nom:n, vague:vi+1, morceaux:ms});
+    });
+  });
+  return out;
+}
+
+/* ---------- moteur ---------- */
+function repartir(maxEssais = 2500){
+  const busy = {};
+  tousMusiciens().forEach(n => busy[cle(n)] = vaguesDe(n));
+  const G = groupes.length;
+  const memK = groupes.map(g => [...new Set(g.membres.map(cle))]);
+  const memInstr = groupes.map(g => {
+    const map = new Map();
+    g.membres.forEach(m => {
+      const k = cle(m), i = instrDe(m).toLowerCase();
+      if (!map.has(k)) map.set(k, new Set());
+      if (i) map.get(k).add(i);
+    });
+    return map;
+  });
+  let best = null;
+
+  const colle = (si, plan, gi) => {          // créneau accolé à un autre du même groupe ?
+    const s = SLOTS[si];
+    const deb = +s.heure.split(' - ')[0].replace(':','');
+    const fin = +(s.heure.split(' - ')[1]||'').replace(':','');
+    return (plan[gi]||[]).some(j => {
+      const t = SLOTS[j];
+      if (t.jourKey !== s.jourKey) return false;
+      const d = +t.heure.split(' - ')[0].replace(':','');
+      const f = +(t.heure.split(' - ')[1]||'').replace(':','');
+      return f === deb || fin === d;
+    });
+  };
+  const libre = (si, gi, occ, occP, jours, plan) => {
+    const s = SLOTS[si];
+    if (plan && colle(si, plan, gi)) return false;   // jamais deux heures d'affilée
+    if ((occ[si]||0) >= s.salles.length) return false;
+    for (const k of memK[gi]){
+      if (s.vague !== null && busy[k] && busy[k].has(s.vague)) return false;
+      if (occP[k] && occP[k].has(si)) return false;
+      if (slotBloque(s, k, memInstr[gi].get(k))) return false;
+    }
+    if (jours && jours.has(s.jourKey)) return false;
+    return true;
+  };
+  const poser = (si, gi, occ, occP, plan, jours) => {
+    occ[si] = (occ[si]||0)+1; plan[gi].push(si); jours.add(SLOTS[si].jourKey);
+    memK[gi].forEach(k => (occP[k] = occP[k]||new Set()).add(si));
+  };
+  const retirer = (si, gi, occ, occP, plan, jours) => {
+    occ[si]--; plan[gi] = plan[gi].filter(x=>x!==si);
+    jours.delete(SLOTS[si].jourKey);
+    memK[gi].forEach(k => occP[k].delete(si));
+  };
+
+  for (let essai = 0; essai < maxEssais; essai++){
+    const occ = {}, occP = {}, plan = {}, jours = {};
+    for (let g=0; g<G; g++){ plan[g]=[]; jours[g]=new Set(); }
+    // tours de table : chacun sa 1re répétition, puis la 2e, puis la 3e
+    for (let tour = 0; tour < 3; tour++){
+      let ordre = [...Array(G).keys()];
+      if (essai === 0) ordre.sort((a,b) => memK[b].length - memK[a].length);
+      else for (let i=ordre.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [ordre[i],ordre[j]]=[ordre[j],ordre[i]]; }
+      for (const gi of ordre){
+        if (plan[gi].length > tour) continue;
+        let cands = [];
+        for (let si=0; si<SLOTS.length; si++)
+          if (libre(si, gi, occ, occP, jours[gi], plan)) cands.push(si);
+        if (!cands.length)                       // en dernier recours, 2 fois le même jour
+          for (let si=0; si<SLOTS.length; si++)
+            if (libre(si, gi, occ, occP, null, plan) && !plan[gi].includes(si)) cands.push(si);
+        if (!cands.length) continue;
+        cands.sort((x,y) => sc(y,gi,occ,plan) - sc(x,gi,occ,plan));
+        const k = essai === 0 ? 0 : (Math.random()*Math.min(4,cands.length))|0;
+        poser(cands[k], gi, occ, occP, plan, jours[gi]);
+      }
+    }
+    // réparation : pour un groupe incomplet, déplacer une réservation gênante
+    for (let gi=0; gi<G; gi++){
+      let garde = 0;
+      while (plan[gi].length < 3 && garde++ < 40){
+        let fait = false;
+        for (let si=0; si<SLOTS.length && !fait; si++){
+          if (plan[gi].includes(si)) continue;
+          const s = SLOTS[si];
+          if (s.vague !== null && memK[gi].some(k => busy[k] && busy[k].has(s.vague))) continue;
+          // qui bloque ?
+          const bloqueurs = [];
+          for (let gj=0; gj<G; gj++){
+            if (gj===gi || !plan[gj].includes(si)) continue;
+            if (memK[gj].some(k => memK[gi].includes(k))) bloqueurs.push(gj);
+          }
+          const place = (occ[si]||0) - bloqueurs.length < s.salles.length;
+          if (!place || bloqueurs.length > 1) continue;
+          for (const gj of bloqueurs){          // tenter de reloger le bloqueur
+            retirer(si, gj, occ, occP, plan, jours[gj]);
+            let relog = -1;
+            for (let sk=0; sk<SLOTS.length; sk++)
+              if (!plan[gj].includes(sk) && libre(sk, gj, occ, occP, jours[gj], plan)) { relog = sk; break; }
+            if (relog < 0){ poser(si, gj, occ, occP, plan, jours[gj]); break; }
+            poser(relog, gj, occ, occP, plan, jours[gj]);
+          }
+          if (libre(si, gi, occ, occP, null, plan)){ poser(si, gi, occ, occP, plan, jours[gi]); fait = true; }
+        }
+        if (!fait) break;
+      }
+    }
+    const complets = Object.values(plan).filter(c=>c.length===3).length;
+    const total = Object.values(plan).reduce((s,c)=>s+c.length,0);
+    let etale = 0;
+    Object.values(plan).forEach(c => etale += new Set(c.map(i=>SLOTS[i].jourKey)).size);
+    const cand = {plan, complets, total, etale};
+    if (!best || complets>best.complets || (complets===best.complets && total>best.total)
+        || (complets===best.complets && total===best.total && etale>best.etale)) best = cand;
+    if (best.complets===G && best.etale===G*3) break;
+  }
+  // conversion + salles
+  const plan={}, salles={}, parSlot={};
+  Object.entries(best.plan).forEach(([gi,idx]) => {
+    const cs = idx.map(i=>SLOTS[i]).sort((a,b)=>a.key-b.key);
+    plan[gi]=cs; cs.forEach(s => (parSlot[s.id]=parSlot[s.id]||[]).push(+gi));
+  });
+  /* Attribution des salles : les grands groupes dans les grandes salles, et
+     jamais deux fois la même salle pour un même groupe. */
+  const dejaVues = {};                        // gi -> Set de salles déjà utilisées
+  const dernier  = {};                        // gi -> {fin, salle} du créneau précédent
+  const finDe = s => { const f = s.heure.split(' - ')[1]; return f ? +f.replace(':','') : null; };
+  const debDe = s => +s.heure.split(' - ')[0].replace(':','');
+  const ordreSlots = Object.keys(parSlot).sort((a,b) =>
+    SLOTS.find(s=>s.id===a).key - SLOTS.find(s=>s.id===b).key);
+  ordreSlots.forEach(sid => {
+    const slot = SLOTS.find(s=>s.id===sid);
+    const gis = parSlot[sid];
+    const dispo = slot.salles.slice();
+    const taille = gi => [...new Set(groupes[gi].membres.map(cle))].length;
+    // le groupe enchaîne-t-il depuis le créneau juste avant, le même jour ?
+    const enchaine = gi => { const d = dernier[gi];
+      return d && d.jour === slot.jourKey && d.fin === debDe(slot) ? d.salle : null; };
+    const cout = (gi, r) => {
+      const suite = enchaine(gi);
+      if (suite) return r === suite ? -80 : 60;   // le groupe est déjà installé : il reste
+      let c = 0;
+      if (dejaVues[gi] && dejaVues[gi].has(r)) c += 100;
+      const grand = taille(gi) >= SEUIL_GRAND, grandeSalle = GRANDES.has(r);
+      if (grand && !grandeSalle) c += 30;
+      if (!grand && grandeSalle) c += 6;
+      return c;
+    };
+    const perms = a => a.length <= 1 ? [a] :
+      a.flatMap((x,i) => perms([...a.slice(0,i), ...a.slice(i+1)]).map(q => [x, ...q]));
+    const cands = perms(dispo).slice(0, 200);
+    let meilleur = null, bc = Infinity;
+    cands.forEach(ordre => {
+      let c = 0;
+      gis.forEach((gi,i) => { c += ordre[i] ? cout(gi, ordre[i]) : 500; });
+      if (c < bc){ bc = c; meilleur = ordre; }
+    });
+    gis.forEach((gi,i) => {
+      const r = (meilleur && meilleur[i]) || dispo[i] || '—';
+      salles[gi+'|'+sid] = r;
+      (dejaVues[gi] = dejaVues[gi] || new Set()).add(r);
+      dernier[gi] = {jour: slot.jourKey, fin: finDe(slot), salle: r};
+    });
+  });
+  return {plan, salles, complets:best.complets, placesTotal:best.total};
+}
+function sc(si, gi, occ, plan){
+  const s = SLOTS[si];
+  let v = (s.vague === null ? 18 : 0) + (s.prio || 0);
+  v += (s.salles.length - (occ[si]||0)) * 3;
+  v -= (occ[si]||0) * 9;
+  const dej = plan[gi].map(i=>SLOTS[i].key);
+  if (dej.length && Math.min(...dej.map(k=>Math.abs(k-s.key))) < 10000) v -= 25;
+  return v;
+}
+
+/* ---------- vérification indépendante ---------- */
+function verifier(sol){
+  const pb = [];
+  const busy = {}; tousMusiciens().forEach(n => busy[cle(n)] = vaguesDe(n));
+  const parSlot = {};
+  Object.entries(sol.plan).forEach(([gi,cs]) => cs.forEach(s => (parSlot[s.id]=parSlot[s.id]||[]).push(+gi)));
+  Object.entries(parSlot).forEach(([sid,gis]) => {
+    const slot = SLOTS.find(s=>s.id===sid);
+    if (gis.length > slot.salles.length)
+      pb.push(`${slot.jour} ${slot.heure} : ${gis.length} groupes pour ${slot.salles.length} salle(s)`);
+    const vus = {};
+    gis.forEach(gi => [...new Set(groupes[gi].membres.map(cle))].forEach(k => {
+      vus[k] = (vus[k]||0) + 1;
+      if (vus[k] > 1) pb.push(`${k} joue dans deux groupes à la fois — ${slot.jour} ${slot.heure}`);
+    }));
+    gis.forEach(gi => [...new Set(groupes[gi].membres)].forEach(m => {
+      if (slotBloque(slot, cle(m), instrDe(m).toLowerCase()))
+        pb.push(`${sansInstr(m)} est indisponible ${slot.jour} ${slot.heure}`);
+    }));
+    if (slot.vague !== null) gis.forEach(gi => [...new Set(groupes[gi].membres)].forEach(m => {
+      if (busy[cle(m)] && busy[cle(m)].has(slot.vague))
+        pb.push(`${norm(m)} a un imposé pendant ${slot.jour} ${slot.heure}`);
+    }));
+  });
+  return [...new Set(pb)];
+}
+
+/* ---------- rendu ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function majStats(){
+  $('stGroupes').textContent = groupes.length;
+  $('stMusiciens').textContent = tousMusiciens().length;
+  const nm = nbMorceaux(), el = $('stMorceaux');
+  el.textContent = nm;
+  el.parentElement.style.color = nm > PLAFOND_MORCEAUX ? '#E8836F' : '';
+  el.style.color = nm > PLAFOND_MORCEAUX ? '#E8836F' : '';
+}
+
+function renderImposes(){
+  let h = '<table><thead><tr><th style="width:190px">Morceau</th><th style="width:74px">Vague</th>'
+        + '<th style="width:290px">Répétitions déjà fixées</th><th>Membres</th></tr></thead><tbody>';
+  IMPOSES.forEach(im => {
+    const val = (membresImposes[im.morceau]||[]).join(', ');
+    h += `<tr class="imp"><td><b>${esc(im.morceau)}</b></td>`
+      +  `<td><span class="tag o">V${im.vague+1}</span></td>`
+      +  `<td style="font-family:var(--mono);font-size:11.5px;color:var(--ink-soft)">`
+      +  im.seances.map(s=>esc(s.lib)).join('<br>') + `</td>`
+      +  `<td><input data-m="${esc(im.morceau)}" class="impIn" value="${esc(val)}" `
+      +  `placeholder="noms séparés par des virgules"></td></tr>`;
+  });
+  $('imposes').innerHTML = h + '</tbody></table>';
+  document.querySelectorAll('.impIn').forEach(inp => inp.addEventListener('change', e => {
+    membresImposes[e.target.dataset.m] = split(e.target.value);
+    majStats(); renderGroupes();
+  }));
+  $('vagueInfo').innerHTML = '<table><tbody>' + VAGUES.map((v,i) =>
+    `<tr><td style="width:70px"><span class="tag o">V${i+1}</span></td>`
+    + `<td>${v.morceaux.map(esc).join(' · ')}</td>`
+    + `<td class="code" style="color:var(--ink-soft)">${v.keys.map(k=>{
+        const s = SLOTS.find(x=>x.key===k); return s ? s.jour+' '+s.heure.split(' - ')[0]
+          : String(k).slice(6,8)+'/'+String(k).slice(4,6)+' '+String(k).slice(8,10)+':'+String(k).slice(10);
+      }).join(' · ')}</td></tr>`).join('') + '</tbody></table>';
+}
+
+/* ---------- tableau éditable, calqué sur la feuille d'inscription ---------- */
+const PUPITRES = ['chant','piano','basse','batterie','guitare','vents'];
+const LIB = {chant:'Chant',piano:'Piano',basse:'Basse',batterie:'Batterie',
+             guitare:'Guitare',vents:'Vents'};
+
+/* cellules brutes <-> modèle interne */
+function cellsDe(g){
+  if (g.cells) return g.cells;
+  const c = {};
+  const ch = (g.cherche||'').split(',').map(x=>norm(x).toLowerCase()).filter(Boolean);
+  PUPITRES.forEach(p => {
+    if (ch.includes(p)){ c[p] = 'CHERCHE'; return; }
+    const noms = (g.membres||[]).filter(m => (instrDe(m)||'').toLowerCase().startsWith(p.slice(0,5)))
+      .map(m => instrDe(m).toLowerCase() === p ? sansInstr(m) : `${sansInstr(m)} (${instrDe(m)})`);
+    c[p] = noms.join(', ');
+  });
+  g.cells = c; return c;
+}
+function appliquerCells(g){
+  const c = g.cells || {}; const membres = [], cherche = [];
+  PUPITRES.forEach(p => {
+    const v = norm(c[p] || '');
+    if (!v) return;
+    if (/^cherche/i.test(v)){ cherche.push(p); return; }
+    if (/^non$/i.test(v)) return;
+    v.split(',').map(norm).filter(Boolean).forEach(x => {
+      membres.push(instrDe(x) ? x : `${x} (${p})`);
+    });
+  });
+  g.membres = membres; g.cherche = cherche.join(', ');
+}
+
+function renderTableau(){
+  const z = $('tableau'); if (!z) return;
+  if (!groupes.length){ z.innerHTML =
+    '<p class="hint" style="margin:0">Aucun morceau. Utilise « Ajouter une ligne » ci-dessous.</p>';
+    return; }
+  const compte = {};
+  groupes.forEach(g => [...new Set((g.membres||[]).map(cle))].forEach(k => compte[k]=(compte[k]||0)+1));
+  let h = '<div style="overflow-x:auto"><table style="min-width:1150px"><thead><tr>'
+    + '<th style="width:30px"></th><th style="width:190px">Titre / auteur</th>'
+    + '<th style="width:110px">Responsable</th><th style="width:100px">Style</th>'
+    + '<th style="width:62px">Tona</th>'
+    + PUPITRES.map(p=>`<th style="width:126px">${LIB[p]}</th>`).join('')
+    + '<th class="noprint" style="width:34px"></th></tr></thead><tbody>';
+  groupes.forEach((g,i) => {
+    const c = cellsDe(g);
+    const inp = (champ, val, w) => `<input data-l="${i}" data-c="${champ}" value="${esc(val||'')}" `
+      + `style="padding:5px 6px;font-size:12.5px${w?';'+w:''}">`;
+    h += `<tr><td style="text-align:center;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft)">`
+      + `<b>${i+1}</b></td>`
+      + `<td>${inp('m1', g.m1)}</td><td>${inp('resp', g.resp)}</td>`
+      + `<td>${inp('style', g.style)}</td><td>${inp('ton', g.ton)}</td>`
+      + PUPITRES.map(p => `<td>${inp('cell:'+p, c[p])}</td>`).join('')
+      + `<td class="noprint"><button class="mini ghost" data-del="${i}" title="Supprimer">✕</button></td></tr>`;
+  });
+  h += '</tbody></table></div>';
+  const multi = Object.entries(compte).filter(([k,n])=>n>1).sort((a,b)=>b[1]-a[1]);
+  h += `<p class="hint" style="margin:10px 0 0"><b>CHERCHE</b> = poste à pourvoir · <b>NON</b> = pas `
+    + `ce pupitre · plusieurs noms séparés par des virgules · un instrument particulier entre `
+    + `parenthèses, ex. <span class="code">Colette (contrebasse)</span>.`;
+  if (multi.length) h += `<br>Engagés sur plusieurs morceaux : `
+    + multi.slice(0,12).map(([k,n])=>`<span class="chip dup">${esc(k)} ×${n}</span>`).join('');
+  h += `</p>`;
+  z.innerHTML = h;
+  z.querySelectorAll('input[data-l]').forEach(el => el.addEventListener('change', e => {
+    const g = groupes[+e.target.dataset.l], ch = e.target.dataset.c;
+    if (ch.startsWith('cell:')){ cellsDe(g); g.cells[ch.slice(5)] = e.target.value; appliquerCells(g); }
+    else g[ch] = norm(e.target.value);
+    if (ch === 'm1') g.nom = norm(e.target.value) || 'Sans titre';
+    renderTableau(); majStats(); $('result').innerHTML = '';
+  }));
+  z.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', e => {
+    const i = +e.currentTarget.dataset.del;
+    if (confirm(`Supprimer « ${groupes[i].nom} » ?`)){
+      groupes.splice(i,1); renderTableau(); majStats(); $('result').innerHTML = '';
+    }
+  }));
+  majStats();
+}
+
+function renderGroupes(){ renderTableau(); }
+
+let ordreConcert = [];
+function renderConducteur(){
+  const z = $('cdTable'); if (!z || !ordreConcert.length) return;
+  const num = (v, def) => { const n = parseInt(v, 10); return isNaN(n) ? def : n; };
+  const hm = String($('cdDebut').value || '18:30').split(':');
+  let t = num(hm[0], 18) * 60 + num(hm[1], 30);
+  const dM = num($('cdMorceau').value, 6), dC = num($('cdChang').value, 3),
+        dK = num($('cdKit').value, 7);
+  const hhmm = m => String(Math.floor(m/60)%24).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+
+  /* 1re passe : où faut-il retourner le kit, et est-ce couvert par un acte sans batterie ? */
+  const flip = ordreConcert.map(() => null);
+  let main = null, dernierBat = -1;
+  ordreConcert.forEach((a,k) => {
+    if (!a.batterie) return;
+    if (main !== null && a.gaucher !== main){
+      const couvert = (k - dernierBat) > 1;              // au moins un acte sans batterie entre
+      flip[k] = {couvert, pendant: couvert ? k-1 : null, vers: a.gaucher};
+    }
+    main = a.gaucher; dernierBat = k;
+  });
+
+  let h = '<table><thead><tr><th style="width:58px">Heure</th><th style="width:34px">N°</th>'
+        + '<th>Groupe</th><th>Morceaux</th><th>Sur scène</th><th>Plateau</th></tr></thead><tbody>';
+  const debut = t;
+  ordreConcert.forEach((a,k) => {
+    const g = groupes[a.i];
+    if (k){
+      const dur = (flip[k] && !flip[k].couvert) ? dK : dC;
+      h += `<tr style="background:#F3F1E8"><td class="code" style="font-size:11.5px">${hhmm(t)}</td>`
+        + `<td></td><td colspan="3" style="font-size:12.5px;font-style:italic">`
+        + ((flip[k] && !flip[k].couvert)
+            ? `<b>INVERSION DU KIT</b> — retourner les toms et la charleston `
+              + `(passage ${flip[k].vers ? 'droitier → gaucher' : 'gaucher → droitier'})`
+            : 'Changement de plateau')
+        + `</td><td class="code" style="font-size:11.5px">${dur} min</td></tr>`;
+      t += dur;
+    }
+    const duree = Math.max(1, a.morceaux.length) * dM;
+    const scene = g.membres.map(m => esc(sansInstr(m))
+        + (instrDe(m) ? ` <span class="free">${esc(instrDe(m))}</span>` : '')).join(' · ');
+    // ce groupe couvre-t-il une inversion pendant qu'il joue ?
+    const couvre = flip.findIndex(f => f && f.couvert && f.pendant === k);
+    h += `<tr><td class="code" style="font-size:12px"><b>${hhmm(t)}</b></td>`
+      + `<td style="text-align:center"><b>${k+1}</b></td>`
+      + `<td><b>${esc(a.nom)}</b>${a.pret?'':' <span class="tag r">pas prêt</span>'}<br>`
+      + `<span class="tag o">${esc(a.style)}</span></td>`
+      + `<td style="font-size:12.5px">${a.morceaux.map(esc).join('<br>')}`
+      + (g.ton ? `<br><span class="code free">${esc(g.ton)}</span>` : '') + `</td>`
+      + `<td style="font-size:12px">${scene}</td>`
+      + `<td style="font-size:12px">${a.batterie
+           ? (a.gaucher ? '<b>batterie gauchère</b>' : 'batterie droitière') : 'sans batterie'}`
+      + (couvre > -1
+          ? `<br><span class="tag o">retourner le kit pendant cet acte</span>` : '')
+      + `<br><span class="code free">${duree} min</span></td></tr>`;
+    t += duree;
+  });
+  const tot = t - debut;
+  h += `<tr><td class="code"><b>${hhmm(t)}</b></td><td></td>`
+     + `<td colspan="4" style="font-style:italic">Fin du concert — durée totale `
+     + `${Math.floor(tot/60)} h ${String(tot%60).padStart(2,'0')}</td></tr>`;
+  z.innerHTML = h + '</tbody></table>';
+}
+function renderResultat(sol){
+  const pb = verifier(sol);
+  const manquants = groupes.map((g,i)=>({g,n:(sol.plan[i]||[]).length})).filter(x=>x.n<2);
+  const deuxSeul  = groupes.map((g,i)=>({g,n:(sol.plan[i]||[]).length})).filter(x=>x.n===2);
+  let h = '<section class="sheet"><p class="eyebrow">Résultat</p><h2>Répartition proposée</h2>'
+        + '<div id="barreImpr" class="noprint"></div><div class="bloc" data-bloc="intro">';
+
+  if (!pb.length && !manquants.length && deuxSeul.length)
+    h += `<div class="msg ok"><b>Tous les groupes sont placés.</b> `
+       + `${deuxSeul.length} groupe(s) à deux répétitions au lieu de trois : `
+       + deuxSeul.map(x=>esc(x.g.nom)).join(', ')
+       + `. Deux séances suffisent quand un musicien est demandé ailleurs.</div>`;
+  else if (!pb.length && !manquants.length)
+    h += `<div class="msg ok"><b>Tous les groupes sont placés.</b> Aucun musicien n'est convoqué
+          deux fois, aucune salle n'est doublée. Vérification recalculée après coup, indépendamment
+          du calcul de placement.</div>`;
+  else {
+    if (manquants.length) h += `<div class="msg err"><b>${manquants.length} groupe(s) avec moins de deux répétitions.</b> `
+      + manquants.map(x=>`${esc(x.g.nom)} (${x.n}/3)`).join(', ')
+      + `. Le détail plus bas explique ce qui bloque et sur quoi agir.</div>`;
+    if (pb.length) h += `<div class="msg err"><b>Contrôle final :</b><br>` + pb.map(esc).join('<br>') + `</div>`;
+  }
+  const idAl = alertesIdentite();
+  if (idAl.length){
+    h += `<div class="msg err"><b>Identités à vérifier — la détection de conflits en dépend.</b><br>`
+      + `<span style="font-size:13px">`
+      + idAl.map(a => a.type === 'prenoms'
+          ? `${a.noms.length} personne(s) désignées par un prénom seul et présentes dans plusieurs `
+            + `formations : <b>${a.noms.map(esc).join(', ')}</b>. Si deux d'entre elles portent le même `
+            + `prénom, ajoute une initiale — sinon l'outil les confond.`
+          : a.type === 'instr'
+          ? `<b>${esc(a.nom)}</b> apparaît avec deux instruments différents (${esc(a.detail)}) dans `
+            + `${a.ou.map(esc).join(', ')} — s'il s'agit de deux personnes, distingue-les `
+            + `(« ${esc(a.nom)} R. » et « ${esc(a.nom)} T. »), sinon l'outil les compte comme une seule.`
+          : `<b>${esc(a.nom)}</b> n'a qu'un prénom et joue dans ${a.ou.length} formations `
+            + `(${a.ou.map(esc).join(', ')}) — si plusieurs personnes portent ce prénom, ajoute une initiale.`
+        ).join('<br>')
+      + `</span></div>`;
+  }
+  const dbl = doublonsVague();
+  if (dbl.length) h += `<div class="msg warn"><b>À vérifier côté imposés :</b><br>`
+    + dbl.map(d=>`${esc(d.nom)} est inscrit sur ${d.morceaux.map(esc).join(' et ')} — même vague ${d.vague}, `
+    + `donc mêmes horaires.`).join('<br>') + `</div>`;
+
+  h += renderDiagnostic(diagnostiquer(sol));
+
+  /* --- feuille de route par groupe --- */
+  h += '</div><div class="bloc" data-bloc="routes">' + '<h2 style="font-size:21px;margin:26px 0 10px">Feuille de route par groupe</h2><table><thead><tr>'
+    + '<th>Groupe</th><th>Responsable</th><th>Morceaux</th><th>Répétition 1</th><th>Répétition 2</th>'
+    + '<th>Répétition 3</th></tr></thead><tbody>';
+  groupes.forEach((g,i) => {
+    const cs = sol.plan[i]||[];
+    h += `<tr><td><b>${esc(g.nom)}</b></td><td>${esc(g.resp)}</td>`
+      +  `<td style="font-size:12.5px">${esc(g.m1)}${g.m2?'<br>'+esc(g.m2):''}<br>`
+      +  `<span class="code" style="color:var(--ink-soft)">${esc(g.ton)}</span>`
+      +  `${g.style?' <span class="tag o">'+esc(g.style)+'</span>':''}</td>`;
+    for (let n=0;n<3;n++){
+      const s = cs[n];
+      h += s ? `<td><b>${esc(s.jour)}</b><br><span class="code">${esc(s.heure)}</span><br>`
+             + `<span style="font-size:12px;color:var(--ink-soft)">${esc(sol.salles[i+'|'+s.id]||'')}</span></td>`
+             : `<td style="color:var(--rouge)">—</td>`;
+    }
+    h += '</tr>';
+  });
+  h += '</tbody></table>';
+
+  /* --- planning par jour --- */
+  h += '</div><div class="bloc" data-bloc="salles">' + '<h2 style="font-size:21px;margin:30px 0 12px">Planning des salles</h2>';
+  const jours = [...new Set(SLOTS.map(s=>s.jourKey))].sort();
+  jours.forEach(jk => {
+    const ss = SLOTS.filter(s=>s.jourKey===jk);
+    let corps = '';
+    ss.forEach(slot => {
+      const occs = [];
+      groupes.forEach((g,i) => (sol.plan[i]||[]).forEach(s => {
+        if (s.id===slot.id) occs.push(`<span class="booking"><b>${esc(g.nom)}</b>`
+          + `<span class="rm">${esc(sol.salles[i+'|'+slot.id]||'')}</span></span>`);
+      }));
+      const reste = slot.salles.length - occs.length;
+      corps += `<div class="slotline"><div class="slottime">${esc(slot.heure)}</div>`
+        + `<div>${occs.join('') || '<span class="free">personne</span>'}`
+        + (reste>0 ? ` <span class="free">— ${reste} salle(s) encore libre(s)</span>` : '')
+        + `</div></div>`;
+    });
+    h += `<div class="day"><div class="dayhead">${esc(ss[0].jour)} — ${esc(ss[0].jourLong)}</div>${corps}</div>`;
+  });
+
+
+
+  /* --- occupation salle par salle --- */
+  h += '</div><div class="bloc" data-bloc="parsalle">'
+    + '<h2 style="font-size:21px;margin:30px 0 10px">Occupation par salle</h2>'
+    + '<p class="hint">Une feuille par salle, à afficher sur la porte.</p>';
+  const SALLES_ORD = [...new Set(SLOTS.flatMap(s => s.salles))];
+  SALLES_ORD.forEach(salle => {
+    const lignes = [];
+    SLOTS.filter(s => s.salles.includes(salle)).sort((a,b)=>a.key-b.key).forEach(slot => {
+      let occupant = null;
+      groupes.forEach((g,i) => (sol.plan[i]||[]).forEach(s => {
+        if (s.id === slot.id && sol.salles[i+'|'+slot.id] === salle) occupant = g; }));
+      lignes.push({slot, occupant});
+    });
+    const pris = lignes.filter(l => l.occupant).length;
+    h += `<div class="day"><div class="dayhead">${esc(salle)} `
+      + `<span style="font-family:var(--mono);font-size:12px;color:var(--ink-soft)">`
+      + `— ${pris} répétition(s) sur ${lignes.length} créneaux</span></div>`
+      + '<table><thead><tr><th style="width:92px">Jour</th><th style="width:120px">Horaire</th>'
+      + '<th>Groupe</th><th>Responsable</th></tr></thead><tbody>';
+    let jour = null;
+    lignes.forEach(({slot, occupant}) => {
+      const nouveau = slot.jour !== jour; jour = slot.jour;
+      h += `<tr${occupant?'':' style="color:var(--ink-soft)"'}>`
+        + `<td class="code" style="font-size:12px">${nouveau ? esc(slot.jour) : ''}</td>`
+        + `<td class="code" style="font-size:12px">${esc(slot.heure)}</td>`
+        + `<td>${occupant ? '<b>'+esc(occupant.nom)+'</b>' : '<span class="free">libre</span>'}</td>`
+        + `<td style="font-size:12.5px">${occupant ? esc(occupant.resp||'') : ''}</td></tr>`;
+    });
+    h += '</tbody></table></div>';
+  });
+
+  /* --- Les blocs suivants sont désactivés : ordre de passage, conducteur du spectacle,
+     programmation par style, inversions de batterie, charge par musicien, arbitrage du
+     plafond de morceaux, suggestions de renforts. Le code est conservé plus bas dans le
+     fichier et peut être réactivé. --- */
+
+  $('result').innerHTML = h + '</div></section>';
+  $('barreImpr').innerHTML = '<div class="toolbar" style="margin:0 0 18px">'
+    + '<span style="font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;'
+    + 'text-transform:uppercase;color:var(--ink-soft);font-weight:600">Imprimer</span>'
+    + [['salles','Planning par jour'],['parsalle','Occupation par salle'],
+       ['routes','Feuilles de route'],['tout','Tout']].map(([k,l]) =>
+         `<button class="ghost mini" data-impr="${k}">${l}</button>`).join('')
+    + '</div>';
+  document.querySelectorAll('[data-impr]').forEach(b =>
+    b.addEventListener('click', e => imprimer(e.target.dataset.impr)));
+  ['cdDebut','cdMorceau','cdChang','cdKit'].forEach(id => {
+    const el = $(id); if (el) el.addEventListener('input', renderConducteur); });
+  renderConducteur();
+  $('result').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+/* ---------- diagnostic : pourquoi un groupe ne passe pas ---------- */
+function diagnostiquer(sol){
+  const busy = {}; tousMusiciens().forEach(n => busy[cle(n)] = vaguesDe(n));
+  const out = [];
+  groupes.forEach((g,i) => {
+    const n = (sol.plan[i]||[]).length;
+    if (n >= 2) return;
+    // créneaux écartés d'office par les imposés des membres
+    const bloques = SLOTS.filter(s => s.vague !== null &&
+      g.membres.some(m => busy[cle(m)] && busy[cle(m)].has(s.vague)));
+    const compat = SLOTS.length - bloques.length;
+    // avec qui ce groupe partage-t-il des musiciens
+    const partages = [];
+    groupes.forEach((h,j) => {
+      if (j === i) return;
+      const com = h.membres.filter(m => g.membres.some(x => cle(x)===cle(m))).map(norm);
+      if (com.length) partages.push({nom:h.nom, com});
+    });
+    partages.sort((a,b)=>b.com.length-a.com.length);
+    // le membre le plus encombrant
+    const poids = g.membres.map(m => ({
+      nom: norm(m),
+      groupes: groupes.filter(h => h.membres.some(x=>cle(x)===cle(m))).length,
+      imposes: (busy[cle(m)]||new Set()).size
+    })).sort((a,b) => (b.groupes+b.imposes) - (a.groupes+a.imposes));
+    out.push({nom:g.nom, obtenu:n, compat, partages:partages.slice(0,4), poids:poids.slice(0,2)});
+  });
+  return out;
+}
+function renderDiagnostic(diags){
+  if (!diags.length) return '';
+  let h = '</div><div class="bloc" data-bloc="diag">' + '<h2 style="font-size:21px;margin:26px 0 8px">Pourquoi ça bloque</h2>'
+    + '<p class="hint">Ce n\'est pas un défaut de la recherche : ces groupes n\'ont aucune place possible '
+    + 'sans casser une contrainte. Voici sur quoi agir.</p>';
+  diags.forEach(d => {
+    h += `<div class="msg warn" style="border-color:var(--ochre)"><b>${esc(d.nom)}</b> — `
+      + `${d.obtenu} répétition(s) sur 3.<br>`
+      + `<span style="font-size:13px">Seulement <b>${d.compat} créneaux sur ${SLOTS.length}</b> lui sont ouverts : `
+      + `les autres tombent pendant un morceau imposé de l'un de ses membres.`;
+    if (d.partages.length) h += `<br>Il partage des musiciens avec `
+      + d.partages.map(p => `<b>${esc(p.nom)}</b> (${p.com.map(esc).join(', ')})`).join(', ')
+      + ` — donc jamais au même moment qu'eux.`;
+    if (d.poids.length) h += `<br><b>Piste :</b> ${esc(d.poids[0].nom)} cumule `
+      + `${d.poids[0].imposes} imposé(s) et ${d.poids[0].groupes} groupe(s) volontaire(s). `
+      + `Le remplacer ici, ou accepter 2 répétitions pour ce groupe, débloque la situation.`;
+    h += `</span></div>`;
+  });
+  return h;
+}
+
+function imprimer(quoi){
+  const blocs = document.querySelectorAll('#result .bloc');
+  if (quoi !== 'tout')
+    blocs.forEach(b => { if (b.dataset.bloc !== quoi && b.dataset.bloc !== 'intro')
+                           b.classList.add('hors-impression'); });
+  document.body.classList.add('impression-ciblee');
+  window.print();
+  setTimeout(() => {
+    document.body.classList.remove('impression-ciblee');
+    blocs.forEach(b => b.classList.remove('hors-impression'));
+  }, 300);
+}
+
+/* ---------- actions ---------- */
+$('addLigne').addEventListener('click', () => {
+  groupes.push({nom:'Sans titre', resp:'', ton:'', style:'', m1:'', m2:'', membres:[], cherche:'',
+                cells:{chant:'',piano:'',basse:'',batterie:'',guitare:'',vents:''}});
+  renderTableau(); $('result').innerHTML = '';
+  $('addMsg').textContent = 'Ligne ajoutée en bas du tableau.';
+  const inps = document.querySelectorAll('#tableau input[data-c="m1"]');
+  if (inps.length) inps[inps.length-1].focus();
+});
+
+$('solveBtn').addEventListener('click', () => {
+  if (!groupes.length){ alert('Ajoute au moins un groupe volontaire.'); return; }
+  const b = $('solveBtn'); b.textContent = 'Recherche en cours…'; b.disabled = true;
+  setTimeout(() => {
+    solution = repartir();
+    renderResultat(solution);
+    b.textContent = 'Relancer la répartition'; b.disabled = false;
+  }, 30);
+});
+
+/* ---------- édition directe ---------- */
+function jsonCourant(){
+  const g = groupes.map(x => { const o = {...x}; delete o.cells; return o; });
+  return JSON.stringify({groupes:g, membresImposes, indispos, identitesConnues}, null, 1);
+}
+$('jsonCharger').addEventListener('click', () => {
+  $('jsonZone').value = jsonCourant();
+  $('jsonMsg').innerHTML = '<span style="color:var(--ink-soft)">État chargé — '
+    + groupes.length + ' groupe(s), ' + tousMusiciens().length + ' musicien(s).</span>';
+});
+$('jsonAppliquer').addEventListener('click', () => {
+  const txt = $('jsonZone').value.trim();
+  const msg = $('jsonMsg');
+  if (!txt){ msg.innerHTML = '<span style="color:var(--rouge)">La zone est vide.</span>'; return; }
+  let d;
+  try { d = JSON.parse(txt); }
+  catch(e){
+    const m = String(e.message).match(/position (\d+)/);
+    let ou = '';
+    if (m){ const i = +m[1]; ou = ' — vers la ligne ' + (txt.slice(0, i).split('\n').length)
+            + ' : « ' + txt.slice(Math.max(0, i-30), i+30).replace(/\n/g, ' ') + ' »'; }
+    msg.innerHTML = '<span style="color:var(--rouge)">JSON invalide' + esc(ou) + '</span>';
+    return;
+  }
+  // contrôles avant d'écraser quoi que ce soit
+  const err = [];
+  if (!d || typeof d !== 'object') err.push('le contenu doit être un objet');
+  if (!Array.isArray(d.groupes)) err.push('« groupes » doit être une liste');
+  else d.groupes.forEach((g,i) => {
+    if (!g || typeof g !== 'object') return err.push(`groupe ${i+1} : ce n'est pas un objet`);
+    if (!g.nom) err.push(`groupe ${i+1} : « nom » manquant`);
+    if (!Array.isArray(g.membres)) err.push(`groupe ${i+1} (${g.nom||'?'}) : « membres » doit être une liste`);
+    else if (g.membres.some(m => typeof m !== 'string'))
+      err.push(`groupe ${i+1} (${g.nom||'?'}) : chaque membre doit être du texte`);
+  });
+  if (d.membresImposes && typeof d.membresImposes !== 'object')
+    err.push('« membresImposes » doit être un objet');
+  if (err.length){
+    msg.innerHTML = '<span style="color:var(--rouge)">' + err.slice(0,4).map(esc).join('<br>')
+      + (err.length > 4 ? `<br>…et ${err.length-4} autre(s)` : '') + '</span>';
+    return;
+  }
+  const avantG = groupes.length, avantM = tousMusiciens().length;
+  groupes = d.groupes.map(g => { const o = {style:'', cherche:'', resp:'', ton:'', m1:'', m2:'', ...g};
+                                 delete o.cells; cellsDe(o); return o; });
+  membresImposes = d.membresImposes || {}; indispos = d.indispos || [];
+  identitesConnues = Array.isArray(d.identitesConnues) ? d.identitesConnues : [];
+  renderImposes(); renderGroupes(); $('result').innerHTML = '';
+  const dg = groupes.length - avantG, dm = tousMusiciens().length - avantM;
+  const d2 = n => (n > 0 ? '+' : '') + n;
+  msg.innerHTML = '<span style="color:var(--vert)"><b>Appliqué.</b> ' + groupes.length
+    + ' groupe(s) (' + d2(dg) + '), ' + tousMusiciens().length + ' musicien(s) (' + d2(dm)
+    + '). Relance la répartition.</span>';
+});
+
+/* ---------- import / export ---------- */
+function dl(nom, txt, type){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([txt], {type}));
+  a.download = nom; a.click(); URL.revokeObjectURL(a.href);
+}
+$('expJson').addEventListener('click', () => {
+  dl('inscriptions_session5.json', jsonCourant(), 'application/json');
+  $('ioMsg').textContent = 'Fichier enregistré. Recharge-le plus tard pour reprendre où tu en étais.';
+});
+$('impBtn').addEventListener('click', () => $('impFile').click());
+$('impFile').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { try {
+    const d = JSON.parse(r.result);
+    groupes = (d.groupes||[]).map(g => { const o = {style:'', cherche:'', ...g}; delete o.cells;
+                                          cellsDe(o); return o; });
+    membresImposes = d.membresImposes||{}; indispos = d.indispos||[];
+    identitesConnues = Array.isArray(d.identitesConnues) ? d.identitesConnues : [];
+    $('echeance').addEventListener('change', e => majEcheance(e.target.value));
+renderImposes(); renderGroupes(); majEcheance($('echeance').value); $('result').innerHTML = '';
+    $('ioMsg').textContent = `Rechargé : ${groupes.length} groupe(s).`;
+  } catch(err){ $('ioMsg').textContent = 'Fichier illisible : ' + err.message; } };
+  r.readAsText(f);
+});
+const q = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
+function csv(nom, lignes){
+  dl(nom, '\ufeff' + lignes.map(l => l.map(q).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
+}
+function seancesTriees(i){
+  return (solution.plan[i] || []).slice().sort((a,b) => a.key - b.key);
+}
+$('expRoutes').addEventListener('click', () => {
+  if (!solution){ $('ioMsg').textContent = "Lance d'abord la répartition."; return; }
+  const L = [['N°','Groupe','Responsable','Tonalite','Morceau','Effectif',
+              'Jour 1','Horaire 1','Salle 1','Jour 2','Horaire 2','Salle 2',
+              'Jour 3','Horaire 3','Salle 3','Nb repetitions']];
+  groupes.forEach((g,i) => {
+    const cs = seancesTriees(i), r = [];
+    for (let k = 0; k < 3; k++){
+      const s = cs[k];
+      r.push(s ? s.jour : '', s ? s.heure : '', s ? (solution.salles[i+'|'+s.id]||'') : '');
+    }
+    L.push([i+1, g.nom, g.resp||'', g.ton||'', g.m1||'',
+            [...new Set(g.membres.map(cle))].length, ...r, cs.length]);
+  });
+  csv('feuilles_de_route.csv', L);
+  $('ioMsg').textContent = `Feuilles de route exportées — ${groupes.length} groupe(s).`;
+});
+$('expSalles').addEventListener('click', () => {
+  if (!solution){ $('ioMsg').textContent = "Lance d'abord la répartition."; return; }
+  const L = [['Salle','Jour','Horaire','Groupe','Responsable','Etat']];
+  const salles = [...new Set(SLOTS.flatMap(s => s.salles))];
+  let n = 0;
+  salles.forEach(salle => {
+    SLOTS.filter(s => s.salles.includes(salle)).sort((a,b)=>a.key-b.key).forEach(slot => {
+      let occ = null;
+      groupes.forEach((g,i) => (solution.plan[i]||[]).forEach(s => {
+        if (s.id === slot.id && solution.salles[i+'|'+slot.id] === salle) occ = g; }));
+      if (occ) n++;
+      L.push([salle, slot.jour, slot.heure, occ ? occ.nom : '', occ ? (occ.resp||'') : '',
+              occ ? 'occupée' : 'libre']);
+    });
+  });
+  csv('occupation_par_salle.csv', L);
+  $('ioMsg').textContent = `Occupation exportée — ${salles.length} salle(s), ${n} répétition(s).`;
+});
+
+renderImposes(); renderGroupes(); majEcheance($('echeance').value);
+
+
+</script>
+</body>
+</html>

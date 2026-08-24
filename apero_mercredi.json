@@ -1,0 +1,267 @@
+{
+ "groupes": [
+  {
+   "nom": "01 · Sur La Place",
+   "resp": "Élisabeth",
+   "ton": "G-",
+   "style": "Chanson Française",
+   "m1": "Sur La Place/Jacques Brel",
+   "m2": "",
+   "membres": [
+    "Élisabeth (chant)",
+    "Jean-louis (clarinette basse)",
+    "Dominique (sax sop)"
+   ],
+   "cherche": "guitare (cherche guitare sèche)"
+  },
+  {
+   "nom": "02 · For Me Formidable",
+   "resp": "David",
+   "ton": "",
+   "style": "Chanson Française",
+   "m1": "For Me Formidable/Aznavour",
+   "m2": "",
+   "membres": [
+    "Sylvain (chant)",
+    "David (chant)",
+    "Emmanuelle (B) (piano)",
+    "Christophe (basse)",
+    "Gaël (batterie)"
+   ],
+   "cherche": "vents"
+  },
+  {
+   "nom": "03 · Compagnons",
+   "resp": "Tiphenn",
+   "ton": "",
+   "style": "Rock",
+   "m1": "Compagnons/Feu Chatterton",
+   "m2": "",
+   "membres": [
+    "Christophe (chant)",
+    "Éric (piano)",
+    "Tiphenn (basse)",
+    "Gaël (batterie)",
+    "Pierre-yves (guitare)",
+    "Marianne (flûte)"
+   ],
+   "cherche": ""
+  },
+  {
+   "nom": "04 · Love",
+   "resp": "Emmanuelle",
+   "ton": "",
+   "style": "Jazz",
+   "m1": "Love/Nat King Cole",
+   "m2": "",
+   "membres": [
+    "Emmanuelle (B) (chant)",
+    "Beate (B) (chant)",
+    "Colette (piano)",
+    "Agnès (basse)",
+    "Autre batteur (batterie)",
+    "Daniel (guitare)",
+    "Pascal (vents)"
+   ],
+   "cherche": ""
+  },
+  {
+   "nom": "05 · Oye Como Va",
+   "resp": "Sergio",
+   "ton": "A-",
+   "style": "Latin",
+   "m1": "Oye Como Va/ Tito Puente",
+   "m2": "",
+   "membres": [
+    "Jocelyne (chant)",
+    "Sergio (piano)",
+    "Christophe (basse)",
+    "Pierre (SIG) (batterie)"
+   ],
+   "cherche": "guitare, vents"
+  },
+  {
+   "nom": "06 · Ces Petits Riens",
+   "resp": "Franck",
+   "ton": "",
+   "style": "Jazz\nFrançais",
+   "m1": "Ces Petits Riens/ S. Gainsbourg",
+   "m2": "",
+   "membres": [
+    "Anne-salomé (chant)",
+    "Cécile (chant)",
+    "Franck (piano)",
+    "Colette (basse)",
+    "Pierre (SIG) (batterie)",
+    "Marianne (flûte)"
+   ],
+   "cherche": ""
+  },
+  {
+   "nom": "07 · Every Breath You Take",
+   "resp": "Éric",
+   "ton": "G",
+   "style": "Pop/Rock",
+   "m1": "Every Breath You Take/Police",
+   "m2": "",
+   "membres": [
+    "Valérie (chant)",
+    "Éric (piano)",
+    "Tiphenn (basse)",
+    "François (batterie)",
+    "Bernard (guitare)"
+   ],
+   "cherche": "vents"
+  },
+  {
+   "nom": "08 · Riders On The Storm",
+   "resp": "François",
+   "ton": "ORIGINE",
+   "style": "Rock Psyché",
+   "m1": "Riders On The Storm/Doors",
+   "m2": "",
+   "membres": [
+    "Jorge (chant)",
+    "Anne-salomé (chant)",
+    "Franck (piano)",
+    "Agnès (basse)",
+    "François (batterie)",
+    "Sylvain (guitare)",
+    "Pascal (vents)"
+   ],
+   "cherche": ""
+  },
+  {
+   "nom": "09 · Soulman",
+   "resp": "Catherine",
+   "ton": "E",
+   "style": "Soul",
+   "m1": "Soulman/Ben L’Oncle Soul",
+   "m2": "",
+   "membres": [
+    "David (chant)",
+    "Colette (piano)",
+    "Arnaud (basse)",
+    "Gaël (batterie)",
+    "Pierre (guitare)",
+    "Catherine (guitare)"
+   ],
+   "cherche": "vents"
+  },
+  {
+   "nom": "10 · Boys Don’T Cry",
+   "resp": "Pierre-yves",
+   "ton": "ORIGINE",
+   "style": "Rock",
+   "m1": "Boys Don’T Cry/The Cure",
+   "m2": "",
+   "membres": [
+    "Pierre-yves (chant)",
+    "David (chant)",
+    "Éric (piano)",
+    "Christophe (basse)",
+    "Gaël (batterie)",
+    "Luc (guitare)",
+    "David (guitare)",
+    "Pierre-yves (guitare)"
+   ],
+   "cherche": ""
+  },
+  {
+   "nom": "11 · Surfin’ Usa",
+   "resp": "Florence",
+   "ton": "Bb",
+   "style": "Pop/Rock",
+   "m1": "Surfin’ Usa/Beach Boys",
+   "m2": "",
+   "membres": [
+    "Éric (piano)",
+    "Arnaud (basse)",
+    "Gaël (batterie)",
+    "Pierre (L) (guitare)",
+    "Florence (vents)",
+    "Brigitte (vents)",
+    "Catoche (vents)",
+    "Liliane (vents)",
+    "Lola (vents)"
+   ],
+   "cherche": ""
+  },
+  {
+   "nom": "12 · So What",
+   "resp": "Colette",
+   "ton": "",
+   "style": "Jazz",
+   "m1": "So What/Miles Davis",
+   "m2": "",
+   "membres": [
+    "Sergio (piano)",
+    "Colette (basse)",
+    "Pierre (SIG) (batterie)",
+    "Jean-louis (clarinette basse)",
+    "Dominique (sax sop)"
+   ],
+   "cherche": ""
+  },
+  {
+   "nom": "13 · Musique Pour X Musiciens",
+   "resp": "Jean-michel",
+   "ton": "C",
+   "style": "Surprise",
+   "m1": "Musique Pour X Musiciens",
+   "m2": "",
+   "membres": [
+    "Cécile (chant)",
+    "Beate (B) (piano)",
+    "Arnaud (basse)",
+    "Agnès (basse)",
+    "Bruno (vents)",
+    "Pascal (vents)"
+   ],
+   "cherche": "chant (cherche 1 chanteur), piano (cherche 2)"
+  }
+ ],
+ "membresImposes": {},
+ "indispos": [
+  {
+   "noms": [
+    "Élisabeth",
+    "Emmanuelle (B)",
+    "Jocelyne",
+    "Anne-salomé",
+    "Cécile",
+    "Valérie",
+    "Jorge",
+    "Pierre-yves"
+   ],
+   "heures": [
+    "09:00",
+    "09:30"
+   ],
+   "roles": [
+    "chant"
+   ],
+   "motif": "chanteurs indisponibles pour le chant de 9h à 10h (peuvent jouer leur instrument)"
+  }
+ ],
+ "identitesConnues": [
+  "Sylvain",
+  "Christophe",
+  "Emmanuelle (B)",
+  "Beate (B)",
+  "Colette",
+  "Dominique",
+  "David",
+  "Gaël",
+  "Éric",
+  "Tiphenn",
+  "Marianne",
+  "Agnès",
+  "Pascal",
+  "Sergio",
+  "Cécile",
+  "Franck",
+  "François",
+  "Arnaud"
+ ]
+}
