@@ -122,7 +122,7 @@
     'salle-hors-creneau': 'Salle attribuée ouverte au créneau',
     'restriction-horaire-salle': 'Restrictions horaires par salle (dortoirs, autres usages)',
     'creneaux-consecutifs': 'Pas deux répétitions accolées pour un même groupe',
-    'preference-espacement-12h': 'Préférer un espacement ≥ 12 h entre 2 répétitions d\'un même groupe',
+    'preference-espacement-12h': 'Repos ≥ 12 h entre deux engagements d\'un même musicien',
     'preference-equilibre-tardif': 'Éviter qu\'un musicien ait toutes ses répés en soirée',
   }
 

@@ -108,12 +108,13 @@ function ecartMinutesEntre(a: Creneau, b: Creneau): number {
 }
 
 /**
- * Objectif métier (Stéphane, session apéro-concert 2026) : dans la mesure
- * du possible, deux répétitions d'un même groupe sont espacées d'au moins
- * `ECART_MIN_ENTRE_REPETS` minutes — laisse le temps de digérer entre deux
- * séances. Traitée en préférence pondérée (score dégressif), pas en
- * contrainte dure : quand un stage court oblige à resserrer, le solveur
- * accepte en le pénalisant.
+ * Objectif métier (Stéphane, session apéro-concert 2026, précisé le
+ * 24/08) : dans la mesure du possible, deux engagements successifs d'un
+ * même musicien (peu importe le morceau) sont espacés d'au moins
+ * `ECART_MIN_ENTRE_REPETS` minutes — c'est la personne qui a besoin de
+ * digérer, pas le groupe. Traitée en préférence pondérée (score dégressif),
+ * pas en contrainte dure : quand un stage court oblige à resserrer, le
+ * solveur accepte en le pénalisant.
  */
 const ECART_MIN_ENTRE_REPETS = 12 * 60
 
@@ -336,15 +337,19 @@ export function repartir(
     v += (cap - occ) * 3 // préférer les créneaux avec de la marge
     v -= occ * 9 // pénaliser la saturation
     if (actif(reg, 'preference-espacement-12h')) {
-      const planG = e.plan.get(g.id) ?? []
-      for (const sid of planG) {
-        const s = creneauxParId.get(sid)
-        if (!s) continue
-        // Pénalité dégressive quand deux répés du groupe sont trop proches :
-        // -50 à 0 min d'écart, 0 à 12h d'écart et au-delà.
-        const ecart = ecartMinutesEntre(s, c)
-        if (ecart < ECART_MIN_ENTRE_REPETS) {
-          v -= Math.round(50 * (1 - ecart / ECART_MIN_ENTRE_REPETS))
+      // Pénalité dégressive pour chaque membre du groupe candidat dont un
+      // engagement précédent (peu importe le groupe) est à moins de 12 h :
+      // -50 à 0 min d'écart, 0 à partir de 12 h.
+      for (const pid of memP.get(g.id) ?? []) {
+        const occs = e.occPersonne.get(pid)
+        if (!occs) continue
+        for (const cid of occs) {
+          const s = creneauxParId.get(cid)
+          if (!s) continue
+          const ecart = ecartMinutesEntre(s, c)
+          if (ecart < ECART_MIN_ENTRE_REPETS) {
+            v -= Math.round(50 * (1 - ecart / ECART_MIN_ENTRE_REPETS))
+          }
         }
       }
     }
