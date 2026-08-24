@@ -456,6 +456,50 @@
     solution = null
   }
 
+  /* --- Édition Personnes ------------------------------------------------- */
+
+  function ajouterPersonne() {
+    inscriptions.personnes.push({
+      id: `personne-${Date.now().toString(36)}`,
+      nom: 'Nouveau stagiaire',
+      discriminant: '',
+      instruments: [],
+      role: 'musicien',
+      indispos: [],
+    })
+    solution = null
+  }
+  function supprimerPersonne(pid: string) {
+    const p = inscriptions.personnes.find((x) => x.id === pid)
+    if (!p) return
+    // Vérifier qu'elle n'est plus dans aucun groupe / imposé
+    const engagements = inscriptions.groupes.filter((g) =>
+      g.membres.some((m) => m.personne_id === pid),
+    ).length
+    if (engagements > 0) {
+      if (!confirm(`${libellePersonne(p)} est encore dans ${engagements} groupe(s). Supprimer quand même ?`))
+        return
+      // Retire des groupes
+      for (const g of inscriptions.groupes) {
+        g.membres = g.membres.filter((m) => m.personne_id !== pid)
+      }
+    }
+    inscriptions.personnes = inscriptions.personnes.filter((x) => x.id !== pid)
+    solution = null
+  }
+  function ajouterInstrument(pid: string) {
+    const p = inscriptions.personnes.find((x) => x.id === pid)
+    if (!p) return
+    p.instruments.push({ pupitre: 'chant' })
+    solution = null
+  }
+  function supprimerInstrument(pid: string, i: number) {
+    const p = inscriptions.personnes.find((x) => x.id === pid)
+    if (!p) return
+    p.instruments.splice(i, 1)
+    solution = null
+  }
+
   /* --- Édition Indispos personnes ---------------------------------------- */
 
   function ajouterIndispo(pid: string) {
@@ -478,6 +522,11 @@
   }
   const nbIndispoTotal = $derived(
     inscriptions.personnes.reduce((s, p) => s + p.indispos.length, 0),
+  )
+  const nbPersonnesLibres = $derived(
+    inscriptions.personnes.filter(
+      (p) => !inscriptions.groupes.some((g) => g.membres.some((m) => m.personne_id === p.id)),
+    ).length,
   )
   const personnesAvecIndispo = $derived(inscriptions.personnes.filter((p) => p.indispos.length > 0))
   const personnesSansIndispo = $derived(
@@ -667,6 +716,67 @@
       </div>
     {/if}
   </section>
+
+  <details class="sheet">
+    <summary>
+      <p class="eyebrow">Étape 1a · Personnes</p>
+      <h2>{inscriptions.personnes.length} personne(s) — dont {nbPersonnesLibres} sans engagement</h2>
+      <p class="hint">
+        Musiciens et chanteurs du stage. Un stagiaire sans groupe reste utilisable
+        comme renfort quand un groupe cherche son pupitre.
+      </p>
+    </summary>
+    <div class="body">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:180px">Nom</th>
+            <th style="width:100px">Discriminant</th>
+            <th>Instruments</th>
+            <th style="width:110px">Rôle</th>
+            <th style="width:70px">Groupes</th>
+            <th style="width:40px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each inscriptions.personnes as p}
+            {@const nGroupes = inscriptions.groupes.filter((g) => g.membres.some((m) => m.personne_id === p.id)).length}
+            <tr>
+              <td><input bind:value={p.nom} /></td>
+              <td><input bind:value={p.discriminant} placeholder="(B), R., L…" /></td>
+              <td>
+                {#each p.instruments as ins, ii}
+                  <span class="chip">
+                    <select bind:value={ins.pupitre} style="border:none;background:transparent;font-size:12.5px">
+                      {#each lieu.pupitres as pup}
+                        <option value={pup}>{pup}</option>
+                      {/each}
+                    </select>
+                    <input bind:value={ins.precision} placeholder="précision" style="width:100px;font-size:11px" />
+                    <button class="mini" onclick={() => supprimerInstrument(p.id, ii)}>×</button>
+                  </span>
+                {/each}
+                <button class="ghost mini-ajout" onclick={() => ajouterInstrument(p.id)}>+ instrument</button>
+              </td>
+              <td>
+                <select bind:value={p.role}>
+                  <option value="musicien">musicien</option>
+                  <option value="chanteur">chanteur</option>
+                  <option value="intervenant">intervenant</option>
+                </select>
+              </td>
+              <td class="center mono">
+                {nGroupes}
+                {#if nGroupes === 0}<span class="tag-libre">libre</span>{/if}
+              </td>
+              <td class="center"><button class="mini" onclick={() => supprimerPersonne(p.id)}>×</button></td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+      <button class="ghost" onclick={ajouterPersonne}>+ Ajouter une personne</button>
+    </div>
+  </details>
 
   <details class="sheet">
     <summary>
