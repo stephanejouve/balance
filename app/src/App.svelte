@@ -6,6 +6,8 @@
   import { Lieu, Session, libellePersonne } from './domain/model'
   import { attribuerSalles } from './engine/allocate-rooms'
   import { chargeParMusicien } from './engine/charge'
+  import { ordonnerConcert } from './engine/concert'
+  import type { EtapeConcert } from './engine/concert'
   import type { IdContrainte } from './engine/contraintes'
   import { REGISTRE_TOUT, registrePersonnalise } from './engine/contraintes'
   import { analyserInfaisabilite, diagnostiquer } from './engine/diagnostic'
@@ -91,11 +93,16 @@
   }
   let solution = $state<Solution | null>(null)
   let calculEnCours = $state(false)
-  let vue = $state<'groupes' | 'salles' | 'musiciens' | 'carte'>('groupes')
+  let vue = $state<'groupes' | 'salles' | 'musiciens' | 'carte' | 'concert'>('groupes')
+  /** Ordre du conducteur, éditable par drag-drop. Recalculé quand solution change. */
+  let ordreConducteur = $state<EtapeConcert[]>([])
+  let dragIdx = $state<number | null>(null)
   /** Case libre survolée dans la carte : affiche les groupes candidats. */
   let inspecteCase = $state<{ creneauId: string; salleId: string } | null>(null)
   /** Seuil de charge par musicien et par jour au-delà duquel on alerte. */
   let seuilChargeJour = $state(4)
+  /** Si vrai, la grille écarte les créneaux dont l'heure de début est passée. */
+  let filtrerPasse = $state(false)
   /** Clés `groupe_id|creneau_id` des assignations à préserver lors des recalculs. */
   let figeesKeys = $state(new Set<string>())
   /** Assignation en cours de déplacement (bascule la vue Par salle en mode cibles). */
@@ -130,7 +137,7 @@
 
   const creneaux = $derived.by(() => {
     try {
-      return genererCreneaux(session, lieu)
+      return genererCreneaux(session, lieu, { maintenant: filtrerPasse ? new Date() : undefined })
     } catch {
       return []
     }
@@ -179,6 +186,35 @@
     }
   }
 
+  /** Recalcule les stats d'un ordre du conducteur (mouvements) à partir des groupes. */
+  function statsConducteur(ordre: EtapeConcert[]): { mouvements: number } {
+    let mouvements = 0
+    let precedents = new Set<string>()
+    for (const e of ordre) {
+      const g = groupesParId.get(e.groupe_id)
+      const m = g ? new Set(g.membres.map((mm) => mm.personne_id)) : new Set<string>()
+      const montent = [...m].filter((x) => !precedents.has(x)).length
+      const descendent = [...precedents].filter((x) => !m.has(x)).length
+      mouvements += montent + descendent
+      precedents = m
+    }
+    return { mouvements }
+  }
+
+  function reordonnerAuto() {
+    const r = ordonnerConcert(inscriptions.groupes)
+    ordreConducteur = r.etapes
+  }
+
+  function dropOrdre(idxCible: number) {
+    if (dragIdx == null || dragIdx === idxCible) return
+    const cp = [...ordreConducteur]
+    const [item] = cp.splice(dragIdx, 1)
+    cp.splice(idxCible, 0, item)
+    ordreConducteur = cp
+    dragIdx = null
+  }
+
   async function lancer() {
     calculEnCours = true
     await new Promise((r) => setTimeout(r, 20))
@@ -208,6 +244,7 @@
       diagnostics,
       duree_ms: Math.round(performance.now() - t0),
     }
+    ordreConducteur = ordonnerConcert(inscriptions.groupes).etapes
     calculEnCours = false
   }
 
@@ -624,6 +661,7 @@
             <th style="width:110px">Style</th>
             <th style="width:70px">Tona</th>
             <th style="width:65px">Effectif</th>
+            <th style="width:80px" title="Répétitions déjà effectuées (recalcul en cours de session)">Déjà fait</th>
             <th style="width:40px"></th>
           </tr>
         </thead>
@@ -637,6 +675,7 @@
               <td><input bind:value={g.style} /></td>
               <td><input bind:value={g.tonalite} /></td>
               <td class="center mono">{effectif}</td>
+              <td class="center"><input type="number" min="0" max={session.repetitions_visees} bind:value={g.repetitions_deja_faites} style="width:60px" /></td>
               <td class="center"><button class="mini" onclick={() => supprimerGroupe(i)}>×</button></td>
             </tr>
           {/each}
@@ -988,6 +1027,10 @@
         </ul>
       </div>
     {/if}
+    <label class="check" style="max-width:none;border:none;margin:8px 0 12px">
+      <input type="checkbox" bind:checked={filtrerPasse} />
+      <span>Ne pas placer de répétitions dans le passé (recalcul en cours de session)</span>
+    </label>
     <button class="big" onclick={lancer} disabled={calculEnCours}>
       {calculEnCours ? 'Recherche en cours…' : solution ? 'Relancer la répartition' : 'Lancer la répartition'}
     </button>
@@ -1058,6 +1101,7 @@
         <button class:actif={vue === 'salles'} onclick={() => (vue = 'salles')}>Par salle</button>
         <button class:actif={vue === 'musiciens'} onclick={() => (vue = 'musiciens')}>Par musicien</button>
         <button class:actif={vue === 'carte'} onclick={() => (vue = 'carte')}>Carte</button>
+        <button class:actif={vue === 'concert'} onclick={() => (vue = 'concert')}>Concert</button>
         <span class="grow"></span>
         {#if figeesKeys.size > 0}
           <span class="mono ink-soft">{figeesKeys.size} figée{figeesKeys.size > 1 ? 's' : ''}</span>
@@ -1214,6 +1258,43 @@
             {/each}
           </tbody>
         </table>
+      {:else if vue === 'concert'}
+        {@const stats = statsConducteur(ordreConducteur)}
+        <div class="toolbar" style="margin-bottom:14px">
+          <button class="ghost" onclick={reordonnerAuto}>Recalculer l'ordre optimal</button>
+          <span class="grow"></span>
+          <span class="mono ink-soft">{stats.mouvements} mouvement(s) de plateau</span>
+        </div>
+        <p class="hint">
+          Glisse-dépose les lignes pour réordonner à la main. Le compteur de mouvements
+          se met à jour en direct.
+        </p>
+        <ol class="conducteur">
+          {#each ordreConducteur as etape, i (etape.groupe_id)}
+            {@const g = groupesParId.get(etape.groupe_id)}
+            <li
+              draggable="true"
+              ondragstart={() => (dragIdx = i)}
+              ondragover={(e) => e.preventDefault()}
+              ondrop={(e) => { e.preventDefault(); dropOrdre(i) }}
+              class:dragging={dragIdx === i}
+            >
+              <span class="num">{i + 1}</span>
+              <span class="corps">
+                <b>{etape.titre}</b>
+                {#if etape.style}<span class="badge">{etape.style}</span>{/if}
+              </span>
+              <span class="mouvements mono ink-soft">
+                {#if i > 0}
+                  ↑ {etape.musiciens_qui_montent.length}
+                  ↓ {etape.musiciens_qui_descendent.length}
+                {:else}
+                  démarrage
+                {/if}
+              </span>
+            </li>
+          {/each}
+        </ol>
       {:else if vue === 'carte'}
         {@const sallesAffichees = lieu.salles.filter((s) => s.actif)}
         {@const creneauxTries = [...creneaux].sort((a, b) =>
@@ -1638,6 +1719,36 @@
     border-radius: 2px;
     font-weight: 600;
   }
+  /* Conducteur du concert */
+  ol.conducteur {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  ol.conducteur li {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 14px;
+    margin: 0 0 4px;
+    background: #f7f5ec;
+    border-left: 3px solid var(--ochre);
+    border-radius: 0 2px 2px 0;
+    cursor: grab;
+    user-select: none;
+  }
+  ol.conducteur li:active { cursor: grabbing; }
+  ol.conducteur li.dragging { opacity: 0.4; }
+  ol.conducteur li:hover { background: #f0eddf; }
+  ol.conducteur .num {
+    font-family: var(--serif);
+    font-size: 24px;
+    color: var(--ochre);
+    width: 30px;
+    text-align: center;
+  }
+  ol.conducteur .corps { flex: 1; display: flex; align-items: center; gap: 10px; }
+  ol.conducteur .mouvements { font-size: 12px; white-space: nowrap; }
   .candidats {
     margin-top: 16px;
     padding: 12px 15px;

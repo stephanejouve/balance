@@ -152,6 +152,7 @@ export function migrerInscriptions(legacy: LegacyInscriptions, session_id: strin
       responsable_id: g.resp ? slug(g.resp) : '',
       membres,
       postes_cherches: extrairePupitresCherches(g.cherche),
+      repetitions_deja_faites: 0,
     }
   })
 

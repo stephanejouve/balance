@@ -185,7 +185,8 @@ function reparer(
   memP: Map<string, string[]>,
   e: EtatEssai,
   creneaux: Creneau[],
-  cible: number,
+  cibleDefaut: number,
+  cibleGroupe: (g: Groupe) => number,
   estLibre: (c: Creneau, g: Groupe, e: EtatEssai, contraintJour: boolean) => boolean,
   poser: (c: Creneau, g: Groupe, e: EtatEssai) => void,
 ): void {
@@ -213,8 +214,9 @@ function reparer(
   for (let passe = 0; passe < 3; passe++) {
     let progresse = false
     for (const g of parPriorite()) {
+      const cibleG = cibleGroupe(g)
       let garde = 0
-      while ((e.plan.get(g.id)?.length ?? 0) < cible && garde++ < 20) {
+      while ((e.plan.get(g.id)?.length ?? 0) < cibleG && garde++ < 20) {
         let fait = false
         // Essai direct d'abord (sans réparer)
         const planG = e.plan.get(g.id) ?? []
@@ -301,6 +303,9 @@ export function repartir(
   const memP = new Map(groupes.map((g) => [g.id, membresUniques(g)]))
   const cible = session.repetitions_visees
   const total = groupes.length
+  /** Cible par groupe = visées - déjà faites (défensif : NaN → 0), ≥ 0 */
+  const cibleGroupe = (g: Groupe): number =>
+    Math.max(0, session.repetitions_visees - (g.repetitions_deja_faites || 0))
   const difficulte = new Map(
     groupes.map((g) => [g.id, coterDifficulte(g, groupes, creneaux, personnesParId)]),
   )
@@ -436,6 +441,7 @@ export function repartir(
         ordre = shuffle(groupes, rng)
       }
       for (const g of ordre) {
+        if ((e.plan.get(g.id)?.length ?? 0) >= cibleGroupe(g)) continue
         if ((e.plan.get(g.id)?.length ?? 0) > tour) continue
         let cands = creneaux.filter((c) => estLibre(c, g, e, true))
         if (cands.length === 0) {
@@ -453,9 +459,9 @@ export function repartir(
     // Phase de réparation : pour un groupe incomplet, tenter de déloger
     // jusqu'à MAX_BLOQUEURS_REPAR bloqueurs partageant un membre, avec
     // rollback complet si l'opération n'aboutit pas.
-    reparer(groupes, memP, e, creneaux, cible, estLibre, poser)
+    reparer(groupes, memP, e, creneaux, cible, cibleGroupe, estLibre, poser)
 
-    const complets = [...e.plan.values()].filter((cs) => cs.length === cible).length
+    const complets = groupes.filter((g) => (e.plan.get(g.id)?.length ?? 0) >= cibleGroupe(g)).length
     const totalPosé = [...e.plan.values()].reduce((s, cs) => s + cs.length, 0)
     let etale = 0
     for (const cs of e.plan.values()) {
@@ -470,7 +476,7 @@ export function repartir(
     ) {
       best = cand
     }
-    if (best.complets === total && best.etale === total * cible) break
+    if (best.complets === total) break
   }
 
   const placement: PlacementItem[] = []

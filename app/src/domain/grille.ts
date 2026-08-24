@@ -100,6 +100,16 @@ export function joursDeSession(debut: IsoDate, fin: IsoDate): IsoDate[] {
 
 /* --------------------------------------------------------- Générateur ----*/
 
+export interface GenererOptions {
+  /**
+   * Date de référence « maintenant ». Si fournie, les créneaux dont le
+   * début est strictement antérieur sont écartés — inutile de proposer
+   * des répétitions à des dates déjà échues quand on refait le planning
+   * en cours de session.
+   */
+  maintenant?: Date
+}
+
 /**
  * Déploie la grille de règles de la session sur les jours du calendrier
  * puis applique les règles de blocage.
@@ -110,8 +120,10 @@ export function joursDeSession(debut: IsoDate, fin: IsoDate): IsoDate[] {
  *  - une règle `bloque: true` retire tout créneau dont le début tombe dans
  *    sa plage `[debut, fin[` sur les jours ciblés
  *  - filtrage final : `date_butoir` + `butoir_heure` de la session
+ *  - filtrage optionnel : créneaux dont le début est strictement antérieur
+ *    à `options.maintenant` (utile pour un recalcul en cours de session)
  */
-export function genererCreneaux(session: Session, lieu: Lieu): Creneau[] {
+export function genererCreneaux(session: Session, lieu: Lieu, options: GenererOptions = {}): Creneau[] {
   const jours = joursDeSession(session.date_debut, session.date_fin)
   const sallesActives = lieu.salles.filter((s) => s.actif).map((s) => s.id)
 
@@ -148,8 +160,18 @@ export function genererCreneaux(session: Session, lieu: Lieu): Creneau[] {
 
   const butoirKey = `${session.date_butoir}T${session.butoir_heure.replace(':', '')}`
 
+  const maintenantKey = options.maintenant
+    ? (() => {
+        const d = options.maintenant
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        const h = `${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`
+        return `${iso}T${h}`
+      })()
+    : null
+
   return emitted
     .filter((c) => !estBloqué(c))
     .filter((c) => `${c.date}T${c.debut.replace(':', '')}` < butoirKey)
+    .filter((c) => !maintenantKey || `${c.date}T${c.debut.replace(':', '')}` >= maintenantKey)
     .sort((a, b) => a.id.localeCompare(b.id))
 }

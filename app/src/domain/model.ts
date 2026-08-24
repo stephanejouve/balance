@@ -191,6 +191,12 @@ export const Groupe = z.object({
   responsable_id: z.string().default(''),
   membres: z.array(MembreGroupe).default([]),
   postes_cherches: z.array(Pupitre).default([]),
+  /**
+   * Répétitions déjà effectuées (ex : recalcul en milieu de session).
+   * Le solveur ne cherche que `session.repetitions_visees - repetitions_deja_faites`
+   * créneaux supplémentaires pour ce groupe. Défaut 0 = rien de fait.
+   */
+  repetitions_deja_faites: z.number().int().min(0).default(0),
 })
 export type Groupe = z.infer<typeof Groupe>
 
