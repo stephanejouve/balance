@@ -1150,7 +1150,16 @@
         <label>Butoir heure <input type="time" bind:value={session.butoir_heure} /></label>
         <label>Répétitions visées <input type="number" min="1" max="10" bind:value={session.repetitions_visees} /></label>
         <label>Minimum acceptable <input type="number" min="1" max="10" bind:value={session.repetitions_min} /></label>
+        <label>
+          Marge d'occupation ({session.marge_pct}%)
+          <input type="range" min="0" max="50" step="5" bind:value={session.marge_pct} />
+        </label>
       </div>
+      <p class="hint" style="margin:6px 0 0;font-size:12.5px">
+        <b>Marge {session.marge_pct}%</b> — le solveur ne remplira pas plus de
+        {100 - session.marge_pct}% des salles disponibles à chaque créneau. À 0%,
+        il peut saturer à 100% (moins de tolérance aux imprévus).
+      </p>
       <h3>Grille de créneaux</h3>
       <p class="hint">
         Chaque règle génère des créneaux sur les jours ciblés (colonne <b>Jours</b> —

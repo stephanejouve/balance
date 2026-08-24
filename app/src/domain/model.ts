@@ -170,6 +170,14 @@ export const Session = z.object({
   plafond_morceaux: z.number().int().positive().default(13),
   repetitions_visees: z.number().int().positive().default(3),
   repetitions_min: z.number().int().positive().default(2),
+  /**
+   * Marge d'occupation en pourcentage : le solveur ne remplit pas plus de
+   * `(100 - marge_pct)`% des salles disponibles à chaque créneau. Permet
+   * de garder du jeu pour les imprévus (brief §5 « un planning optimal à
+   * 100 % est un planning qui casse au premier contretemps »).
+   * 0 = comportement historique (peut saturer à 100%).
+   */
+  marge_pct: z.number().min(0).max(90).default(0),
 })
 export type Session = z.infer<typeof Session>
 

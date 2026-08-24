@@ -310,7 +310,14 @@ export function repartir(
     groupes.map((g) => [g.id, coterDifficulte(g, groupes, creneaux, personnesParId)]),
   )
 
-  const sallesUtilisables = (c: Creneau) => c.salles.filter((sid) => sallesActives.has(sid)).length
+  const margePct = session.marge_pct || 0
+  const sallesUtilisables = (c: Creneau) => {
+    const dispo = c.salles.filter((sid) => sallesActives.has(sid)).length
+    if (dispo === 0 || margePct === 0) return dispo
+    // Réduit la capacité effective pour garder de la marge.
+    // Garantit au moins 1 place tant qu'il y a des salles disponibles.
+    return Math.max(1, Math.floor(dispo * (1 - margePct / 100)))
+  }
 
   const estLibre = (c: Creneau, g: Groupe, e: EtatEssai, contraintJour: boolean): boolean => {
     const cap = sallesUtilisables(c)
