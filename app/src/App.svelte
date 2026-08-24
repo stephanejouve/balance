@@ -166,25 +166,12 @@
   function nouvelleSessionVide() {
     if (
       !confirm(
-        "Repartir de zéro ? Le lieu, la session et toutes les inscriptions actuelles seront remplacés par un modèle vide.",
+        "Nouvelle session dans ce lieu ? Le lieu et ses salles sont préservés. La session (dates + grille) et toutes les inscriptions actuelles seront remplacés par un modèle vierge.",
       )
     )
       return
-    // Lieu : 1 salle générique
-    Object.assign(lieu, {
-      id: 'nouveau-lieu',
-      nom: 'Nouveau lieu',
-      pupitres: ['chant', 'piano', 'basse', 'batterie', 'guitare', 'vents'],
-    })
-    lieu.salles.splice(0, lieu.salles.length, {
-      id: 'salle-1',
-      nom: 'Salle 1',
-      jauge: 8,
-      equipement: [],
-      restrictions: [],
-      actif: true,
-    })
-    // Session : cette semaine, grille type
+    // Lieu inchangé (salles, restrictions, pupitres, équipements).
+    // Session : cette semaine, grille type minimale
     const today = new Date()
     const iso = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -196,7 +183,6 @@
     Object.assign(session, {
       id: 'nouvelle-session',
       nom: 'Nouvelle session',
-      lieu_id: 'nouveau-lieu',
       date_debut: iso(today),
       date_fin: dansXjours(6),
       date_butoir: dansXjours(6),
@@ -211,9 +197,9 @@
       { jours: [], debut: '09:00', fin: '12:00', pas_minutes: 60, salles: [], bloque: false },
       { jours: [], debut: '14:00', fin: '18:00', pas_minutes: 60, salles: [], bloque: false },
     )
-    // Inscriptions vides
+    // Inscriptions vides (personnes + groupes + imposés)
     inscriptions = { session_id: 'nouvelle-session', personnes: [], groupes: [], imposes: [] }
-    sourceLabel = 'nouvelle session (vide)'
+    sourceLabel = `nouvelle session dans « ${lieu.nom} »`
     warningsImport = []
     erreurImport = ''
     solution = null
@@ -747,7 +733,7 @@
       ou du jeu de démonstration.
     </p>
     <div class="toolbar">
-      <button class="ghost" onclick={nouvelleSessionVide}>Nouvelle session vide</button>
+      <button class="ghost" onclick={nouvelleSessionVide}>Nouvelle session (garde le lieu)</button>
       <button class="ghost" onclick={utiliserDemo}>Recharger la démo</button>
       <label class="fake-btn">
         Importer .xlsx…
