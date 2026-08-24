@@ -11,8 +11,9 @@ import { z } from 'zod'
  * Chaque jeu est parsable / sérialisable indépendamment.
  */
 
-const HH_MM_RE = /^([01]\d|2[0-3]):[0-5]\d$/
-export const HhMm = z.string().regex(HH_MM_RE, 'attendu HH:MM')
+/** Accepte 24:00 pour représenter la fin de journée (repris du prototype). */
+const HH_MM_RE = /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/
+export const HhMm = z.string().regex(HH_MM_RE, 'attendu HH:MM (ou 24:00 pour minuit)')
 export type HhMm = z.infer<typeof HhMm>
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/

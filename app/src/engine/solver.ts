@@ -72,6 +72,83 @@ function accolAvecPlan(
   })
 }
 
+/**
+ * Tente de déloger les groupes bloqueurs d'un créneau afin d'y placer un
+ * groupe incomplet. Un bloqueur est délogeable si (1) il ne partage pas
+ * son créneau avec plusieurs groupes conflictuels et (2) on peut le
+ * reloger ailleurs. Version conservatrice du prototype.
+ */
+function reparer(
+  groupes: Groupe[],
+  memP: Map<string, string[]>,
+  e: EtatEssai,
+  creneaux: Creneau[],
+  estLibre: (c: Creneau, g: Groupe, e: EtatEssai, contraintJour: boolean) => boolean,
+  poser: (c: Creneau, g: Groupe, e: EtatEssai) => void,
+): void {
+  const retirer = (c: Creneau, g: Groupe) => {
+    e.occSlot.set(c.id, Math.max(0, (e.occSlot.get(c.id) ?? 0) - 1))
+    const planG = e.plan.get(g.id)
+    if (planG) e.plan.set(g.id, planG.filter((id) => id !== c.id))
+    // recalcule les jours du groupe
+    const jours = new Set<string>()
+    ;(e.plan.get(g.id) ?? []).forEach((sid) => {
+      const s = creneaux.find((x) => x.id === sid)
+      if (s) jours.add(s.date)
+    })
+    e.joursGroupe.set(g.id, jours)
+    for (const pid of memP.get(g.id) ?? []) e.occPersonne.get(pid)?.delete(c.id)
+  }
+
+  const cible = 3 // consommé après avoir vérifié plan.length < cible
+
+  for (const g of groupes) {
+    let garde = 0
+    while ((e.plan.get(g.id)?.length ?? 0) < cible && garde++ < 40) {
+      let fait = false
+      for (const c of creneaux) {
+        if (fait) break
+        const planG = e.plan.get(g.id) ?? []
+        if (planG.includes(c.id)) continue
+
+        // Identifier les groupes bloqueurs (qui partagent un membre)
+        const membresG = memP.get(g.id) ?? []
+        const bloqueurs: Groupe[] = []
+        for (const g2 of groupes) {
+          if (g2.id === g.id) continue
+          if (!(e.plan.get(g2.id) ?? []).includes(c.id)) continue
+          const m2 = memP.get(g2.id) ?? []
+          if (m2.some((pid) => membresG.includes(pid))) bloqueurs.push(g2)
+        }
+        // Contrainte : au plus 1 bloqueur (sinon délogement en cascade)
+        if (bloqueurs.length > 1) continue
+        const occ = e.occSlot.get(c.id) ?? 0
+        // Il faut que la salle se libère après délogement
+        if (occ - bloqueurs.length >= c.salles.length) continue
+
+        for (const bloqueur of bloqueurs) {
+          retirer(c, bloqueur)
+          // Chercher un nouveau créneau pour le bloqueur
+          const relog = creneaux.find(
+            (cc) => !(e.plan.get(bloqueur.id) ?? []).includes(cc.id) && estLibre(cc, bloqueur, e, true),
+          )
+          if (!relog) {
+            // Rétablir le bloqueur à sa place
+            poser(c, bloqueur, e)
+            break
+          }
+          poser(relog, bloqueur, e)
+        }
+        if (estLibre(c, g, e, false)) {
+          poser(c, g, e)
+          fait = true
+        }
+      }
+      if (!fait) break
+    }
+  }
+}
+
 export function repartir(
   session: Session,
   lieu: Lieu,
@@ -172,6 +249,11 @@ export function repartir(
         poser(cands[k], g, e)
       }
     }
+
+    // Phase de réparation : pour un groupe incomplet, tenter de déloger un
+    // bloqueur (autre groupe qui partage un membre) vers un autre créneau.
+    // Port du prototype `repartir()` § "réparation".
+    reparer(groupes, memP, e, creneaux, estLibre, poser)
 
     const complets = [...e.plan.values()].filter((cs) => cs.length === cible).length
     const totalPosé = [...e.plan.values()].reduce((s, cs) => s + cs.length, 0)
