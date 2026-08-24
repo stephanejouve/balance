@@ -9,6 +9,7 @@
   import { REGISTRE_TOUT, registrePersonnalise } from './engine/contraintes'
   import { analyserInfaisabilite, diagnostiquer } from './engine/diagnostic'
   import { enrichirIndispos } from './engine/imposes'
+  import { ciblesValides } from './engine/manuel'
   import { repartir } from './engine/solver'
   import type { Assignation, Probleme } from './engine/types'
   import { couverture, verifier } from './engine/verify'
@@ -91,6 +92,8 @@
   let vue = $state<'groupes' | 'salles' | 'musiciens'>('groupes')
   /** Clés `groupe_id|creneau_id` des assignations à préserver lors des recalculs. */
   let figeesKeys = $state(new Set<string>())
+  /** Assignation en cours de déplacement (bascule la vue Par salle en mode cibles). */
+  let deplacementEnCours = $state<Assignation | null>(null)
   let contraintesActives = $state<Record<IdContrainte, boolean>>({
     'personne-unique-moment': true,
     'salle-unique-groupe': true,
@@ -424,6 +427,71 @@
   }
   function toutDegeler() {
     figeesKeys = new Set()
+  }
+
+  /* --- Ajustement manuel : déplacer une répé ----------------------------- */
+
+  const ciblesDeplacement = $derived.by(() => {
+    if (!deplacementEnCours || !solution) return new Set<string>()
+    const g = inscriptions.groupes.find((x) => x.id === deplacementEnCours!.groupe_id)
+    if (!g) return new Set<string>()
+    const autres = solution.assignations.filter(
+      (a) => !(a.groupe_id === deplacementEnCours!.groupe_id && a.creneau_id === deplacementEnCours!.creneau_id),
+    )
+    const cibles = ciblesValides(deplacementEnCours!, g, lieu, inscriptions, creneaux, autres, {
+      date: session.date_butoir,
+      heure: session.butoir_heure,
+    })
+    return new Set(cibles.map((c) => `${c.creneau.id}|${c.salle_id}`))
+  })
+
+  function estCibleValide(creneauId: string, salleId: string): boolean {
+    return ciblesDeplacement.has(`${creneauId}|${salleId}`)
+  }
+
+  function demarrerDeplacement(a: Assignation) {
+    deplacementEnCours = deplacementEnCours && keyFigee(deplacementEnCours) === keyFigee(a) ? null : a
+    if (deplacementEnCours) vue = 'salles' // bascule sur la vue qui affiche les cibles
+  }
+
+  function appliquerDeplacement(creneauId: string, salleId: string) {
+    if (!deplacementEnCours || !solution) return
+    if (!estCibleValide(creneauId, salleId)) return
+    const orig = deplacementEnCours
+    // Réassigne la solution en modifiant l'assignation correspondante
+    solution.assignations = solution.assignations.map((a) =>
+      a.groupe_id === orig.groupe_id && a.creneau_id === orig.creneau_id
+        ? { ...a, creneau_id: creneauId, salle_id: salleId }
+        : a,
+    )
+    // Si l'assignation était figée, met à jour la clé
+    if (figeesKeys.has(keyFigee(orig))) {
+      const next = new Set(figeesKeys)
+      next.delete(keyFigee(orig))
+      next.add(`${orig.groupe_id}|${creneauId}`)
+      figeesKeys = next
+    }
+    // Recalcule couverture + vérification pour l'affichage post-hoc
+    const problemes = verifier(
+      session,
+      lieu,
+      enrichirIndispos(inscriptions),
+      creneaux,
+      solution.assignations,
+      registrePersonnalise(
+        (Object.entries(contraintesActives) as [IdContrainte, boolean][])
+          .filter(([, v]) => v)
+          .map(([k]) => k),
+      ),
+    )
+    const cov = couverture(session, inscriptions, solution.assignations)
+    solution.problemes = problemes
+    solution.couverture = cov
+    deplacementEnCours = null
+  }
+
+  function annulerDeplacement() {
+    deplacementEnCours = null
   }
 </script>
 
@@ -845,6 +913,15 @@
           le solveur calcule autour. Clique sur le cadenas pour dégeler.
         </p>
       {/if}
+      {#if deplacementEnCours}
+        {@const g = inscriptions.groupes.find((x) => x.id === deplacementEnCours!.groupe_id)}
+        <div class="msg warn">
+          <b>Déplacement en cours :</b> {g?.titre ?? deplacementEnCours.groupe_id}.
+          Sélectionne une case libre surlignée en vert dans la vue Par salle
+          ({ciblesDeplacement.size} cible(s) valide(s)).
+          <button class="ghost mini-ajout" onclick={annulerDeplacement}>Annuler</button>
+        </div>
+      {/if}
 
       {#if vue === 'groupes'}
         <table>
@@ -877,6 +954,13 @@
                         title={estFigee(a) ? 'Dégeler' : 'Figer cette répétition'}
                         aria-label={estFigee(a) ? 'Dégeler' : 'Figer'}
                       ></button>
+                      <button
+                        class="move"
+                        class:on={deplacementEnCours && keyFigee(deplacementEnCours) === keyFigee(a)}
+                        onclick={() => demarrerDeplacement(a)}
+                        title="Déplacer cette répétition"
+                        aria-label="Déplacer"
+                      ></button>
                     </span>
                   {/each}
                   {#if cs.length === 0}
@@ -906,7 +990,11 @@
                 {@const ass = solution.assignations.find((a) => a.creneau_id === c.id && a.salle_id === salle.id)}
                 {@const g = ass ? groupesParId.get(ass.groupe_id) : undefined}
                 {@const resp = g ? personnesParId.get(g.responsable_id) : undefined}
-                <tr class:libre={!ass} class:figee={ass && estFigee(ass)}>
+                <tr
+                  class:libre={!ass}
+                  class:figee={ass && estFigee(ass)}
+                  class:cible={deplacementEnCours && estCibleValide(c.id, salle.id)}
+                >
                   <td>{salle.nom}</td>
                   <td class="mono">{c.date.slice(5).replace('-', '/')} · {c.debut}–{c.fin}</td>
                   <td>{g ? g.titre : '—'}</td>
@@ -920,6 +1008,19 @@
                         title={estFigee(ass) ? 'Dégeler' : 'Figer cette répétition'}
                         aria-label={estFigee(ass) ? 'Dégeler' : 'Figer'}
                       ></button>
+                      <button
+                        class="move"
+                        class:on={deplacementEnCours && keyFigee(deplacementEnCours) === keyFigee(ass)}
+                        onclick={() => demarrerDeplacement(ass)}
+                        title="Déplacer cette répétition"
+                        aria-label="Déplacer"
+                      ></button>
+                    {:else if deplacementEnCours && estCibleValide(c.id, salle.id)}
+                      <button
+                        class="drop-target"
+                        onclick={() => appliquerDeplacement(c.id, salle.id)}
+                        title="Déplacer ici"
+                      >poser ici</button>
                     {/if}
                   </td>
                 </tr>
@@ -1168,6 +1269,41 @@
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23C8871F' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><rect x='4' y='11' width='16' height='10' rx='2' fill='%23FBF2DF'/><path d='M8 11V7a4 4 0 0 1 8 0v4'/></svg>");
   }
   tr.figee td { background: #fbf2df; }
+  tr.cible td { background: #e3eee6; }
+  /* Bouton déplacer — flèche SVG */
+  button.move {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    margin-left: 3px;
+    background: transparent;
+    border: none;
+    vertical-align: -3px;
+    cursor: pointer;
+    opacity: 0.4;
+    transition: opacity 0.15s;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 14px 14px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235B6660' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 9h14M5 15h14M13 5l6 4-6 4M11 19l-6-4 6-4'/></svg>");
+  }
+  button.move:hover { opacity: 0.9; }
+  button.move.on {
+    opacity: 1;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23C8871F' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M5 9h14M5 15h14M13 5l6 4-6 4M11 19l-6-4 6-4'/></svg>");
+  }
+  button.drop-target {
+    padding: 3px 10px;
+    font-size: 11px;
+    background: var(--vert);
+    border-color: var(--vert);
+    color: white;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  button.drop-target:hover { background: #3d6a4a; border-color: #3d6a4a; }
   .rouge { color: var(--rouge); font-style: italic; }
   .mono { font-family: var(--mono); font-size: 12px; }
 
