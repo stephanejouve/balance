@@ -89,7 +89,9 @@
   }
   let solution = $state<Solution | null>(null)
   let calculEnCours = $state(false)
-  let vue = $state<'groupes' | 'salles' | 'musiciens'>('groupes')
+  let vue = $state<'groupes' | 'salles' | 'musiciens' | 'carte'>('groupes')
+  /** Case libre survolée dans la carte : affiche les groupes candidats. */
+  let inspecteCase = $state<{ creneauId: string; salleId: string } | null>(null)
   /** Clés `groupe_id|creneau_id` des assignations à préserver lors des recalculs. */
   let figeesKeys = $state(new Set<string>())
   /** Assignation en cours de déplacement (bascule la vue Par salle en mode cibles). */
@@ -493,6 +495,31 @@
   function annulerDeplacement() {
     deplacementEnCours = null
   }
+
+  /* --- Carte des créneaux disponibles ------------------------------------ */
+
+  /** Pour la case libre inspectée, liste les groupes qui pourraient s'y insérer. */
+  const candidatsCase = $derived.by(() => {
+    if (!inspecteCase || !solution) return []
+    const c = creneauxParId.get(inspecteCase.creneauId)
+    if (!c) return []
+    const autres = solution.assignations.filter(
+      (a) => !(a.creneau_id === inspecteCase!.creneauId && a.salle_id === inspecteCase!.salleId),
+    )
+    const out: Array<{ groupe_id: string; titre: string }> = []
+    for (const g of inscriptions.groupes) {
+      // Simule un "déplacement fictif" depuis nulle part — pas d'assignation d'origine
+      const fictif: Assignation = { groupe_id: g.id, creneau_id: '__none__', salle_id: '__none__' }
+      const cibles = ciblesValides(fictif, g, lieu, inscriptions, creneaux, autres, {
+        date: session.date_butoir,
+        heure: session.butoir_heure,
+      })
+      if (cibles.some((x) => x.creneau.id === inspecteCase!.creneauId && x.salle_id === inspecteCase!.salleId)) {
+        out.push({ groupe_id: g.id, titre: g.titre })
+      }
+    }
+    return out
+  })
 </script>
 
 <main>
@@ -896,6 +923,7 @@
         <button class:actif={vue === 'groupes'} onclick={() => (vue = 'groupes')}>Par groupe</button>
         <button class:actif={vue === 'salles'} onclick={() => (vue = 'salles')}>Par salle</button>
         <button class:actif={vue === 'musiciens'} onclick={() => (vue = 'musiciens')}>Par musicien</button>
+        <button class:actif={vue === 'carte'} onclick={() => (vue = 'carte')}>Carte</button>
         <span class="grow"></span>
         {#if figeesKeys.size > 0}
           <span class="mono ink-soft">{figeesKeys.size} figée{figeesKeys.size > 1 ? 's' : ''}</span>
@@ -1028,6 +1056,81 @@
             {/each}
           </tbody>
         </table>
+      {:else if vue === 'carte'}
+        {@const sallesAffichees = lieu.salles.filter((s) => s.actif)}
+        {@const creneauxTries = [...creneaux].sort((a, b) =>
+          `${a.date}T${a.debut}`.localeCompare(`${b.date}T${b.debut}`),
+        )}
+        <table class="carte">
+          <thead>
+            <tr>
+              <th style="width:150px">Créneau</th>
+              {#each sallesAffichees as s}
+                <th class="mono" style="text-align:center;font-size:11px">{s.nom}</th>
+              {/each}
+              <th style="width:60px">Occ.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each creneauxTries as c}
+              {@const assCr = solution.assignations.filter((a) => a.creneau_id === c.id)}
+              {@const parSalle = new Map(assCr.map((a) => [a.salle_id, a]))}
+              {@const salleOuverte = new Set(c.salles)}
+              {@const nbOuvertes = sallesAffichees.filter((s) => salleOuverte.has(s.id)).length}
+              {@const nbOccupees = assCr.length}
+              <tr>
+                <td class="mono">{c.date.slice(5).replace('-', '/')} · {c.debut}–{c.fin}</td>
+                {#each sallesAffichees as s}
+                  {@const ass = parSalle.get(s.id)}
+                  {@const ouvert = salleOuverte.has(s.id)}
+                  {#if !ouvert}
+                    <td class="fermee">—</td>
+                  {:else if ass}
+                    {@const g = groupesParId.get(ass.groupe_id)}
+                    <td class="occ" class:figee={estFigee(ass)}>{g?.titre ?? ass.groupe_id}</td>
+                  {:else}
+                    <td
+                      class="libre-cell"
+                      class:inspecte={inspecteCase &&
+                        inspecteCase.creneauId === c.id &&
+                        inspecteCase.salleId === s.id}
+                      onclick={() =>
+                        (inspecteCase =
+                          inspecteCase && inspecteCase.creneauId === c.id && inspecteCase.salleId === s.id
+                            ? null
+                            : { creneauId: c.id, salleId: s.id })}
+                      role="button"
+                      tabindex="0"
+                    >libre</td>
+                  {/if}
+                {/each}
+                <td class="mono taux" class:hot={nbOccupees === nbOuvertes && nbOuvertes > 0}>
+                  {nbOccupees}/{nbOuvertes}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+        {#if inspecteCase}
+          {@const c = creneauxParId.get(inspecteCase.creneauId)}
+          {@const s = sallesParId.get(inspecteCase.salleId)}
+          <div class="candidats">
+            <b>{s?.nom} · {c?.date.slice(5).replace('-', '/')} · {c?.debut}–{c?.fin}</b>
+            <span class="ink-soft mono"> — {candidatsCase.length} groupe(s) compatible(s)</span>
+            {#if candidatsCase.length > 0}
+              <div class="chips" style="margin-top:8px">
+                {#each candidatsCase as gc}
+                  <span class="chip">{gc.titre}</span>
+                {/each}
+              </div>
+            {:else}
+              <p class="hint" style="margin-top:6px">
+                Aucun groupe ne peut occuper cette case (tous ont un membre déjà pris,
+                indisponible, ou la salle est restreinte).
+              </p>
+            {/if}
+          </div>
+        {/if}
       {:else}
         {@const parPersonne = (() => {
           const m = new Map<string, Array<{ a: Assignation; c: (typeof creneaux)[number] }>>()
@@ -1304,6 +1407,37 @@
     font-weight: 600;
   }
   button.drop-target:hover { background: #3d6a4a; border-color: #3d6a4a; }
+
+  /* Carte des créneaux */
+  table.carte td, table.carte th { padding: 6px 8px; font-size: 12.5px; }
+  table.carte td.fermee { color: #ccc; background: #f7f6f0; text-align: center; }
+  table.carte td.occ {
+    background: #e9ede2;
+    text-align: center;
+    font-weight: 500;
+  }
+  table.carte td.occ.figee { background: #fbf2df; }
+  table.carte td.libre-cell {
+    text-align: center;
+    color: var(--vert);
+    cursor: pointer;
+    background: #f2f9f4;
+    font-style: italic;
+  }
+  table.carte td.libre-cell:hover, table.carte td.libre-cell.inspecte {
+    background: var(--vert);
+    color: white;
+    font-style: normal;
+  }
+  table.carte td.taux { text-align: right; color: var(--ink-soft); }
+  table.carte td.taux.hot { color: var(--rouge); font-weight: 600; }
+  .candidats {
+    margin-top: 16px;
+    padding: 12px 15px;
+    background: #f2f9f4;
+    border-left: 3px solid var(--vert);
+    border-radius: 0 2px 2px 0;
+  }
   .rouge { color: var(--rouge); font-style: italic; }
   .mono { font-family: var(--mono); font-size: 12px; }
 
