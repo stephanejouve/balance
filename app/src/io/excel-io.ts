@@ -1,4 +1,4 @@
-import readXlsxFile from 'read-excel-file'
+import readXlsxFile from 'read-excel-file/browser'
 import type { ExtractionListe, MappingListe } from './liste-adapter'
 import { extraireListe } from './liste-adapter'
 

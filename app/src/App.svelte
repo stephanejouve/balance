@@ -2,13 +2,18 @@
   import { genererCreneaux } from './domain/grille'
   import { parseLegacyInscriptions } from './domain/legacy'
   import { migrerInscriptions } from './domain/migrate'
+  import type { Inscriptions } from './domain/model'
   import { Lieu, Session, libellePersonne } from './domain/model'
   import { attribuerSalles } from './engine/allocate-rooms'
   import { repartir } from './engine/solver'
   import type { Assignation, Probleme } from './engine/types'
   import { couverture, verifier } from './engine/verify'
   import { csvParGroupe, csvParMusicien, csvParSalle, telechargerCsv } from './io/csv'
+  import { importerListeExcel } from './io/excel-io'
+  import type { MappingListe } from './io/liste-adapter'
   import fixture from './fixtures/apero_mercredi.json'
+
+  /* --- Données de démarrage --------------------------------------------- */
 
   const lieu = Lieu.parse({
     id: 'musiques-festives',
@@ -36,8 +41,34 @@
     ],
     repetitions_visees: 3,
   })
-  const inscriptions = migrerInscriptions(parseLegacyInscriptions(fixture), session.id)
-  const creneaux = genererCreneaux(session, lieu)
+
+  const MAPPING_DEFAUT: MappingListe = {
+    colonneMorceau: 'Morceau',
+    colonneAuteur: 'Auteur',
+    colonneStyle: 'Style',
+    colonneTona: 'Tona',
+    colonneResp: 'Resp',
+    colonneCherche: 'Cherche',
+    colonnesPupitres: {
+      chant: 'Chant',
+      piano: 'Piano',
+      basse: 'Basse',
+      batterie: 'Batterie',
+      guitare: 'Guitare',
+      vents: 'Vents',
+    },
+  }
+
+  function chargerDemo(): Inscriptions {
+    return migrerInscriptions(parseLegacyInscriptions(fixture), session.id)
+  }
+
+  /* --- État réactif ----------------------------------------------------- */
+
+  let inscriptions = $state<Inscriptions>(chargerDemo())
+  let sourceLabel = $state<string>('démo · apero_mercredi.json')
+  let warningsImport = $state<string[]>([])
+  let erreurImport = $state<string>('')
 
   type Solution = {
     assignations: Assignation[]
@@ -45,15 +76,47 @@
     couverture: Array<{ groupe_id: string; obtenu: number; cible: number; min: number }>
     duree_ms: number
   }
-
   let solution = $state<Solution | null>(null)
   let calculEnCours = $state(false)
   let vue = $state<'groupes' | 'salles' | 'musiciens'>('groupes')
 
-  const groupesParId = new Map(inscriptions.groupes.map((g) => [g.id, g]))
-  const personnesParId = new Map(inscriptions.personnes.map((p) => [p.id, p]))
-  const creneauxParId = new Map(creneaux.map((c) => [c.id, c]))
+  const creneaux = $derived(genererCreneaux(session, lieu))
+  const groupesParId = $derived(new Map(inscriptions.groupes.map((g) => [g.id, g])))
+  const personnesParId = $derived(new Map(inscriptions.personnes.map((p) => [p.id, p])))
+  const creneauxParId = $derived(new Map(creneaux.map((c) => [c.id, c])))
   const sallesParId = new Map(lieu.salles.map((s) => [s.id, s]))
+
+  /* --- Actions ---------------------------------------------------------- */
+
+  function utiliserDemo() {
+    inscriptions = chargerDemo()
+    sourceLabel = 'démo · apero_mercredi.json'
+    warningsImport = []
+    erreurImport = ''
+    solution = null
+  }
+
+  async function importerFichier(e: Event) {
+    const cible = e.target as HTMLInputElement
+    const file = cible.files?.[0]
+    if (!file) return
+    warningsImport = []
+    erreurImport = ''
+    try {
+      const { groupes, warnings } = await importerListeExcel(file, 'Liste', MAPPING_DEFAUT)
+      inscriptions = migrerInscriptions(
+        { groupes, membresImposes: {}, indispos: [], identitesConnues: [] },
+        session.id,
+      )
+      sourceLabel = `Excel · ${file.name}`
+      warningsImport = warnings
+      solution = null
+    } catch (err) {
+      erreurImport = err instanceof Error ? err.message : String(err)
+    } finally {
+      cible.value = ''
+    }
+  }
 
   async function lancer() {
     calculEnCours = true
@@ -95,20 +158,50 @@
     <p class="eyebrow">Balance · V1</p>
     <h1>Qui répète <em>où</em>, et <em>quand</em></h1>
     <p class="hint">
-      Chargement du jeu réel <code>apero_mercredi.json</code> — 13 groupes, {inscriptions.personnes.length}
-      musiciens, {creneaux.length} créneaux sur {lieu.salles.length} salles avant butoir du {session.date_butoir}.
+      Répartition automatique des répétitions d'un stage de musique — équilibre entre
+      musiciens, groupes et salles. {inscriptions.groupes.length} groupes,
+      {inscriptions.personnes.length} musiciens, {creneaux.length} créneaux avant butoir du {session.date_butoir}.
     </p>
   </header>
 
   <section class="sheet">
-    <p class="eyebrow">Étape 1 · Placement</p>
+    <p class="eyebrow">Étape 1 · Source</p>
+    <h2>Inscriptions</h2>
+    <p class="hint">
+      Lecture directe de l'onglet <code>Liste</code> du classeur Excel de l'association,
+      ou du jeu de démonstration.
+    </p>
+    <div class="toolbar">
+      <button class="ghost" onclick={utiliserDemo}>Recharger la démo</button>
+      <label class="fake-btn">
+        Importer un classeur .xlsx…
+        <input type="file" accept=".xlsx,.xlsm" hidden onchange={importerFichier} />
+      </label>
+      <span class="grow"></span>
+      <span class="ink-soft mono">Chargé : {sourceLabel}</span>
+    </div>
+    {#if erreurImport}
+      <div class="msg err"><b>Import échoué :</b> {erreurImport}</div>
+    {/if}
+    {#if warningsImport.length > 0}
+      <div class="msg warn">
+        <b>Avertissements d'import :</b>
+        <ul>
+          {#each warningsImport as w}<li>{w}</li>{/each}
+        </ul>
+      </div>
+    {/if}
+  </section>
+
+  <section class="sheet">
+    <p class="eyebrow">Étape 2 · Placement</p>
     <h2>Répartition</h2>
     <p class="hint">
-      Le solveur cherche à placer chaque groupe {session.repetitions_visees} fois avant l'échéance,
-      sans jamais convoquer deux fois la même personne au même moment ni doubler une salle.
+      Placer chaque groupe {session.repetitions_visees} fois avant l'échéance, sans jamais
+      convoquer deux fois la même personne au même moment ni doubler une salle.
     </p>
     <button class="big" onclick={lancer} disabled={calculEnCours}>
-      {calculEnCours ? 'Recherche en cours…' : (solution ? 'Relancer la répartition' : 'Lancer la répartition')}
+      {calculEnCours ? 'Recherche en cours…' : solution ? 'Relancer la répartition' : 'Lancer la répartition'}
     </button>
     {#if solution}
       <div class="stats">
@@ -124,9 +217,7 @@
         <div class="msg err">
           <b>Contrôle indépendant :</b>
           <ul>
-            {#each solution.problemes.slice(0, 8) as pb}
-              <li>{pb.message}</li>
-            {/each}
+            {#each solution.problemes.slice(0, 8) as pb}<li>{pb.message}</li>{/each}
             {#if solution.problemes.length > 8}
               <li>… et {solution.problemes.length - 8} autres</li>
             {/if}
@@ -140,7 +231,7 @@
 
   {#if solution}
     <section class="sheet">
-      <p class="eyebrow">Étape 2 · Résultats</p>
+      <p class="eyebrow">Étape 3 · Résultats</p>
       <h2>États imprimables</h2>
       <div class="toolbar">
         <button class:actif={vue === 'groupes'} onclick={() => (vue = 'groupes')}>Par groupe</button>
@@ -227,7 +318,8 @@
               m.get(pid)!.push({ a, c })
             }
           }
-          for (const l of m.values()) l.sort((x, y) => `${x.c.date}T${x.c.debut}`.localeCompare(`${y.c.date}T${y.c.debut}`))
+          for (const l of m.values())
+            l.sort((x, y) => `${x.c.date}T${x.c.debut}`.localeCompare(`${y.c.date}T${y.c.debut}`))
           return m
         })()}
         <table>
@@ -315,7 +407,7 @@
   .sheet .hint {
     color: var(--ink-soft);
   }
-  button {
+  button, .fake-btn {
     font-family: var(--sans);
     font-weight: 600;
     font-size: 14px;
@@ -325,9 +417,11 @@
     border: 1px solid var(--ink);
     background: var(--ink);
     color: var(--paper);
-    transition: transform 0.08s, background 0.15s;
+    transition: background 0.15s;
+    display: inline-block;
+    line-height: 1.2;
   }
-  button:hover:not(:disabled) { background: #000; }
+  button:hover:not(:disabled), .fake-btn:hover { background: #000; }
   button:disabled { opacity: 0.5; cursor: wait; }
   button.big {
     font-size: 16px;
@@ -340,6 +434,8 @@
   button.ghost { background: transparent; color: var(--ink); }
   button.ghost:hover { background: #efede4; }
   button.actif { background: var(--ochre); border-color: var(--ochre); color: #231703; }
+  .fake-btn { background: transparent; color: var(--ink); }
+  .fake-btn:hover { background: #efede4; }
   .stats {
     display: flex;
     flex-wrap: wrap;
@@ -369,6 +465,7 @@
   }
   .msg.ok { background: #e8f1ea; border-color: var(--vert); }
   .msg.err { background: #f8e6e3; border-color: var(--rouge); }
+  .msg.warn { background: #fbf2df; border-color: var(--ochre); }
   .msg ul { margin: 6px 0 0 16px; }
   .toolbar {
     display: flex;
@@ -378,6 +475,7 @@
     margin: 20px 0 16px;
   }
   .grow { flex: 1; }
+  .ink-soft { color: var(--ink-soft); }
   table {
     width: 100%;
     border-collapse: collapse;
