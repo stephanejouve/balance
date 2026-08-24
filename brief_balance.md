@@ -14,6 +14,42 @@ de la donnée.
 
 ---
 
+## 0. Périmètre — à lire avant tout le reste
+
+Ce document est long parce qu'il consigne tout ce qui a été appris. **Il ne décrit pas un
+produit à construire d'un bloc.** La version 1 tient en peu de choses :
+
+### À faire en v1
+
+- Lire le classeur existant de l'association (onglet `Liste`, structure déjà validée)
+- Salles, dates et créneaux **saisissables**, rien en dur
+- Quatre contraintes seulement : une personne à un seul endroit à la fois, une salle à un
+  seul groupe, indisponibilités déclarées, tout avant la date butoir
+- Le moteur existant, qui fonctionne
+- Deux états : feuille de route par groupe, occupation par salle — imprimables et en CSV
+
+C'est tout. Ça remplace le calcul manuel, ne change aucune habitude, et se teste sur la
+prochaine session.
+
+### À ne pas faire en v1
+
+Ordre de passage du concert, conducteur minuté, temps de trajet entre salles, couplage à
+un logiciel de gestion, CP-SAT, planning individuel, simulation de quotas, profils de
+lieux multiples.
+
+Tout cela est décrit plus loin parce que ça a été étudié et que ça peut resservir. **Rien
+ne doit être développé sans qu'un besoin réel se soit manifesté.** Les sections 11 à 14
+sont exploratoires, pas prescriptives.
+
+### La seule exigence structurante
+
+Garder le **modèle de contraintes séparé du moteur** et les règles **activables une par
+une**. C'est ce qui permettra d'ajouter le reste plus tard sans tout reprendre — et
+c'est la leçon de la mise au point : les règles ont changé une dizaine de fois en une
+journée.
+
+---
+
 ## 1. Le problème à résoudre
 
 Un stage de musique. Des stagiaires forment des groupes autour de morceaux qu'ils veulent
@@ -361,11 +397,60 @@ L'organisation actuelle du stage repose sur :
 Autrement dit : **tableur, Drive, papier.** Le tout maîtrisé, avec des habitudes solides.
 L'onglet `Résa salles` montre qu'ils font déjà de la réservation de salles à la main.
 
+### Ce que le site de l'association confirme
+
+Association Musiques Festives, active depuis 1994 — 32 ans —, licence de spectacle et
+code NAF 9001Z : le recours à des intermittents est établi. **Six sessions par an**, ce
+qui correspond à ce qu'indique le commanditaire.
+
+Quatre éléments ont un effet direct sur la conception :
+
+**Le lieu est stable, mais pas définitif.** Toutes les sessions se tiennent actuellement
+en Corrèze, au Domaine de Meilhac. La mention du Gard sur le site est un reste d'une
+implantation passée : en 32 ans le stage a déménagé plusieurs fois.
+
+Conséquence pour le §12 : la portabilité reste nécessaire — ne rien coder en dur — mais
+ce n'est **pas** un besoin de reconfiguration fréquente. On décrit le lieu une fois, on y
+revient tous les quelques années. Deux effets :
+
+- Le profil de lieu peut être **soigné plutôt que rapide** : jauges réelles, équipement
+  salle par salle, contraintes de voisinage. Ces données seront réutilisées des dizaines
+  de fois, l'effort de saisie est vite amorti.
+- Le changement de lieu n'est **pas un argument de démonstration** — voir §14, à ajuster.
+
+**Le format des sessions varie.** La journée type publiée — préparation par instrument le
+matin, répétitions générales et combos l'après-midi, jams et concerts le soir — correspond
+exactement à la structure déduite du planning. Mais certaines sessions sont thématiques et
+consacrent aussi les matinées au jeu en groupe. La grille de créneaux doit donc être
+**décrite, jamais supposée**.
+
+**La liste des instruments est large** : chant, guitare, piano, batterie, basse
+électrique, contrebasse, saxophones, clarinette, flûte, trompette, trombone, cuivres et
+bois, violon, alto, violoncelle et cordes, percussions, accordéon, harmonica, DJing et
+instruments électroniques. Les pupitres doivent être librement éditables, sans liste
+figée.
+
+**Les places sont contingentées par instrument** — le site annonce « il reste deux places
+batterie en S5 ». L'association pilote donc déjà le recrutement pupitre par pupitre.
+
+### Une piste à forte valeur pour l'organisateur
+
+Ce dernier point rejoint la découverte la plus utile de la mise au point : **le nombre de
+batteurs détermine le nombre de groupes réalisables**. Sur la session testée, trois
+batteurs pour treize morceaux rendaient le planning infaisable ; les simulations montrent
+une rupture nette entre trois et quatre batteurs, pas une dégradation progressive.
+
+Balance peut donc servir en amont, à l'inscription : *avec tant de batteurs, de bassistes
+et de pianistes inscrits, combien de groupes pourra-t-on servir ?* C'est une aide à la
+politique de quotas, et probablement l'argument qui parlera le plus à un organisateur —
+davantage que le confort de planification.
+
 ### Ce qu'on ignore
 
-Rien n'indique l'usage d'un logiciel de gestion d'école de musique. L'association emploie
-des intermittents, elle a donc forcément un outil de paie et d'administration — mais il
-n'a pas été observé et ne communique pas avec le planning.
+Rien n'indique l'usage d'un logiciel de gestion d'école de musique. Le site public est un
+site classique, sans espace adhérent ni planning en ligne. L'association emploie des
+intermittents, elle a donc forcément un outil de paie et d'administration — mais il n'a
+pas été observé et ne communique pas avec le planning.
 
 **À vérifier avant toute décision d'architecture**, en une conversation avec
 l'organisateur : quel outil pour les adhérents et la paie, qui produit les PDF du
@@ -553,11 +638,14 @@ Ce qui convainc, dans l'ordre :
    placés en une seconde, sans conflit.
 2. **Montrer le diagnostic** : provoquer un blocage en ajoutant un engagement à quelqu'un
    de déjà chargé, et voir l'outil expliquer pourquoi et proposer un levier.
-3. **Changer de lieu en direct** — charger un second profil avec d'autres salles, et
-   relancer. C'est ce qui prouve que l'outil n'est pas jetable.
+3. **Montrer l'aide aux quotas d'inscription** — faire varier le nombre de batteurs ou de
+   bassistes et voir combien de groupes deviennent réalisables. C'est l'argument le plus
+   parlant pour qui gère six sessions par an et contingente déjà les places par instrument.
+   *(Le changement de lieu, lui, n'a pas à être démontré : il n'arrive que tous les
+   quelques années.)*
 4. **Imprimer les deux états** : la feuille de route d'un groupe, l'occupation d'une salle.
 
-Prévoir donc **un second profil de lieu fictif** dans les jeux d'essai, uniquement pour
+Prévoir donc dans les jeux d'essai de quoi faire varier les effectifs par pupitre, pour
 cette démonstration.
 
 Ce qu'il vaut mieux annoncer d'emblée : l'outil ne décide de rien de musical. Il ne sait
