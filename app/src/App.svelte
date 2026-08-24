@@ -9,38 +9,43 @@
   import type { Assignation, Probleme } from './engine/types'
   import { couverture, verifier } from './engine/verify'
   import { csvParGroupe, csvParMusicien, csvParSalle, telechargerCsv } from './io/csv'
+  import { exporterClasseurExcel } from './io/excel-export'
   import { importerListeExcel } from './io/excel-io'
   import type { MappingListe } from './io/liste-adapter'
   import fixture from './fixtures/apero_mercredi.json'
 
   /* --- Données de démarrage --------------------------------------------- */
 
-  const lieu = Lieu.parse({
-    id: 'musiques-festives',
-    nom: 'Musiques Festives — Domaine de Meilhac',
-    salles: [
-      { id: 'le-garage', nom: 'Le Garage', jauge: 10, equipement: ['batterie', 'piano'] },
-      { id: 'xveme', nom: 'XVème', jauge: 10, equipement: ['batterie', 'piano'] },
-      { id: 'les-clapiers', nom: 'Les Clapiers', jauge: 10, equipement: ['batterie', 'piano'] },
-      { id: 'l-esperance', nom: "L'Espérance", jauge: 6, equipement: ['piano'] },
-      { id: 'la-chenaie', nom: 'La Chênaie', jauge: 6, equipement: ['piano'] },
-    ],
-  })
-  const session = Session.parse({
-    id: 'session-5',
-    nom: 'Session 5 — Musiques Festives',
-    lieu_id: 'musiques-festives',
-    date_debut: '2026-08-24',
-    date_fin: '2026-08-28',
-    date_butoir: '2026-08-26',
-    butoir_heure: '18:30',
-    grille: [
-      { debut: '09:00', fin: '12:00', pas_minutes: 60 },
-      { debut: '13:30', fin: '18:30', pas_minutes: 60 },
-      { debut: '22:00', fin: '24:00', pas_minutes: 60 },
-    ],
-    repetitions_visees: 3,
-  })
+  const lieu = $state(
+    Lieu.parse({
+      id: 'musiques-festives',
+      nom: 'Musiques Festives — Domaine de Meilhac',
+      salles: [
+        { id: 'le-garage', nom: 'Le Garage', jauge: 10, equipement: ['batterie', 'piano'] },
+        { id: 'xveme', nom: 'XVème', jauge: 10, equipement: ['batterie', 'piano'] },
+        { id: 'les-clapiers', nom: 'Les Clapiers', jauge: 10, equipement: ['batterie', 'piano'] },
+        { id: 'l-esperance', nom: "L'Espérance", jauge: 6, equipement: ['piano'] },
+        { id: 'la-chenaie', nom: 'La Chênaie', jauge: 6, equipement: ['piano'] },
+      ],
+    }),
+  )
+  const session = $state(
+    Session.parse({
+      id: 'session-5',
+      nom: 'Session 5 — Musiques Festives',
+      lieu_id: 'musiques-festives',
+      date_debut: '2026-08-24',
+      date_fin: '2026-08-28',
+      date_butoir: '2026-08-26',
+      butoir_heure: '18:30',
+      grille: [
+        { debut: '09:00', fin: '12:00', pas_minutes: 60 },
+        { debut: '13:30', fin: '18:30', pas_minutes: 60 },
+        { debut: '22:00', fin: '24:00', pas_minutes: 60 },
+      ],
+      repetitions_visees: 3,
+    }),
+  )
 
   const MAPPING_DEFAUT: MappingListe = {
     colonneMorceau: 'Morceau',
@@ -80,11 +85,17 @@
   let calculEnCours = $state(false)
   let vue = $state<'groupes' | 'salles' | 'musiciens'>('groupes')
 
-  const creneaux = $derived(genererCreneaux(session, lieu))
+  const creneaux = $derived.by(() => {
+    try {
+      return genererCreneaux(session, lieu)
+    } catch {
+      return []
+    }
+  })
   const groupesParId = $derived(new Map(inscriptions.groupes.map((g) => [g.id, g])))
   const personnesParId = $derived(new Map(inscriptions.personnes.map((p) => [p.id, p])))
   const creneauxParId = $derived(new Map(creneaux.map((c) => [c.id, c])))
-  const sallesParId = new Map(lieu.salles.map((s) => [s.id, s]))
+  const sallesParId = $derived(new Map(lieu.salles.map((s) => [s.id, s])))
 
   /* --- Actions ---------------------------------------------------------- */
 
@@ -151,6 +162,53 @@
       csvParMusicien(lieu, inscriptions, creneaux, solution.assignations),
     )
   }
+  async function exporterXlsx() {
+    if (!solution) return
+    await exporterClasseurExcel(
+      'balance.xlsx',
+      session,
+      lieu,
+      inscriptions,
+      creneaux,
+      solution.assignations,
+    )
+  }
+
+  /* --- Édition Lieu ------------------------------------------------------ */
+
+  function ajouterSalle() {
+    lieu.salles.push({
+      id: `salle-${Date.now().toString(36)}`,
+      nom: 'Nouvelle salle',
+      jauge: 8,
+      equipement: [],
+      restrictions: [],
+      actif: true,
+    })
+    solution = null
+  }
+  function supprimerSalle(i: number) {
+    lieu.salles.splice(i, 1)
+    solution = null
+  }
+
+  /* --- Édition Session --------------------------------------------------- */
+
+  function ajouterRegle() {
+    session.grille.push({
+      jours: [],
+      debut: '09:00',
+      fin: '10:00',
+      pas_minutes: 60,
+      salles: [],
+      bloque: false,
+    })
+    solution = null
+  }
+  function supprimerRegle(i: number) {
+    session.grille.splice(i, 1)
+    solution = null
+  }
 </script>
 
 <main>
@@ -193,8 +251,99 @@
     {/if}
   </section>
 
+  <details class="sheet" open>
+    <summary>
+      <p class="eyebrow">Étape 2a · Lieu</p>
+      <h2>{lieu.nom}</h2>
+      <p class="hint">
+        {lieu.salles.filter((s) => s.actif).length} salle(s) active(s) sur {lieu.salles.length}.
+        Cliquer pour déplier / modifier.
+      </p>
+    </summary>
+    <div class="body">
+      <label class="line">
+        Nom du lieu <input bind:value={lieu.nom} />
+      </label>
+      <table>
+        <thead>
+          <tr>
+            <th>Salle</th>
+            <th style="width:80px">Jauge</th>
+            <th style="width:70px">Active</th>
+            <th style="width:40px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each lieu.salles as salle, i}
+            <tr>
+              <td><input bind:value={salle.nom} /></td>
+              <td><input type="number" min="1" bind:value={salle.jauge} /></td>
+              <td class="center"><input type="checkbox" bind:checked={salle.actif} /></td>
+              <td class="center"><button class="mini" onclick={() => supprimerSalle(i)}>×</button></td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+      <button class="ghost" onclick={ajouterSalle}>+ Ajouter une salle</button>
+    </div>
+  </details>
+
+  <details class="sheet" open>
+    <summary>
+      <p class="eyebrow">Étape 2b · Session</p>
+      <h2>{session.nom}</h2>
+      <p class="hint">
+        {session.date_debut} → {session.date_fin}, butoir {session.date_butoir} {session.butoir_heure}.
+        {session.grille.filter((r) => !r.bloque).length} règle(s) créatrice(s),
+        {session.grille.filter((r) => r.bloque).length} règle(s) de blocage —
+        <b>{creneaux.length}</b> créneaux générés.
+      </p>
+    </summary>
+    <div class="body">
+      <label class="line">
+        Nom de session <input bind:value={session.nom} />
+      </label>
+      <div class="fields">
+        <label>Début <input type="date" bind:value={session.date_debut} /></label>
+        <label>Fin <input type="date" bind:value={session.date_fin} /></label>
+        <label>Butoir <input type="date" bind:value={session.date_butoir} /></label>
+        <label>Butoir heure <input type="time" bind:value={session.butoir_heure} /></label>
+        <label>Répétitions visées <input type="number" min="1" max="10" bind:value={session.repetitions_visees} /></label>
+        <label>Minimum acceptable <input type="number" min="1" max="10" bind:value={session.repetitions_min} /></label>
+      </div>
+      <h3>Grille de créneaux</h3>
+      <p class="hint">
+        Chaque règle génère des créneaux tous les jours de la session (sauf si on précise
+        des dates ISO dans « jours »). « Bloque » retire les créneaux qui tombent dans la plage.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:110px">Début</th>
+            <th style="width:110px">Fin</th>
+            <th style="width:80px">Pas (min)</th>
+            <th style="width:80px">Bloque</th>
+            <th style="width:40px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each session.grille as regle, i}
+            <tr>
+              <td><input type="time" bind:value={regle.debut} /></td>
+              <td><input type="time" bind:value={regle.fin} /></td>
+              <td><input type="number" min="10" max="240" step="15" bind:value={regle.pas_minutes} /></td>
+              <td class="center"><input type="checkbox" bind:checked={regle.bloque} /></td>
+              <td class="center"><button class="mini" onclick={() => supprimerRegle(i)}>×</button></td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+      <button class="ghost" onclick={ajouterRegle}>+ Ajouter une règle</button>
+    </div>
+  </details>
+
   <section class="sheet">
-    <p class="eyebrow">Étape 2 · Placement</p>
+    <p class="eyebrow">Étape 3 · Placement</p>
     <h2>Répartition</h2>
     <p class="hint">
       Placer chaque groupe {session.repetitions_visees} fois avant l'échéance, sans jamais
@@ -230,8 +379,8 @@
   </section>
 
   {#if solution}
-    <section class="sheet">
-      <p class="eyebrow">Étape 3 · Résultats</p>
+    <section class="sheet impression">
+      <p class="eyebrow">Étape 4 · Résultats</p>
       <h2>États imprimables</h2>
       <div class="toolbar">
         <button class:actif={vue === 'groupes'} onclick={() => (vue = 'groupes')}>Par groupe</button>
@@ -241,6 +390,8 @@
         <button class="ghost" onclick={exporterGroupes}>CSV groupes</button>
         <button class="ghost" onclick={exporterSalles}>CSV salles</button>
         <button class="ghost" onclick={exporterMusiciens}>CSV musiciens</button>
+        <button class="ghost" onclick={exporterXlsx}>Classeur .xlsx</button>
+        <button class="ghost" onclick={() => window.print()}>Imprimer</button>
       </div>
 
       {#if vue === 'groupes'}
@@ -519,4 +670,116 @@
   }
   .rouge { color: var(--rouge); font-style: italic; }
   .mono { font-family: var(--mono); font-size: 12px; }
+
+  /* Éditeurs Lieu / Session */
+  details.sheet > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 0;
+    margin: 0;
+  }
+  details.sheet > summary::-webkit-details-marker { display: none; }
+  details.sheet > summary::after {
+    content: '▾';
+    float: right;
+    font-size: 20px;
+    color: var(--ink-soft);
+    transform: translate(0, -12px);
+    transition: transform 0.15s;
+  }
+  details.sheet[open] > summary::after {
+    transform: translate(0, -12px) rotate(180deg);
+  }
+  details.sheet > summary h2 { margin-bottom: 4px; }
+  details.sheet > summary .hint { margin-bottom: 0; }
+  details.sheet > .body { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--paper-edge); }
+  .body h3 {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: 20px;
+    margin: 22px 0 6px;
+  }
+  input[type='text'], input:not([type]), input[type='date'], input[type='time'], input[type='number'] {
+    padding: 6px 9px;
+    border: 1px solid #cfcbbe;
+    border-radius: 2px;
+    background: #fff;
+    font-family: var(--sans);
+    font-size: 13.5px;
+    color: var(--ink);
+    width: 100%;
+  }
+  input:focus { outline: 2px solid var(--ochre); outline-offset: -1px; border-color: var(--ochre); }
+  .line { display: block; margin: 0 0 12px; }
+  .line input { max-width: 480px; margin-top: 4px; }
+  label {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .fields label { text-transform: uppercase; }
+  button.mini {
+    padding: 3px 8px;
+    font-size: 14px;
+    font-weight: 400;
+    background: transparent;
+    color: var(--rouge);
+    border-color: transparent;
+  }
+  button.mini:hover { background: #f8e6e3; }
+  td.center { text-align: center; }
+  td input { padding: 5px 7px; font-size: 12.5px; }
+
+  /* Impression : conserver la seule vue résultat active, sans formulaires.
+     Chaque tableau ne se coupe pas en milieu de ligne. */
+  @media print {
+    @page { margin: 12mm 10mm; }
+    body { background: white !important; color: black; }
+    main { max-width: none; padding: 0; }
+    header, details.sheet, .sheet:not(.impression), .toolbar {
+      display: none !important;
+    }
+    .sheet.impression {
+      background: white;
+      color: black;
+      box-shadow: none;
+      padding: 0;
+      margin: 0;
+      border-radius: 0;
+    }
+    .sheet.impression .eyebrow,
+    .sheet.impression h2 {
+      color: black;
+    }
+    .sheet.impression .toolbar,
+    .sheet.impression .stats,
+    .sheet.impression .msg,
+    .sheet.impression button,
+    .sheet.impression .fake-btn {
+      display: none !important;
+    }
+    table {
+      page-break-inside: auto;
+      border-collapse: collapse;
+    }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; page-break-after: auto; }
+    .chip {
+      background: white;
+      border: 1px solid #999;
+      color: black;
+    }
+    .chip em { color: #444; }
+  }
 </style>

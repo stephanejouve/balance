@@ -29,13 +29,13 @@ function csvRows(rows: unknown[][]): string {
 
 /* -------------------------------------------- Feuille de route / groupe ---*/
 
-export function csvParGroupe(
+export function tableauParGroupe(
   session: Session,
   lieu: Lieu,
   inscriptions: Inscriptions,
   creneaux: Creneau[],
   assignations: Assignation[],
-): string {
+): unknown[][] {
   const cible = session.repetitions_visees
   const creneauxParId = new Map(creneaux.map((c) => [c.id, c]))
   const sallesParId = new Map(lieu.salles.map((s) => [s.id, s]))
@@ -78,17 +78,27 @@ export function csvParGroupe(
     rows.push(row)
   })
 
-  return csvRows(rows)
+  return rows
 }
 
-/* --------------------------------------------- Occupation par salle -----*/
-
-export function csvParSalle(
+export function csvParGroupe(
+  session: Session,
   lieu: Lieu,
   inscriptions: Inscriptions,
   creneaux: Creneau[],
   assignations: Assignation[],
 ): string {
+  return csvRows(tableauParGroupe(session, lieu, inscriptions, creneaux, assignations))
+}
+
+/* --------------------------------------------- Occupation par salle -----*/
+
+export function tableauParSalle(
+  lieu: Lieu,
+  inscriptions: Inscriptions,
+  creneaux: Creneau[],
+  assignations: Assignation[],
+): unknown[][] {
   const groupesParId = new Map(inscriptions.groupes.map((g) => [g.id, g]))
   const personnesParId = new Map(inscriptions.personnes.map((p) => [p.id, p]))
   const parCreneauSalle = new Map<string, Assignation>()
@@ -114,17 +124,26 @@ export function csvParSalle(
     }
   }
 
-  return csvRows(rows)
+  return rows
 }
 
-/* --------------------------------------------- Planning par musicien ---*/
-
-export function csvParMusicien(
+export function csvParSalle(
   lieu: Lieu,
   inscriptions: Inscriptions,
   creneaux: Creneau[],
   assignations: Assignation[],
 ): string {
+  return csvRows(tableauParSalle(lieu, inscriptions, creneaux, assignations))
+}
+
+/* --------------------------------------------- Planning par musicien ---*/
+
+export function tableauParMusicien(
+  lieu: Lieu,
+  inscriptions: Inscriptions,
+  creneaux: Creneau[],
+  assignations: Assignation[],
+): unknown[][] {
   const creneauxParId = new Map(creneaux.map((c) => [c.id, c]))
   const sallesParId = new Map(lieu.salles.map((s) => [s.id, s]))
   const groupesParId = new Map(inscriptions.groupes.map((g) => [g.id, g]))
@@ -163,7 +182,16 @@ export function csvParMusicien(
     }
   }
 
-  return csvRows(rows)
+  return rows
+}
+
+export function csvParMusicien(
+  lieu: Lieu,
+  inscriptions: Inscriptions,
+  creneaux: Creneau[],
+  assignations: Assignation[],
+): string {
+  return csvRows(tableauParMusicien(lieu, inscriptions, creneaux, assignations))
 }
 
 /* ------------------------------------------------ Téléchargement navigateur */
