@@ -438,6 +438,23 @@
     if (idx >= 0) g.postes_cherches.splice(idx, 1)
     solution = null
   }
+  /** Retire un membre d'un groupe. Si le pupitre n'est plus tenu, l'ajoute à `postes_cherches`. */
+  function retirerMembre(groupe_id: string, membreIdx: number) {
+    const g = inscriptions.groupes.find((x) => x.id === groupe_id)
+    if (!g) return
+    const m = g.membres[membreIdx]
+    if (!m) return
+    const p = personnesParId.get(m.personne_id)
+    const libelle = p ? libellePersonne(p) : m.personne_id
+    if (!confirm(`Retirer ${libelle} (${m.pupitre}) de « ${g.titre} » ?`)) return
+    g.membres.splice(membreIdx, 1)
+    // Auto : si personne d'autre ne tient ce pupitre, on le passe en cherche.
+    const encore = g.membres.some((mm) => mm.pupitre === m.pupitre)
+    if (!encore && !g.postes_cherches.includes(m.pupitre)) {
+      g.postes_cherches.push(m.pupitre)
+    }
+    solution = null
+  }
 
   /* --- Édition Indispos personnes ---------------------------------------- */
 
@@ -665,25 +682,42 @@
         <thead>
           <tr>
             <th style="width:30px">N°</th>
-            <th>Titre</th>
-            <th style="width:130px">Responsable</th>
-            <th style="width:110px">Style</th>
-            <th style="width:70px">Tona</th>
-            <th style="width:65px">Effectif</th>
-            <th style="width:80px" title="Répétitions déjà effectuées (recalcul en cours de session)">Déjà fait</th>
+            <th style="width:200px">Titre</th>
+            <th style="width:110px">Resp.</th>
+            <th style="width:90px">Style</th>
+            <th style="width:55px">Tona</th>
+            <th>Membres</th>
+            <th style="width:65px" title="Répétitions déjà effectuées">Déjà fait</th>
             <th style="width:40px"></th>
           </tr>
         </thead>
         <tbody>
           {#each inscriptions.groupes as g, i}
-            {@const effectif = new Set(g.membres.map((m) => m.personne_id)).size}
             <tr>
               <td class="mono">{i + 1}</td>
               <td><input bind:value={g.titre} /></td>
               <td><input bind:value={g.responsable_id} /></td>
               <td><input bind:value={g.style} /></td>
               <td><input bind:value={g.tonalite} /></td>
-              <td class="center mono">{effectif}</td>
+              <td>
+                {#each g.membres as m, mi}
+                  {@const p = personnesParId.get(m.personne_id)}
+                  <span class="chip">
+                    {p ? libellePersonne(p) : m.personne_id}
+                    <em>{m.pupitre}{m.precision ? ` · ${m.precision}` : ''}</em>
+                    <button
+                      class="mini"
+                      onclick={() => retirerMembre(g.id, mi)}
+                      title="Retirer ce membre du groupe"
+                    >×</button>
+                  </span>
+                {/each}
+                {#if g.postes_cherches.length > 0}
+                  {#each g.postes_cherches as pup}
+                    <span class="badge">cherche {pup}</span>
+                  {/each}
+                {/if}
+              </td>
               <td class="center"><input type="number" min="0" max={session.repetitions_visees} bind:value={g.repetitions_deja_faites} style="width:60px" /></td>
               <td class="center"><button class="mini" onclick={() => supprimerGroupe(i)}>×</button></td>
             </tr>
