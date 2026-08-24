@@ -1109,8 +1109,11 @@
           </p>
           {#each solution.diagnostics as d}
             <div class="diag-bloc">
-              <b>{d.titre}</b> — {d.obtenu}/{d.cible} répétitions,
+              <b>{d.titre}</b> — {d.obtenu}/{d.cible} répétitions restantes,
               seulement <b>{d.creneaux_ouverts}</b> créneaux compatibles sur {creneaux.length}.
+              {#if d.repetitions_deja_faites > 0}
+                <span class="badge" style="margin-left:6px">{d.repetitions_deja_faites} déjà fait(es)</span>
+              {/if}
               {#if d.partages.length > 0}
                 <br /><span class="ink-soft">
                   Partage des musiciens avec :
@@ -1125,7 +1128,15 @@
                   {d.poids_musicien.n_groupes} groupe(s)
                   {#if d.poids_musicien.n_imposes > 0}
                     + {d.poids_musicien.n_imposes} séance(s) imposée(s)
-                  {/if}. Le remplacer ici, ou accepter {d.cible - 1} répétitions, débloque la situation.
+                  {/if}. Le remplacer ici, ou accepter {Math.max(0, d.cible - 1)} répétitions supplémentaires, débloque la situation.
+                </span>
+              {:else if d.repetitions_deja_faites > 0}
+                <br /><span class="ink-soft">
+                  Ce groupe a déjà commencé ses répétitions — modifier sa composition
+                  n'est plus une option. Leviers possibles : accepter que les {d.cible} répétitions
+                  restantes ne soient pas toutes placées (voir le minimum acceptable), libérer
+                  des créneaux ailleurs (dégeler des figées, retirer un imposé), ou insérer un
+                  nouveau créneau dans la grille.
                 </span>
               {/if}
             </div>

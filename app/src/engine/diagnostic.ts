@@ -118,6 +118,8 @@ export interface DiagGroupe {
     n_groupes: number
     n_imposes: number
   }
+  /** Nombre de répétitions déjà effectuées — si > 0, on ne peut plus retirer un membre. */
+  repetitions_deja_faites: number
 }
 
 export function diagnostiquer(
@@ -141,8 +143,10 @@ export function diagnostiquer(
 
   const out: DiagGroupe[] = []
   for (const g of enrichies.groupes) {
+    const dejaFaites = g.repetitions_deja_faites || 0
+    const cibleG = Math.max(0, cible - dejaFaites)
     const obtenu = posesPar.get(g.id) ?? 0
-    if (obtenu >= cible) continue
+    if (obtenu >= cibleG) continue
     const membres = [...new Set(g.membres.map((m) => m.personne_id))]
 
     // Créneaux ouverts : aucun membre indispo dessus
@@ -190,10 +194,12 @@ export function diagnostiquer(
       groupe_id: g.id,
       titre: g.titre,
       obtenu,
-      cible,
+      cible: cibleG,
       creneaux_ouverts: ouverts,
       partages: partages.slice(0, 4),
-      poids_musicien: poids,
+      // Le remplacement d'un membre n'a plus de sens si le groupe a déjà répété
+      poids_musicien: dejaFaites > 0 ? undefined : poids,
+      repetitions_deja_faites: dejaFaites,
     })
   }
   return out
