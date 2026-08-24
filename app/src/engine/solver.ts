@@ -117,6 +117,18 @@ function ecartMinutesEntre(a: Creneau, b: Creneau): number {
  */
 const ECART_MIN_ENTRE_REPETS = 12 * 60
 
+/**
+ * Un créneau démarrant à ou après `HEURE_TARDIVE_DEBUT` est considéré
+ * « tardif ». Règle métier (participant, 2026) : personne ne devrait se
+ * retrouver avec TOUTES ses répétitions à des heures tardives — le
+ * score pénalise les placements qui aggravent le déséquilibre.
+ */
+const HEURE_TARDIVE_DEBUT = 20 * 60
+
+function estTardif(c: Creneau): boolean {
+  return toMinutes(c.debut) >= HEURE_TARDIVE_DEBUT
+}
+
 function membresUniques(g: Groupe): string[] {
   return [...new Set(g.membres.map((m) => m.personne_id))]
 }
@@ -333,6 +345,23 @@ export function repartir(
       if (ecart < ECART_MIN_ENTRE_REPETS) {
         v -= Math.round(50 * (1 - ecart / ECART_MIN_ENTRE_REPETS))
       }
+    }
+    // Équilibre diurne / tardif par membre : évite qu'un musicien se
+    // retrouve avec l'ensemble de ses créneaux à des heures tardives.
+    const candTardif = estTardif(c)
+    for (const pid of memP.get(g.id) ?? []) {
+      const occs = e.occPersonne.get(pid)
+      if (!occs || occs.size === 0) continue
+      let nTard = 0
+      let nDiur = 0
+      for (const cid of occs) {
+        const cc = creneauxParId.get(cid)
+        if (!cc) continue
+        if (estTardif(cc)) nTard++
+        else nDiur++
+      }
+      if (candTardif && nDiur === 0 && nTard > 0) v -= 25 // aggrave un « tout tardif »
+      else if (!candTardif && nTard > nDiur) v += 12 // rééquilibre
     }
     return v
   }
