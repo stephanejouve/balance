@@ -98,6 +98,25 @@ function toMinutes(t: string): number {
   return h * 60 + m
 }
 
+/** Écart en minutes entre deux créneaux (dates ISO + heures HH:MM). */
+function ecartMinutesEntre(a: Creneau, b: Creneau): number {
+  const [ya, ma, da] = a.date.split('-').map(Number)
+  const [yb, mb, db] = b.date.split('-').map(Number)
+  const jourA = Date.UTC(ya, ma - 1, da) / 60000 + toMinutes(a.debut)
+  const jourB = Date.UTC(yb, mb - 1, db) / 60000 + toMinutes(b.debut)
+  return Math.abs(jourA - jourB)
+}
+
+/**
+ * Objectif métier (Stéphane, session apéro-concert 2026) : dans la mesure
+ * du possible, deux répétitions d'un même groupe sont espacées d'au moins
+ * `ECART_MIN_ENTRE_REPETS` minutes — laisse le temps de digérer entre deux
+ * séances. Traitée en préférence pondérée (score dégressif), pas en
+ * contrainte dure : quand un stage court oblige à resserrer, le solveur
+ * accepte en le pénalisant.
+ */
+const ECART_MIN_ENTRE_REPETS = 12 * 60
+
 function membresUniques(g: Groupe): string[] {
   return [...new Set(g.membres.map((m) => m.personne_id))]
 }
@@ -308,8 +327,12 @@ export function repartir(
     for (const sid of planG) {
       const s = creneauxParId.get(sid)
       if (!s) continue
-      if (s.date === c.date) v -= 15
-      if (s.date === c.date && Math.abs(toMinutes(s.debut) - toMinutes(c.debut)) < 240) v -= 10
+      // Pénalité dégressive quand deux répés du groupe sont trop proches :
+      // -50 à 0 min d'écart, 0 à 12h d'écart et au-delà.
+      const ecart = ecartMinutesEntre(s, c)
+      if (ecart < ECART_MIN_ENTRE_REPETS) {
+        v -= Math.round(50 * (1 - ecart / ECART_MIN_ENTRE_REPETS))
+      }
     }
     return v
   }
