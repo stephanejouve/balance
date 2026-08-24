@@ -1,6 +1,8 @@
 import type { Creneau } from '../domain/grille'
 import type { Groupe, Inscriptions, Lieu, Personne, Pupitre, Session } from '../domain/model'
 import { libellePersonne } from '../domain/model'
+import type { RegistreContraintes } from './contraintes'
+import { actif } from './contraintes'
 import type { Assignation, Probleme, Solution } from './types'
 
 /**
@@ -66,6 +68,7 @@ export function verifier(
   inscriptions: Inscriptions,
   creneaux: Creneau[],
   assignations: Assignation[],
+  registre?: RegistreContraintes,
 ): Probleme[] {
   const ctx = bâtirContexte(session, lieu, inscriptions, creneaux)
   const problemes: Probleme[] = []
@@ -96,7 +99,7 @@ export function verifier(
     }
 
     const creneauKey = `${creneau.date}T${creneau.debut.replace(':', '')}`
-    if (creneauKey >= butoirKey) {
+    if (actif(registre, 'avant-butoir') && creneauKey >= butoirKey) {
       ass.forEach((a) =>
         problemes.push({
           type: 'apres-butoir',
@@ -111,7 +114,7 @@ export function verifier(
     const sallesDispo = new Set(creneau.salles)
     const sallesPrises = new Set<string>()
     for (const a of ass) {
-      if (!sallesDispo.has(a.salle_id)) {
+      if (actif(registre, 'salle-hors-creneau') && !sallesDispo.has(a.salle_id)) {
         problemes.push({
           type: 'salle-hors-creneau',
           message: `salle ${a.salle_id} non ouverte au créneau ${creneau.date} ${creneau.debut}`,
@@ -120,7 +123,7 @@ export function verifier(
           salle_id: a.salle_id,
         })
       }
-      if (sallesPrises.has(a.salle_id)) {
+      if (actif(registre, 'salle-unique-groupe') && sallesPrises.has(a.salle_id)) {
         problemes.push({
           type: 'salle-double-bookee',
           message: `salle ${a.salle_id} prise deux fois au créneau ${creneau.date} ${creneau.debut}`,
@@ -132,81 +135,89 @@ export function verifier(
     }
 
     // Vérifier jauge par groupe
-    for (const a of ass) {
-      const g = ctx.groupesParId.get(a.groupe_id)
-      const s = ctx.sallesParId.get(a.salle_id)
-      if (!g || !s) continue
-      const effectif = personnesDe(g).length
-      if (effectif > s.jauge) {
-        problemes.push({
-          type: 'jauge-depassee',
-          message: `${g.titre} (${effectif} musiciens) dépasse la jauge de ${s.nom} (${s.jauge})`,
-          creneau_id,
-          groupe_id: a.groupe_id,
-          salle_id: a.salle_id,
-        })
+    if (actif(registre, 'jauge-salle')) {
+      for (const a of ass) {
+        const g = ctx.groupesParId.get(a.groupe_id)
+        const s = ctx.sallesParId.get(a.salle_id)
+        if (!g || !s) continue
+        const effectif = personnesDe(g).length
+        if (effectif > s.jauge) {
+          problemes.push({
+            type: 'jauge-depassee',
+            message: `${g.titre} (${effectif} musiciens) dépasse la jauge de ${s.nom} (${s.jauge})`,
+            creneau_id,
+            groupe_id: a.groupe_id,
+            salle_id: a.salle_id,
+          })
+        }
       }
     }
 
     // Vérifier collisions de personnes entre groupes sur ce créneau
-    const vus = new Map<string, string>() // personne_id -> groupe_id
-    for (const a of ass) {
-      const g = ctx.groupesParId.get(a.groupe_id)
-      if (!g) continue
-      for (const pid of personnesDe(g)) {
-        if (vus.has(pid) && vus.get(pid) !== a.groupe_id) {
-          const p = ctx.personnesParId.get(pid)
-          problemes.push({
-            type: 'personne-double-bookee',
-            message: `${p ? libellePersonne(p) : pid} joue dans deux groupes au créneau ${creneau.date} ${creneau.debut}`,
-            creneau_id,
-            personne_id: pid,
-          })
+    if (actif(registre, 'personne-unique-moment')) {
+      const vus = new Map<string, string>() // personne_id -> groupe_id
+      for (const a of ass) {
+        const g = ctx.groupesParId.get(a.groupe_id)
+        if (!g) continue
+        for (const pid of personnesDe(g)) {
+          if (vus.has(pid) && vus.get(pid) !== a.groupe_id) {
+            const p = ctx.personnesParId.get(pid)
+            problemes.push({
+              type: 'personne-double-bookee',
+              message: `${p ? libellePersonne(p) : pid} joue dans deux groupes au créneau ${creneau.date} ${creneau.debut}`,
+              creneau_id,
+              personne_id: pid,
+            })
+          }
+          vus.set(pid, a.groupe_id)
         }
-        vus.set(pid, a.groupe_id)
       }
     }
 
     // Vérifier indispos
-    for (const a of ass) {
-      const g = ctx.groupesParId.get(a.groupe_id)
-      if (!g) continue
-      for (const pid of personnesDe(g)) {
-        const p = ctx.personnesParId.get(pid)
-        if (!p) continue
-        const pupitres = pupitresDe(pid, g)
-        if (indispoBloque(p, creneau, pupitres)) {
-          problemes.push({
-            type: 'personne-indispo',
-            message: `${libellePersonne(p)} est indisponible au créneau ${creneau.date} ${creneau.debut}`,
-            creneau_id,
-            personne_id: pid,
-            groupe_id: a.groupe_id,
-          })
+    if (actif(registre, 'personne-indispo')) {
+      for (const a of ass) {
+        const g = ctx.groupesParId.get(a.groupe_id)
+        if (!g) continue
+        for (const pid of personnesDe(g)) {
+          const p = ctx.personnesParId.get(pid)
+          if (!p) continue
+          const pupitres = pupitresDe(pid, g)
+          if (indispoBloque(p, creneau, pupitres)) {
+            problemes.push({
+              type: 'personne-indispo',
+              message: `${libellePersonne(p)} est indisponible au créneau ${creneau.date} ${creneau.debut}`,
+              creneau_id,
+              personne_id: pid,
+              groupe_id: a.groupe_id,
+            })
+          }
         }
       }
     }
   }
 
   // Vérifier créneaux consécutifs pour un même groupe
-  const parGroupe = new Map<string, Creneau[]>()
-  for (const a of assignations) {
-    const c = ctx.creneauxParId.get(a.creneau_id)
-    if (!c) continue
-    if (!parGroupe.has(a.groupe_id)) parGroupe.set(a.groupe_id, [])
-    parGroupe.get(a.groupe_id)!.push(c)
-  }
-  for (const [groupe_id, cs] of parGroupe) {
-    const tries = [...cs].sort((a, b) => a.id.localeCompare(b.id))
-    for (let i = 1; i < tries.length; i++) {
-      const prev = tries[i - 1]
-      const curr = tries[i]
-      if (prev.date === curr.date && prev.fin === curr.debut) {
-        problemes.push({
-          type: 'creneaux-consecutifs',
-          message: `${groupe_id} : deux créneaux consécutifs le ${curr.date} (${prev.debut}-${prev.fin} puis ${curr.debut}-${curr.fin})`,
-          groupe_id,
-        })
+  if (actif(registre, 'creneaux-consecutifs')) {
+    const parGroupe = new Map<string, Creneau[]>()
+    for (const a of assignations) {
+      const c = ctx.creneauxParId.get(a.creneau_id)
+      if (!c) continue
+      if (!parGroupe.has(a.groupe_id)) parGroupe.set(a.groupe_id, [])
+      parGroupe.get(a.groupe_id)!.push(c)
+    }
+    for (const [groupe_id, cs] of parGroupe) {
+      const tries = [...cs].sort((a, b) => a.id.localeCompare(b.id))
+      for (let i = 1; i < tries.length; i++) {
+        const prev = tries[i - 1]
+        const curr = tries[i]
+        if (prev.date === curr.date && prev.fin === curr.debut) {
+          problemes.push({
+            type: 'creneaux-consecutifs',
+            message: `${groupe_id} : deux créneaux consécutifs le ${curr.date} (${prev.debut}-${prev.fin} puis ${curr.debut}-${curr.fin})`,
+            groupe_id,
+          })
+        }
       }
     }
   }

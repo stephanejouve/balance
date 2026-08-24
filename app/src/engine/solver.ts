@@ -1,5 +1,7 @@
 import type { Creneau } from '../domain/grille'
 import type { Groupe, Inscriptions, Lieu, Personne, Pupitre, Session } from '../domain/model'
+import type { RegistreContraintes } from './contraintes'
+import { actif } from './contraintes'
 import { makeRng, shuffle } from './rng'
 
 /**
@@ -56,6 +58,8 @@ export function coterDifficulte(
 export interface RepartirOptions {
   seed?: number
   maxEssais?: number
+  /** Registre des contraintes actives. Défaut : toutes actives. */
+  registre?: RegistreContraintes
 }
 
 export interface PlacementItem {
@@ -240,6 +244,7 @@ export function repartir(
 ): RepartirResultat {
   const maxEssais = options.maxEssais ?? 2500
   const rng = makeRng(options.seed ?? 1)
+  const reg = options.registre
   const personnesParId = new Map(inscriptions.personnes.map((p) => [p.id, p]))
   const creneauxParId = new Map(creneaux.map((c) => [c.id, c]))
   const sallesActives = new Set(lieu.salles.filter((s) => s.actif).map((s) => s.id))
@@ -255,12 +260,13 @@ export function repartir(
 
   const estLibre = (c: Creneau, g: Groupe, e: EtatEssai, contraintJour: boolean): boolean => {
     const cap = sallesUtilisables(c)
-    if ((e.occSlot.get(c.id) ?? 0) >= cap) return false
+    if (actif(reg, 'salle-unique-groupe') && (e.occSlot.get(c.id) ?? 0) >= cap) return false
     const planG = e.plan.get(g.id) ?? []
-    if (accolAvecPlan(c, planG, creneauxParId)) return false
+    if (actif(reg, 'creneaux-consecutifs') && accolAvecPlan(c, planG, creneauxParId)) return false
     if (contraintJour && e.joursGroupe.get(g.id)?.has(c.date)) return false
     for (const pid of memP.get(g.id) ?? []) {
-      if (e.occPersonne.get(pid)?.has(c.id)) return false
+      if (actif(reg, 'personne-unique-moment') && e.occPersonne.get(pid)?.has(c.id)) return false
+      if (!actif(reg, 'personne-indispo')) continue
       const p = personnesParId.get(pid)
       if (!p) continue
       if (indispoBloque(p, c, pupitresDe(pid, g))) return false
