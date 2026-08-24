@@ -68,16 +68,7 @@ describe('pipeline complet apero_mercredi.json', () => {
     expect(creneaux.every((c) => c.salles.length === 5)).toBe(true)
   })
 
-  // FIXME solveur V1 : place ~5/13 groupes complets sur la session 5.
-  //  - le pattern « soit 3 répés soit 0 » suggère que les groupes en tête
-  //    d'ordre saturent le graphe de collisions au tour 0
-  //  - la phase de réparation actuelle abandonne dès qu'un créneau a > 1
-  //    bloqueur, trop restrictif sur ce dataset dense (7-8 partages/groupe)
-  //  - pistes : ordre initial par « coter » (difficulté a priori), tolérer N
-  //    bloqueurs si tous relogeables, pondérer « pas 2× même jour » au lieu
-  //    de bloquer dur
-  //  - objectif prototype : 13/13 complets ; à atteindre avant livraison
-  it('produit un placement cohérent (V1 tolérante — cf. FIXME)', () => {
+  it('place la totalité de la session 5 (13/13 complets, 39 places)', () => {
     const { groupes_complets, places_totales, placement } = repartir(
       session,
       lieu,
@@ -85,12 +76,9 @@ describe('pipeline complet apero_mercredi.json', () => {
       creneaux,
       { seed: 42, maxEssais: 500 },
     )
-    // V1 : on garantit seulement que le solveur retourne quelque chose de
-    // structurellement valide. La qualité (nb groupes complets) est
-    // insuffisante — cf. FIXME au-dessus.
-    expect(groupes_complets).toBeGreaterThanOrEqual(1)
+    expect(groupes_complets).toBe(13)
+    expect(places_totales).toBe(39)
     expect(places_totales).toBe(placement.length)
-    expect(places_totales).toBeGreaterThanOrEqual(3)
   })
 
   it("le pipeline complet ne produit aucun problème sur ce qui est placé", () => {

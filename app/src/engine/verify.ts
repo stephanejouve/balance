@@ -49,16 +49,13 @@ function pupitresDe(personne_id: string, groupe: Groupe): Pupitre[] {
 
 function indispoBloque(personne: Personne, creneau: Creneau, pupitres: Pupitre[]): boolean {
   return personne.indispos.some((ind) => {
-    // Restriction par jour
     if (ind.jours.length > 0 && !ind.jours.includes(creneau.date)) return false
-    // Restriction par rôle : indispo cible un/plusieurs pupitres
     if (ind.roles.length > 0 && !pupitres.some((p) => ind.roles.includes(p))) return false
-    // Restriction horaire : le début du créneau tombe dans [debut, fin[
-    const debut = ind.debut
-    const fin = ind.fin
-    if (debut && creneau.debut < debut) return false
-    if (fin && creneau.debut >= fin) return false
-    if (!debut && !fin) return true // indispo toute la journée
+    // Cf. commentaire sémantique dans solver.ts::indispoBloque
+    if (!ind.debut && !ind.fin) return true
+    if (ind.debut && !ind.fin) return creneau.debut === ind.debut
+    if (ind.debut && creneau.debut < ind.debut) return false
+    if (ind.fin && creneau.debut >= ind.fin) return false
     return true
   })
 }

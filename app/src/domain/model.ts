@@ -50,9 +50,16 @@ export type RolePersonne = z.infer<typeof RolePersonne>
 /**
  * Indispo d'une personne. Peut cibler :
  *  - un ou plusieurs jours précis (`jours`), ou tous (`jours` vide)
- *  - un intervalle horaire (`debut`/`fin`), ou l'intégralité du jour
+ *  - un intervalle horaire (`debut`/`fin`), l'intégralité du jour, ou un
+ *    créneau ponctuel
  *  - éventuellement seulement certains rôles (`roles`) — reprend la
  *    sémantique du prototype (cf. `roles: ['chant']`)
+ *
+ * Sémantique horaire :
+ *  - ni `debut` ni `fin`      → journée entière
+ *  - `debut` seul             → créneau commençant exactement à `debut`
+ *                               (compatibilité prototype : match sur début)
+ *  - `debut` et `fin`         → plage `[debut, fin[`
  */
 export const Indispo = z.object({
   jours: z.array(IsoDate).default([]),

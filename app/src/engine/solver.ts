@@ -3,6 +3,47 @@ import type { Groupe, Inscriptions, Lieu, Personne, Pupitre, Session } from '../
 import { makeRng, shuffle } from './rng'
 
 /**
+ * Cote a priori la difficulté d'un groupe (0 = facile, ∞ = impossible).
+ * Combine :
+ *   - nb de créneaux fermés par les indispos de ses membres
+ *   - nb de groupes partageant au moins un membre
+ *   - taille du groupe (léger biais : les gros sont plus contraints)
+ * L'ordre de placement au 1er essai suit cette difficulté décroissante :
+ *   les groupes les plus contraints choisissent parmi le champ le plus large,
+ *   au lieu de se retrouver bloqués en fin de tour.
+ */
+export function coterDifficulte(
+  g: Groupe,
+  groupes: Groupe[],
+  creneaux: Creneau[],
+  personnesParId: Map<string, Personne>,
+): number {
+  const membres = [...new Set(g.membres.map((m) => m.personne_id))]
+  if (membres.length === 0) return 0
+  const pupitresParPersonne = new Map<string, Pupitre[]>()
+  g.membres.forEach((m) => {
+    if (!pupitresParPersonne.has(m.personne_id)) pupitresParPersonne.set(m.personne_id, [])
+    pupitresParPersonne.get(m.personne_id)!.push(m.pupitre)
+  })
+  const ouverts = creneaux.filter((c) => {
+    for (const pid of membres) {
+      const p = personnesParId.get(pid)
+      if (!p) continue
+      if (indispoBloque(p, c, pupitresParPersonne.get(pid) ?? [])) return false
+    }
+    return true
+  }).length
+  let partages = 0
+  const setMembres = new Set(membres)
+  for (const g2 of groupes) {
+    if (g2.id === g.id) continue
+    if (g2.membres.some((m) => setMembres.has(m.personne_id))) partages++
+  }
+  const ratioFerme = 1 - ouverts / Math.max(1, creneaux.length)
+  return partages * 12 + ratioFerme * 60 + membres.length * 2
+}
+
+/**
  * Placement horaire — port structuré de `repartir()` (prototype
  * `repartiteur_repetitions.html`). Placement sans salle : l'attribution
  * salles est une passe séparée (cf. `allocate-rooms.ts`, brief §4).
@@ -53,9 +94,14 @@ function indispoBloque(p: Personne, c: Creneau, pupitres: Pupitre[]): boolean {
   return p.indispos.some((ind) => {
     if (ind.jours.length > 0 && !ind.jours.includes(c.date)) return false
     if (ind.roles.length > 0 && !pupitres.some((r) => ind.roles.includes(r))) return false
+    // Sémantique Indispo :
+    //  - ni debut ni fin : journée entière bloquée
+    //  - debut seul       : match exact sur début de créneau (compat legacy)
+    //  - debut ET fin     : plage [debut, fin[
+    if (!ind.debut && !ind.fin) return true
+    if (ind.debut && !ind.fin) return c.debut === ind.debut
     if (ind.debut && c.debut < ind.debut) return false
     if (ind.fin && c.debut >= ind.fin) return false
-    if (!ind.debut && !ind.fin) return true
     return true
   })
 }
@@ -73,79 +119,115 @@ function accolAvecPlan(
 }
 
 /**
- * Tente de déloger les groupes bloqueurs d'un créneau afin d'y placer un
- * groupe incomplet. Un bloqueur est délogeable si (1) il ne partage pas
- * son créneau avec plusieurs groupes conflictuels et (2) on peut le
- * reloger ailleurs. Version conservatrice du prototype.
+ * Réparation par échange : pour chaque groupe incomplet, tente de libérer
+ * un créneau en délogeant jusqu'à `MAX_BLOQUEURS` bloqueurs partageant un
+ * membre, à condition qu'ils soient tous relogeables. Le délogement est
+ * exécuté puis annulé (rollback complet) si l'opération ne débloque pas
+ * la situation — pas d'état laissé incohérent.
  */
+const MAX_BLOQUEURS_REPAR = 3
+
 function reparer(
   groupes: Groupe[],
   memP: Map<string, string[]>,
   e: EtatEssai,
   creneaux: Creneau[],
+  cible: number,
   estLibre: (c: Creneau, g: Groupe, e: EtatEssai, contraintJour: boolean) => boolean,
   poser: (c: Creneau, g: Groupe, e: EtatEssai) => void,
 ): void {
+  const creneauxParId = new Map(creneaux.map((c) => [c.id, c]))
   const retirer = (c: Creneau, g: Groupe) => {
     e.occSlot.set(c.id, Math.max(0, (e.occSlot.get(c.id) ?? 0) - 1))
     const planG = e.plan.get(g.id)
     if (planG) e.plan.set(g.id, planG.filter((id) => id !== c.id))
-    // recalcule les jours du groupe
     const jours = new Set<string>()
     ;(e.plan.get(g.id) ?? []).forEach((sid) => {
-      const s = creneaux.find((x) => x.id === sid)
+      const s = creneauxParId.get(sid)
       if (s) jours.add(s.date)
     })
     e.joursGroupe.set(g.id, jours)
     for (const pid of memP.get(g.id) ?? []) e.occPersonne.get(pid)?.delete(c.id)
   }
 
-  const cible = 3 // consommé après avoir vérifié plan.length < cible
+  // Trie les groupes incomplets par manque décroissant (les plus en défaut
+  // en premier) — donne plus de chances aux groupes à 0 répé.
+  const parPriorite = () =>
+    [...groupes].sort(
+      (a, b) => (e.plan.get(a.id)?.length ?? 0) - (e.plan.get(b.id)?.length ?? 0),
+    )
 
-  for (const g of groupes) {
-    let garde = 0
-    while ((e.plan.get(g.id)?.length ?? 0) < cible && garde++ < 40) {
-      let fait = false
-      for (const c of creneaux) {
-        if (fait) break
+  for (let passe = 0; passe < 3; passe++) {
+    let progresse = false
+    for (const g of parPriorite()) {
+      let garde = 0
+      while ((e.plan.get(g.id)?.length ?? 0) < cible && garde++ < 20) {
+        let fait = false
+        // Essai direct d'abord (sans réparer)
         const planG = e.plan.get(g.id) ?? []
-        if (planG.includes(c.id)) continue
-
-        // Identifier les groupes bloqueurs (qui partagent un membre)
-        const membresG = memP.get(g.id) ?? []
-        const bloqueurs: Groupe[] = []
-        for (const g2 of groupes) {
-          if (g2.id === g.id) continue
-          if (!(e.plan.get(g2.id) ?? []).includes(c.id)) continue
-          const m2 = memP.get(g2.id) ?? []
-          if (m2.some((pid) => membresG.includes(pid))) bloqueurs.push(g2)
-        }
-        // Contrainte : au plus 1 bloqueur (sinon délogement en cascade)
-        if (bloqueurs.length > 1) continue
-        const occ = e.occSlot.get(c.id) ?? 0
-        // Il faut que la salle se libère après délogement
-        if (occ - bloqueurs.length >= c.salles.length) continue
-
-        for (const bloqueur of bloqueurs) {
-          retirer(c, bloqueur)
-          // Chercher un nouveau créneau pour le bloqueur
-          const relog = creneaux.find(
-            (cc) => !(e.plan.get(bloqueur.id) ?? []).includes(cc.id) && estLibre(cc, bloqueur, e, true),
-          )
-          if (!relog) {
-            // Rétablir le bloqueur à sa place
-            poser(c, bloqueur, e)
-            break
-          }
-          poser(relog, bloqueur, e)
-        }
-        if (estLibre(c, g, e, false)) {
-          poser(c, g, e)
+        let direct = creneaux.find((c) => !planG.includes(c.id) && estLibre(c, g, e, true))
+        if (!direct) direct = creneaux.find((c) => !planG.includes(c.id) && estLibre(c, g, e, false))
+        if (direct) {
+          poser(direct, g, e)
           fait = true
+          progresse = true
+          continue
         }
+        // Sinon, chercher un créneau à libérer par délogement
+        const membresG = memP.get(g.id) ?? []
+        for (const c of creneaux) {
+          if (fait) break
+          if ((e.plan.get(g.id) ?? []).includes(c.id)) continue
+          const bloqueurs: Groupe[] = []
+          for (const g2 of groupes) {
+            if (g2.id === g.id) continue
+            if (!(e.plan.get(g2.id) ?? []).includes(c.id)) continue
+            const m2 = memP.get(g2.id) ?? []
+            if (m2.some((pid) => membresG.includes(pid))) bloqueurs.push(g2)
+          }
+          if (bloqueurs.length === 0 || bloqueurs.length > MAX_BLOQUEURS_REPAR) continue
+          const occ = e.occSlot.get(c.id) ?? 0
+          if (occ - bloqueurs.length >= c.salles.length) continue
+
+          // Snapshot pour rollback : (bloqueur, creneau_delogé, creneau_relogé|null)
+          type Op = { g: Groupe; retiré: Creneau; relog: Creneau | null }
+          const ops: Op[] = []
+          let toutRelog = true
+          for (const b of bloqueurs) {
+            retirer(c, b)
+            let relog = creneaux.find(
+              (cc) => !(e.plan.get(b.id) ?? []).includes(cc.id) && estLibre(cc, b, e, true),
+            )
+            if (!relog) {
+              relog = creneaux.find(
+                (cc) => !(e.plan.get(b.id) ?? []).includes(cc.id) && estLibre(cc, b, e, false),
+              )
+            }
+            ops.push({ g: b, retiré: c, relog: relog ?? null })
+            if (!relog) {
+              toutRelog = false
+              break
+            }
+            poser(relog, b, e)
+          }
+          const posable = toutRelog && estLibre(c, g, e, false)
+          if (posable) {
+            poser(c, g, e)
+            fait = true
+            progresse = true
+          } else {
+            // Rollback : retirer les relogs, restaurer sur c
+            for (let i = ops.length - 1; i >= 0; i--) {
+              const op = ops[i]
+              if (op.relog) retirer(op.relog, op.g)
+              poser(op.retiré, op.g, e)
+            }
+          }
+        }
+        if (!fait) break
       }
-      if (!fait) break
     }
+    if (!progresse) break
   }
 }
 
@@ -165,6 +247,9 @@ export function repartir(
   const memP = new Map(groupes.map((g) => [g.id, membresUniques(g)]))
   const cible = session.repetitions_visees
   const total = groupes.length
+  const difficulte = new Map(
+    groupes.map((g) => [g.id, coterDifficulte(g, groupes, creneaux, personnesParId)]),
+  )
 
   const sallesUtilisables = (c: Creneau) => c.salles.filter((sid) => sallesActives.has(sid)).length
 
@@ -229,12 +314,19 @@ export function repartir(
     groupes.forEach((g) => e.plan.set(g.id, []))
 
     for (let tour = 0; tour < cible; tour++) {
-      const ordre =
-        essai === 0
-          ? [...groupes].sort(
-              (a, b) => (memP.get(b.id)?.length ?? 0) - (memP.get(a.id)?.length ?? 0),
-            )
-          : shuffle(groupes, rng)
+      // Essai 0 : ordre par difficulté décroissante (les plus contraints
+      // choisissent avant que le graphe ne soit saturé). Essais suivants :
+      // shuffle biaisé où les plus difficiles restent souvent en tête.
+      let ordre: Groupe[]
+      if (essai === 0) {
+        ordre = [...groupes].sort((a, b) => (difficulte.get(b.id) ?? 0) - (difficulte.get(a.id) ?? 0))
+      } else if (essai % 3 === 1) {
+        ordre = [...groupes].sort(
+          (a, b) => (memP.get(b.id)?.length ?? 0) - (memP.get(a.id)?.length ?? 0),
+        )
+      } else {
+        ordre = shuffle(groupes, rng)
+      }
       for (const g of ordre) {
         if ((e.plan.get(g.id)?.length ?? 0) > tour) continue
         let cands = creneaux.filter((c) => estLibre(c, g, e, true))
@@ -250,10 +342,10 @@ export function repartir(
       }
     }
 
-    // Phase de réparation : pour un groupe incomplet, tenter de déloger un
-    // bloqueur (autre groupe qui partage un membre) vers un autre créneau.
-    // Port du prototype `repartir()` § "réparation".
-    reparer(groupes, memP, e, creneaux, estLibre, poser)
+    // Phase de réparation : pour un groupe incomplet, tenter de déloger
+    // jusqu'à MAX_BLOQUEURS_REPAR bloqueurs partageant un membre, avec
+    // rollback complet si l'opération n'aboutit pas.
+    reparer(groupes, memP, e, creneaux, cible, estLibre, poser)
 
     const complets = [...e.plan.values()].filter((cs) => cs.length === cible).length
     const totalPosé = [...e.plan.values()].reduce((s, cs) => s + cs.length, 0)

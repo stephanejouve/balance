@@ -93,6 +93,14 @@ retoucher le code.
 
 ## 4. Le moteur
 
+### Ajustement manuel
+
+Le calcul propose, l'organisateur dispose. Prévoir de **déplacer une répétition à la main**
+depuis la carte des créneaux, avec validation immédiate : l'outil accepte, ou refuse en
+disant qui serait en conflit. Et de **figer** une répétition pour que le moteur ne la
+touche plus lors des recalculs suivants — indispensable dès qu'une séance a déjà eu lieu
+ou qu'un accord a été passé avec un groupe.
+
 ### Placement
 Recherche par redémarrages aléatoires : ordre des groupes rebattu à chaque essai,
 attribution par **tours de table** (chaque groupe obtient sa 1ʳᵉ répétition, puis la 2ᵉ,
@@ -102,6 +110,31 @@ incomplets. Environ 2 500 essais, moins d'une seconde.
 
 Ce n'est pas un solveur exact, et ça suffit : sur un cas de test, une recherche
 exhaustive a confirmé que l'heuristique trouvait l'optimum.
+
+### Choix du solveur — décision d'architecture à prendre d'emblée
+
+Le problème traité est un **timetabling** classique, très étudié : mêmes contraintes que
+l'emploi du temps scolaire, avec « musicien » à la place de « professeur ». Il existe des
+solveurs génériques bien plus solides que l'heuristique du prototype. Trois voies :
+
+| Voie | Avantages | Coût |
+|---|---|---|
+| **A. Heuristique maison** (prototype actuel) | fichier autonome, léger, aucune dépendance ; suffisant sur les cas testés | pas de preuve d'optimalité ni d'infaisabilité |
+| **B. OR-Tools CP-SAT compilé en WebAssembly** | vrai solveur dans le navigateur, sans serveur ; prouve l'optimalité et démontre l'infaisabilité | binaire à embarquer — mesurer son poids, il compromet peut-être le fichier unique |
+| **C. Solveur côté serveur** (OR-Tools Python, Timefold) | le plus puissant, outillage mature | exige une infrastructure : contraire à l'usage sur place, sans réseau fiable |
+
+**Recommandation.** Garder A par défaut — c'est l'autonomie du fichier qui a permis de
+l'utiliser sur le terrain. Mais **écrire le modèle de contraintes de façon déclarative**,
+séparé du moteur, pour que B puisse se brancher sans réécrire la logique métier.
+
+C'est sur le diagnostic que B apporterait le plus : là où l'heuristique dit « je n'ai pas
+trouvé », CP-SAT sait démontrer qu'aucune solution n'existe et désigner le sous-ensemble
+de contraintes responsable. Sur la session testée, il aurait pointé Gaël immédiatement.
+
+Vérifier aussi ce que font les logiciels du métier — ALGEM (libre, écoles de musique),
+Orfeo, Viviarto. Ils gèrent la réservation de salles et signalent les conflits, mais ne
+calculent pas de répartition. Le manque est réel : rien entre l'agenda qui ne résout rien
+et le solveur générique qu'il faut savoir programmer.
 
 ### Vérification indépendante — à conserver absolument
 Après chaque calcul, une fonction **recontrôle la solution** par un chemin de code
@@ -126,14 +159,87 @@ explique instantanément un échec que le solveur mettrait longtemps à démontr
 
 ## 5. Les sorties
 
-### Les deux états indispensables
-- **Feuille de route par groupe** — pour chaque morceau : responsable, tonalité, effectif,
-  et ses répétitions (jour, horaire, salle)
-- **Occupation par salle** — une feuille par salle, chronologique, créneaux libres
-  compris, à afficher sur la porte
+Trois entrées dans la même donnée, pour trois questions différentes. C'est un besoin
+constaté sur le terrain : présenté la grille par morceau, un musicien l'a parcourue
+chronologiquement en cherchant ce qui le concernait ensuite. Aucune des vues existantes
+ne répondait à sa question.
 
-Les deux doivent être **imprimables séparément** (sans les formulaires) et **exportables
-en CSV** (séparateur `;`, BOM UTF-8 pour Excel) — `balance_feuilles_de_route.csv` et `balance_occupation_par_salle.csv`.
+### Les trois vues
+- **Par groupe** — « quand répète-t-on ? » Pour chaque morceau : responsable, tonalité,
+  effectif, et ses répétitions (jour, horaire, salle). Destinée aux responsables.
+- **Par salle** — « qu'est-ce qui se passe ici ? » Une feuille par salle, chronologique,
+  créneaux libres compris, à afficher sur la porte.
+- **Par musicien** — « où dois-je être ? » L'agenda personnel de chacun, dans l'ordre
+  du temps : horaire, salle, morceau. Quelqu'un engagé sur trois morceaux ne devrait pas
+  avoir à reconstituer sa journée en balayant toute la grille. C'est aussi la vue qui rend
+  visibles les enchaînements serrés et les temps de trajet (§12).
+
+Les trois doivent être **imprimables séparément** (sans les formulaires) et **exportables
+en CSV** (séparateur `;`, BOM UTF-8 pour Excel) — `balance_par_groupe.csv`,
+`balance_par_salle.csv`, `balance_par_musicien.csv`.
+
+### Carte des créneaux disponibles
+
+Une grille **créneaux × salles** montrant d'un coup d'œil ce qui est pris et ce qui reste.
+C'est l'outil de la souplesse : savoir où insérer une répétition supplémentaire, où
+déplacer un groupe qui a un empêchement, ou quelles salles rendre à d'autres usages.
+
+À faire apparaître : le taux d'occupation par créneau et par jour, les créneaux
+entièrement libres (récupérables), et pour chaque case libre **quels groupes pourraient
+l'occuper** sans créer de conflit — c'est ce qui transforme un tableau de cases vides en
+outil de décision.
+
+Prévoir aussi un réglage **« garder de la marge »** : demander au moteur de ne pas
+saturer, en laissant un pourcentage de créneaux libres pour les imprévus. Un planning
+optimal à 100 % est un planning qui casse au premier contretemps.
+
+### Un troisième état : le planning individuel
+
+Constaté en présentation : devant la grille par morceau, un musicien l'a parcourue
+**à la verticale, par heure**, pour savoir ce qu'il faisait ensuite. Il cherchait une
+information que ni la feuille de route par groupe ni l'occupation par salle ne donnent
+directement — *sa* journée à lui.
+
+Trois lectures, trois publics :
+
+| État | Répond à | Pour qui |
+|---|---|---|
+| Feuille de route par groupe | *quand et où répète mon morceau ?* | les responsables |
+| Occupation par salle | *qui occupe cette salle, et quand se libère-t-elle ?* | l'organisation, affichage sur les portes |
+| **Planning individuel** | *qu'est-ce que je fais, et où, dans l'ordre ?* | chaque participant |
+
+Le planning individuel : une page par personne, chronologique, avec pour chaque ligne
+l'heure, le morceau, la salle — et le temps libre entre deux engagements. C'est aussi la
+vue qui révèle le mieux les surcharges : celui qui enchaîne cinq répétitions le lundi
+le voit immédiatement.
+
+À exporter et imprimer comme les deux autres, et à générer en lot (un fichier par
+personne, ou une page par personne dans un même document).
+
+### Visualiser ce qui reste libre
+
+Une fois la répartition faite, il reste de la marge — dans la session testée, une bonne
+moitié des places. Elle n'est visible nulle part, alors que c'est elle qui permet de
+réagir : un groupe formé en retard, une répétition supplémentaire pour un morceau
+fragile, un déplacement de dernière minute.
+
+Prévoir une **grille créneaux × salles** montrant d'un coup d'œil l'occupé et le libre,
+avec un filtre « n'afficher que les disponibilités ». Et, à partir de là, deux questions
+que l'outil sait déjà traiter :
+
+- **Où puis-je encore caser ce groupe ?** — les créneaux libres compatibles avec ses
+  membres, c'est le même calcul que pour les suggestions de renforts
+- **Quels groupes pourraient prendre une répétition de plus ?** — utile pour ceux qui
+  n'en ont obtenu que deux
+
+C'est le pendant du diagnostic : celui-ci explique ce qui bloque, celle-là montre ce qui
+reste possible.
+
+### Ne pas recréer l'encombrement
+
+Le prototype avait fini par empiler neuf blocs de résultats, au point de devoir en
+désactiver sept. Les états supplémentaires doivent être **choisis, pas empilés** :
+onglets ou sélection, avec deux vues actives par défaut et les autres à la demande.
 
 ### Fonctions optionnelles, à débrayer facilement
 Développées et validées dans le prototype, désactivées aujourd'hui. Elles doivent être
@@ -237,7 +343,106 @@ Le reste — structure du code, interface, persistance — est à reprendre.
 
 ---
 
-## 11. Portabilité : changer de lieu, changer de session
+## 11. S'intégrer à l'existant — ce qu'on sait, ce qu'on suppose
+
+### Ce qui a été observé, et qui est certain
+
+L'organisation actuelle du stage repose sur :
+
+- **Un dossier Google Drive partagé** (« 2026 Session 5 / Programme ») contenant un PDF
+  par journée, produits par l'organisation
+- **Des feuilles A4 imprimées et scotchées au tableau** sur place, corrigées à la main
+  quand le planning bouge — un « niveau I » manuscrit, un nom barré et remplacé
+- **Un classeur Excel** dont les onglets disent tout de la méthode : `Liste`,
+  `Résa salles`, `Setlist mercredi`, plus deux feuilles de travail
+- Des conventions de saisie stables : `CHERCHE`, `NON`, plusieurs noms par cellule,
+  l'instrument entre parenthèses
+
+Autrement dit : **tableur, Drive, papier.** Le tout maîtrisé, avec des habitudes solides.
+L'onglet `Résa salles` montre qu'ils font déjà de la réservation de salles à la main.
+
+### Ce qu'on ignore
+
+Rien n'indique l'usage d'un logiciel de gestion d'école de musique. L'association emploie
+des intermittents, elle a donc forcément un outil de paie et d'administration — mais il
+n'a pas été observé et ne communique pas avec le planning.
+
+**À vérifier avant toute décision d'architecture**, en une conversation avec
+l'organisateur : quel outil pour les adhérents et la paie, qui produit les PDF du
+planning, avec quoi, et faut-il que Balance s'y raccorde ou reste autonome.
+
+### Scénario le plus probable, à privilégier par défaut
+
+Se greffer sur ce qui existe plutôt que d'imposer un système :
+
+- **Entrée** : lire directement leur classeur — l'onglet `Liste` a déjà la bonne structure,
+  il a été converti sans difficulté pendant la mise au point
+- **Sortie** : produire les états au format qu'ils diffusent — un onglet `Résa salles`
+  rempli, et des PDF par journée déposables sur le Drive
+- **Aucun changement d'habitude** : ils continuent avec le tableur et le Drive, Balance
+  ne fait que remplacer le calcul manuel
+
+C'est le scénario le moins coûteux et le plus susceptible d'être adopté. Un outil qui
+produit exactement les documents qu'ils impriment déjà ne demande aucune conversion.
+
+### Scénario alternatif, si un logiciel de gestion existe ou est envisagé
+
+Si l'association utilise — ou envisage — un logiciel de type ALGEM (libre, Java,
+PostgreSQL, AGPL, conçu pour les écoles de musique et les salles de répétition), le
+couplage devient intéressant : il gère déjà adhérents, salles, intervenants, heures et
+exports comptables, et dispose d'une interface web où chacun consulte son planning — ce
+qui couvrirait gratuitement le besoin de « planning individuel ».
+
+Balance n'apporterait alors que ce qui manque partout : **la composition des groupes par
+pupitre et le solveur**.
+
+#### Interfaces d'échange d'ALGEM — état des lieux
+
+Recherche faite : **aucune API REST publique documentée.** Trois points d'entrée :
+
+1. **La base PostgreSQL partagée — mécanisme assumé par le projet.** L'extension web
+   d'ALGEM est une application Spring distincte qui fonctionne conjointement au logiciel
+   à condition que la base leur soit commune. Un troisième programme qui s'y branche suit
+   donc le schéma d'intégration prévu, ce n'est pas un détournement.
+2. **Un mécanisme d'extension par jar** : une classe compilée placée dans le classpath
+   dote l'organisation d'exports de données personnalisés.
+3. **Des exports comptables** au format paramétrable, via la configuration.
+
+Encourageant pour notre cas : le code comporte déjà un paquet `group` modélisant des
+groupes de musiciens, ainsi que `room`, `planning` et `edition`. Les concepts existent.
+
+Ce qui reste à établir, et qui demande un accès réel ou un contact avec l'éditeur :
+**le schéma de la base n'est pas documenté publiquement**. Il faudra l'inspecter.
+
+#### Précautions
+
+Écrire dans la base d'un logiciel tiers reste risqué (schéma mouvant — lire directement,
+écrire en mode simulation d'abord) ; la licence AGPL mérite un examen selon que Balance
+reste un programme séparé ou du code intégré ; et il vaut mieux prendre contact avec
+l'équipe du projet avant de développer un greffon.
+
+**Vérifier aussi la vitalité du projet** : le dépôt public paraît peu actif (peu
+d'étoiles, dernières contributions surtout automatiques). Le développement et le support
+semblent passer par l'éditeur plutôt que par GitHub — à confirmer avant de miser dessus.
+
+**Ne pas engager ce chantier sans confirmation.** Introduire un logiciel de gestion dans
+une organisation qui fonctionne au tableur depuis trente ans est un projet en soi,
+beaucoup plus lourd que Balance.
+
+### Sur le solveur, selon le scénario
+
+Le choix entre heuristique embarquée et CP-SAT dépend directement de là :
+
+- **Fichier autonome, usage sur place** → heuristique, ou OR-Tools compilé en WebAssembly
+- **Serveur associatif disponible** → CP-SAT en Python, avec preuve d'optimalité et
+  démonstration d'infaisabilité
+
+D'où la recommandation du §4 : modèle de contraintes déclaratif, séparé du moteur, pour
+que la décision reste ouverte.
+
+---
+
+## 12. Portabilité : changer de lieu, changer de session
 
 **Exigence du commanditaire.** L'outil doit servir aux sessions suivantes, y compris dans
 un autre lieu. Aucune donnée de lieu, de date ou de calendrier ne doit subsister dans le
@@ -287,7 +492,60 @@ défaut, les libellés.
 
 ---
 
-## 12. Présentation à l'organisateur
+## 13. Sites éloignés : temps de trajet entre salles
+
+Sur le lieu actuel, les salles sont voisines et le déplacement est négligeable. Ce ne sera
+pas vrai partout : un stage réparti sur plusieurs bâtiments, voire plusieurs communes,
+change la nature du problème. À prévoir dès la conception, même si la fonction reste
+désactivée par défaut.
+
+### Ce qui change
+
+Un musicien qui termine une répétition salle A à 15:00 et en commence une salle B à 15:00
+ne peut pas y être. Aujourd'hui l'outil l'autorise, parce qu'il considère les créneaux
+comme instantanément enchaînables.
+
+Et le trajet **mange la séance** : dix minutes de marche entre deux bâtiments, sur une
+répétition d'une heure, c'est un sixième du temps perdu — et le groupe qui attend est
+pénalisé autant que celui qui arrive.
+
+### Saisie
+
+Une matrice complète salle × salle serait pénible à remplir. Préférer deux niveaux :
+
+- **Regrouper les salles en sites** (bâtiment, annexe, gymnase…)
+- **Une matrice site × site** en minutes, symétrique par défaut
+- Trajet intra-site : une valeur unique par site, souvent zéro
+- Surcharge ponctuelle possible pour une salle particulière (étage sans ascenseur,
+  bâtiment à l'écart)
+
+### Contraintes à ajouter
+
+**Dure** — entre deux engagements d'une même personne, l'écart doit couvrir le trajet.
+S'il ne le couvre pas, le placement est refusé.
+
+**Préférence** — minimiser les déplacements : garder une personne sur le même site
+sur une même demi-journée, limiter le nombre de changements de site par jour.
+
+**Affichage** — signaler dans la feuille de route les enchaînements serrés, avec le temps
+de trajet et la durée réellement disponible. Un groupe qui perd dix minutes doit le savoir.
+
+### Conséquence architecturale — le point important
+
+Dans le prototype, le placement horaire se fait d'abord, l'attribution des salles ensuite.
+Ça tient tant que les salles sont interchangeables. **Avec des temps de trajet, ce n'est
+plus vrai** : le choix d'une salle peut rendre un horaire infaisable pour un musicien qui
+vient d'ailleurs. Les deux étapes deviennent couplées.
+
+Deux voies : les résoudre ensemble, ou conserver la séparation avec une boucle de retour
+qui invalide un placement horaire quand aucune attribution de salles ne le satisfait. La
+seconde est plus simple à faire évoluer depuis l'existant.
+
+À prévoir dans la structure du code même si la fonction n'est pas livrée tout de suite.
+
+---
+
+## 14. Présentation à l'organisateur
 
 Ce qui convainc, dans l'ordre :
 
