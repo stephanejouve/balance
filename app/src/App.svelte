@@ -5,6 +5,7 @@
   import type { Inscriptions } from './domain/model'
   import { Lieu, Session, libellePersonne } from './domain/model'
   import { attribuerSalles } from './engine/allocate-rooms'
+  import { chargeParMusicien } from './engine/charge'
   import type { IdContrainte } from './engine/contraintes'
   import { REGISTRE_TOUT, registrePersonnalise } from './engine/contraintes'
   import { analyserInfaisabilite, diagnostiquer } from './engine/diagnostic'
@@ -93,6 +94,8 @@
   let vue = $state<'groupes' | 'salles' | 'musiciens' | 'carte'>('groupes')
   /** Case libre survolée dans la carte : affiche les groupes candidats. */
   let inspecteCase = $state<{ creneauId: string; salleId: string } | null>(null)
+  /** Seuil de charge par musicien et par jour au-delà duquel on alerte. */
+  let seuilChargeJour = $state(4)
   /** Clés `groupe_id|creneau_id` des assignations à préserver lors des recalculs. */
   let figeesKeys = $state(new Set<string>())
   /** Assignation en cours de déplacement (bascule la vue Par salle en mode cibles). */
@@ -1157,6 +1160,7 @@
           </div>
         {/if}
       {:else}
+        {@const chargeMap = chargeParMusicien(inscriptions, creneaux, solution.assignations)}
         {@const parPersonne = (() => {
           const m = new Map<string, Array<{ a: Assignation; c: (typeof creneaux)[number] }>>()
           for (const a of solution.assignations) {
@@ -1173,21 +1177,39 @@
             l.sort((x, y) => `${x.c.date}T${x.c.debut}`.localeCompare(`${y.c.date}T${y.c.debut}`))
           return m
         })()}
+        {@const surcharges = [...chargeMap.values()].filter((c) => c.max_jour > seuilChargeJour)}
+        <div class="toolbar" style="margin-bottom:12px">
+          <label class="line" style="margin:0;display:flex;align-items:center;gap:8px">
+            <span>Seuil charge / jour</span>
+            <input type="number" min="1" max="12" bind:value={seuilChargeJour} style="width:70px" />
+          </label>
+          <span class="grow"></span>
+          {#if surcharges.length > 0}
+            <span class="badge">⚠ {surcharges.length} musicien(s) au-delà du seuil</span>
+          {/if}
+        </div>
         <table>
           <thead>
             <tr>
               <th>Musicien</th>
-              <th>Nb</th>
+              <th style="width:70px">Total</th>
+              <th style="width:100px">Max/jour</th>
               <th>Planning chronologique</th>
             </tr>
           </thead>
           <tbody>
             {#each [...inscriptions.personnes].sort((a, b) => libellePersonne(a).localeCompare(libellePersonne(b), 'fr')) as p}
               {@const items = parPersonne.get(p.id) ?? []}
-              {#if items.length > 0}
-                <tr>
+              {@const ch = chargeMap.get(p.id)}
+              {#if items.length > 0 || (ch && ch.total > 0)}
+                {@const surcharge = ch && ch.max_jour > seuilChargeJour}
+                <tr class:surcharge>
                   <td><b>{libellePersonne(p)}</b></td>
-                  <td class="mono">{items.length}</td>
+                  <td class="mono">{ch?.total ?? items.length}</td>
+                  <td class="mono">
+                    {ch?.max_jour ?? 0}
+                    {#if surcharge}<span class="rouge"> ⚠</span>{/if}
+                  </td>
                   <td>
                     {#each items as { a, c }}
                       {@const g = groupesParId.get(a.groupe_id)}
@@ -1398,6 +1420,7 @@
   }
   tr.figee td { background: #fbf2df; }
   tr.cible td { background: #e3eee6; }
+  tr.surcharge td { background: #f8e6e3; }
   /* Bouton déplacer — flèche SVG */
   button.move {
     display: inline-block;
