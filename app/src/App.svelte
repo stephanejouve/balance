@@ -7,6 +7,7 @@
   import { attribuerSalles } from './engine/allocate-rooms'
   import type { IdContrainte } from './engine/contraintes'
   import { REGISTRE_TOUT, registrePersonnalise } from './engine/contraintes'
+  import { analyserInfaisabilite, diagnostiquer } from './engine/diagnostic'
   import { enrichirIndispos } from './engine/imposes'
   import { repartir } from './engine/solver'
   import type { Assignation, Probleme } from './engine/types'
@@ -82,6 +83,7 @@
     assignations: Assignation[]
     problemes: Probleme[]
     couverture: Array<{ groupe_id: string; obtenu: number; cible: number; min: number }>
+    diagnostics: ReturnType<typeof diagnostiquer>
     duree_ms: number
   }
   let solution = $state<Solution | null>(null)
@@ -112,6 +114,13 @@
   const creneaux = $derived.by(() => {
     try {
       return genererCreneaux(session, lieu)
+    } catch {
+      return []
+    }
+  })
+  const infaisabilites = $derived.by(() => {
+    try {
+      return analyserInfaisabilite(session, inscriptions, creneaux)
     } catch {
       return []
     }
@@ -168,7 +177,14 @@
     const assignations = attribuerSalles(placement, lieu, inscEnrichies, creneaux)
     const problemes = verifier(session, lieu, inscEnrichies, creneaux, assignations, registre)
     const cov = couverture(session, inscEnrichies, assignations)
-    solution = { assignations, problemes, couverture: cov, duree_ms: Math.round(performance.now() - t0) }
+    const diagnostics = diagnostiquer(session, inscriptions, creneaux, placement)
+    solution = {
+      assignations,
+      problemes,
+      couverture: cov,
+      diagnostics,
+      duree_ms: Math.round(performance.now() - t0),
+    }
     calculEnCours = false
   }
 
@@ -692,6 +708,30 @@
       Placer chaque groupe {session.repetitions_visees} fois avant l'échéance, sans jamais
       convoquer deux fois la même personne au même moment ni doubler une salle.
     </p>
+    {#if infaisabilites.length > 0}
+      <div class="msg warn">
+        <b>Contrôle en amont : {infaisabilites.length} musicien(s) en surcharge structurelle.</b>
+        <p class="mini-h">
+          Chacun ci-dessous demande plus de créneaux qu'il n'en a de disponibles.
+          Le solveur va échouer à les placer tous — il faut réduire leurs engagements
+          ou libérer des créneaux avant.
+        </p>
+        <ul>
+          {#each infaisabilites.slice(0, 8) as d}
+            <li>
+              <b>{d.nom}</b> — demande <b>{d.demande}</b> créneaux
+              ({d.detail.groupes} groupes × {d.detail.repetitions_visees}
+              {#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} imposés{/if})
+              mais seulement <b>{d.offre}</b> lui sont ouverts
+              (sur {d.detail.creneaux_total} au total).
+            </li>
+          {/each}
+          {#if infaisabilites.length > 8}
+            <li>… et {infaisabilites.length - 8} autres</li>
+          {/if}
+        </ul>
+      </div>
+    {/if}
     <button class="big" onclick={lancer} disabled={calculEnCours}>
       {calculEnCours ? 'Recherche en cours…' : solution ? 'Relancer la répartition' : 'Lancer la répartition'}
     </button>
@@ -717,6 +757,38 @@
         </div>
       {:else}
         <div class="msg ok">Aucun conflit détecté par la vérification indépendante.</div>
+      {/if}
+      {#if solution.diagnostics.length > 0}
+        <div class="msg warn">
+          <b>Pourquoi ça bloque</b>
+          <p class="mini-h">
+            Ces groupes n'ont pas atteint la cible ({session.repetitions_visees} répétitions).
+            Voici sur quoi agir.
+          </p>
+          {#each solution.diagnostics as d}
+            <div class="diag-bloc">
+              <b>{d.titre}</b> — {d.obtenu}/{d.cible} répétitions,
+              seulement <b>{d.creneaux_ouverts}</b> créneaux compatibles sur {creneaux.length}.
+              {#if d.partages.length > 0}
+                <br /><span class="ink-soft">
+                  Partage des musiciens avec :
+                  {#each d.partages.slice(0, 3) as p, i}
+                    {i > 0 ? ', ' : ''}<b>{p.titre}</b> ({p.communs.join(', ')})
+                  {/each}
+                </span>
+              {/if}
+              {#if d.poids_musicien}
+                <br /><span class="ink-soft">
+                  Piste : <b>{d.poids_musicien.nom}</b> cumule
+                  {d.poids_musicien.n_groupes} groupe(s)
+                  {#if d.poids_musicien.n_imposes > 0}
+                    + {d.poids_musicien.n_imposes} séance(s) imposée(s)
+                  {/if}. Le remplacer ici, ou accepter {d.cible - 1} répétitions, débloque la situation.
+                </span>
+              {/if}
+            </div>
+          {/each}
+        </div>
       {/if}
     {/if}
   </section>
@@ -1108,6 +1180,19 @@
     padding: 3px 10px;
     font-size: 12px;
     margin-top: 2px;
+  }
+  .diag-bloc {
+    padding: 10px 12px;
+    margin: 8px 0 0;
+    background: rgba(255, 255, 255, 0.55);
+    border-radius: 2px;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .mini-h {
+    margin: 4px 0 8px;
+    font-size: 13px;
+    color: var(--ink-soft);
   }
   .impose-bloc {
     border-left: 3px solid var(--ochre);
