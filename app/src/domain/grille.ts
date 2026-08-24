@@ -42,6 +42,41 @@ export function decouper(debut: HhMm, fin: HhMm, pasMinutes: number): Tour[] {
   }))
 }
 
+const JOURS_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
+
+/**
+ * Convertit une liste de « jours » (dates ISO OU noms de jour FR : lundi,
+ * mardi… — tolérant à la casse et aux accents) en dates ISO effectivement
+ * présentes dans la session. Les valeurs non reconnues sont ignorées.
+ */
+export function resoudreJours(saisi: readonly string[], joursSession: readonly IsoDate[]): IsoDate[] {
+  const out = new Set<IsoDate>()
+  const sessionSet = new Set(joursSession)
+  for (const s of saisi) {
+    const norm = s
+      .toLowerCase()
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+    if (/^\d{4}-\d{2}-\d{2}$/.test(norm)) {
+      if (sessionSet.has(norm)) out.add(norm)
+      continue
+    }
+    const idx = JOURS_FR.indexOf(norm)
+    if (idx < 0) continue
+    for (const d of joursSession) {
+      const [y, m, day] = d.split('-').map(Number)
+      const dt = new Date(Date.UTC(y, m - 1, day))
+      if (dt.getUTCDay() === idx) out.add(d)
+    }
+  }
+  return [...out].sort()
+}
+
+function normaliserFinMinuit(t: HhMm): HhMm {
+  return t === '00:00' ? '24:00' : t
+}
+
 /**
  * Énumère les dates ISO entre `debut` et `fin` (inclus des deux côtés).
  * Utilise Date.UTC pour éviter les décalages de fuseau.
@@ -85,10 +120,11 @@ export function genererCreneaux(session: Session, lieu: Lieu): Creneau[] {
 
   const emitted: Creneau[] = []
   for (const regle of reglesCreatrices) {
-    const jourReglés = regle.jours.length ? regle.jours : jours
+    const jourReglés = regle.jours.length ? resoudreJours(regle.jours, jours) : jours
     const salles = regle.salles.length ? regle.salles : sallesActives
+    const finNormale = normaliserFinMinuit(regle.fin)
     for (const jour of jourReglés) {
-      for (const tour of decouper(regle.debut, regle.fin, regle.pas_minutes)) {
+      for (const tour of decouper(regle.debut, finNormale, regle.pas_minutes)) {
         emitted.push({
           id: `${jour}T${tour.debut.replace(':', '')}`,
           date: jour,
@@ -102,9 +138,10 @@ export function genererCreneaux(session: Session, lieu: Lieu): Creneau[] {
 
   const estBloqué = (c: Creneau): boolean => {
     for (const regle of reglesBloqueuses) {
-      const jourReglés = regle.jours.length ? regle.jours : jours
+      const jourReglés = regle.jours.length ? resoudreJours(regle.jours, jours) : jours
       if (!jourReglés.includes(c.date)) continue
-      if (c.debut >= regle.debut && c.debut < regle.fin) return true
+      const finNormale = normaliserFinMinuit(regle.fin)
+      if (c.debut >= regle.debut && c.debut < finNormale) return true
     }
     return false
   }

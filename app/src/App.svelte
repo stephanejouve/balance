@@ -393,6 +393,34 @@
     solution = null
   }
 
+  /* --- Édition Indispos personnes ---------------------------------------- */
+
+  function ajouterIndispo(pid: string) {
+    const p = inscriptions.personnes.find((x) => x.id === pid)
+    if (!p) return
+    p.indispos.push({
+      jours: [],
+      debut: '09:00',
+      fin: undefined,
+      roles: [],
+      motif: '',
+    })
+    solution = null
+  }
+  function supprimerIndispo(pid: string, i: number) {
+    const p = inscriptions.personnes.find((x) => x.id === pid)
+    if (!p) return
+    p.indispos.splice(i, 1)
+    solution = null
+  }
+  const nbIndispoTotal = $derived(
+    inscriptions.personnes.reduce((s, p) => s + p.indispos.length, 0),
+  )
+  const personnesAvecIndispo = $derived(inscriptions.personnes.filter((p) => p.indispos.length > 0))
+  const personnesSansIndispo = $derived(
+    inscriptions.personnes.filter((p) => p.indispos.length === 0),
+  )
+
   /* --- Édition Imposés --------------------------------------------------- */
 
   function ajouterImpose() {
@@ -620,6 +648,85 @@
 
   <details class="sheet">
     <summary>
+      <p class="eyebrow">Étape 1d · Indisponibilités déclarées</p>
+      <h2>{nbIndispoTotal} règle(s) d'indisponibilité</h2>
+      <p class="hint">
+        Créneaux où une personne ne peut pas être placée. Un rôle (chant, piano…)
+        restreint la règle à ce pupitre uniquement — utile pour un chanteur qui suit
+        un atelier de chant à 9h mais reste disponible pour son autre instrument.
+      </p>
+    </summary>
+    <div class="body">
+      {#each personnesAvecIndispo as p}
+        <div class="impose-bloc">
+          <div class="impose-titre">
+            <span class="strong">{libellePersonne(p)}</span>
+            <span class="mono ink-soft">{p.indispos.length} règle(s)</span>
+            <button class="ghost mini-ajout" onclick={() => ajouterIndispo(p.id)}>+ règle</button>
+          </div>
+          {#each p.indispos as ind, i}
+            <div class="restr">
+              <input
+                value={ind.jours.join(', ')}
+                oninput={(e) => {
+                  ind.jours = (e.currentTarget as HTMLInputElement).value
+                    .split(/[,;\s]+/)
+                    .map((s) => s.trim())
+                    .filter(Boolean)
+                  solution = null
+                }}
+                placeholder="jours ISO (vide = tous)"
+                style="flex:1;min-width:150px"
+              />
+              <input type="time" bind:value={ind.debut} placeholder="début" />
+              <span>→</span>
+              <input
+                type="time"
+                value={ind.fin ?? ''}
+                oninput={(e) => {
+                  const v = (e.currentTarget as HTMLInputElement).value
+                  ind.fin = v || undefined
+                  solution = null
+                }}
+                placeholder="fin (vide = match exact)"
+              />
+              <input
+                value={ind.roles.join(', ')}
+                oninput={(e) => {
+                  ind.roles = (e.currentTarget as HTMLInputElement).value
+                    .split(/[,;\s]+/)
+                    .map((s) => s.trim().toLowerCase())
+                    .filter(Boolean)
+                  solution = null
+                }}
+                placeholder="rôles (chant, piano… vide = tous)"
+                style="flex:1;min-width:120px"
+              />
+              <input bind:value={ind.motif} placeholder="motif" style="flex:1;min-width:120px" />
+              <button class="mini" onclick={() => supprimerIndispo(p.id, i)}>×</button>
+            </div>
+          {/each}
+        </div>
+      {/each}
+      {#if personnesSansIndispo.length > 0}
+        <details class="renforts" style="margin-top:14px">
+          <summary>
+            <span class="mono ink-soft">Ajouter une indispo à une personne sans règle ({personnesSansIndispo.length})</span>
+          </summary>
+          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px">
+            {#each personnesSansIndispo as p}
+              <button class="ghost mini-ajout" onclick={() => ajouterIndispo(p.id)}>
+                {libellePersonne(p)}
+              </button>
+            {/each}
+          </div>
+        </details>
+      {/if}
+    </div>
+  </details>
+
+  <details class="sheet">
+    <summary>
       <p class="eyebrow">Étape 1c · Morceaux imposés</p>
       <h2>{inscriptions.imposes.length} imposé(s)</h2>
       <p class="hint">
@@ -784,12 +891,16 @@
       </div>
       <h3>Grille de créneaux</h3>
       <p class="hint">
-        Chaque règle génère des créneaux tous les jours de la session (sauf si on précise
-        des dates ISO dans « jours »). « Bloque » retire les créneaux qui tombent dans la plage.
+        Chaque règle génère des créneaux sur les jours ciblés (colonne <b>Jours</b> —
+        vide = tous les jours de la session). Accepte des dates ISO (<code>2026-08-26</code>)
+        ou des noms de jour FR (<code>mercredi</code>, <code>lundi</code>…).
+        « Bloque » retire les créneaux qui tombent dans la plage. Pour minuit, saisis
+        <code>24:00</code> plutôt que <code>00:00</code> (mieux compris par le solveur).
       </p>
       <table>
         <thead>
           <tr>
+            <th>Jours (ISO, CSV)</th>
             <th style="width:110px">Début</th>
             <th style="width:110px">Fin</th>
             <th style="width:80px">Pas (min)</th>
@@ -800,6 +911,19 @@
         <tbody>
           {#each session.grille as regle, i}
             <tr>
+              <td>
+                <input
+                  value={regle.jours.join(', ')}
+                  oninput={(e) => {
+                    regle.jours = (e.currentTarget as HTMLInputElement).value
+                      .split(/[,;\s]+/)
+                      .map((s) => s.trim())
+                      .filter(Boolean)
+                    solution = null
+                  }}
+                  placeholder="tous les jours"
+                />
+              </td>
               <td><input type="time" bind:value={regle.debut} /></td>
               <td><input type="time" bind:value={regle.fin} /></td>
               <td><input type="number" min="10" max="240" step="15" bind:value={regle.pas_minutes} /></td>

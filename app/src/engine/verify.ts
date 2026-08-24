@@ -73,7 +73,10 @@ export function salleRestreinte(
 ): 'interdit' | 'acoustique_seulement' | 'pas_reduit' | null {
   for (const r of salle.restrictions) {
     if (r.jours.length > 0 && !r.jours.includes(creneau.date)) continue
-    if (creneau.debut < r.debut || creneau.debut >= r.fin) continue
+    // Normalise `00:00` (impossible à saisir dans certains navigateurs) en
+    // `24:00` — permet une plage type « 22:00 → 00:00 = 22h → minuit ».
+    const finNorm = r.fin === '00:00' ? '24:00' : r.fin
+    if (creneau.debut < r.debut || creneau.debut >= finNorm) continue
     if (r.contrainte === 'interdit') return 'interdit'
     if (r.contrainte === 'pas_reduit') {
       const max = r.pas_max_minutes ?? Infinity
