@@ -109,6 +109,8 @@
     'salle-hors-creneau': true,
     'restriction-horaire-salle': true,
     'creneaux-consecutifs': true,
+    'preference-espacement-12h': true,
+    'preference-equilibre-tardif': true,
   })
 
   const LIBELLE_CONTRAINTE: Record<IdContrainte, string> = {
@@ -120,6 +122,8 @@
     'salle-hors-creneau': 'Salle attribuée ouverte au créneau',
     'restriction-horaire-salle': 'Restrictions horaires par salle (dortoirs, autres usages)',
     'creneaux-consecutifs': 'Pas deux répétitions accolées pour un même groupe',
+    'preference-espacement-12h': 'Préférer un espacement ≥ 12 h entre 2 répétitions d\'un même groupe',
+    'preference-equilibre-tardif': 'Éviter qu\'un musicien ait toutes ses répés en soirée',
   }
 
   const creneaux = $derived.by(() => {

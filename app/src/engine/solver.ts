@@ -335,33 +335,37 @@ export function repartir(
     const occ = e.occSlot.get(c.id) ?? 0
     v += (cap - occ) * 3 // préférer les créneaux avec de la marge
     v -= occ * 9 // pénaliser la saturation
-    const planG = e.plan.get(g.id) ?? []
-    for (const sid of planG) {
-      const s = creneauxParId.get(sid)
-      if (!s) continue
-      // Pénalité dégressive quand deux répés du groupe sont trop proches :
-      // -50 à 0 min d'écart, 0 à 12h d'écart et au-delà.
-      const ecart = ecartMinutesEntre(s, c)
-      if (ecart < ECART_MIN_ENTRE_REPETS) {
-        v -= Math.round(50 * (1 - ecart / ECART_MIN_ENTRE_REPETS))
+    if (actif(reg, 'preference-espacement-12h')) {
+      const planG = e.plan.get(g.id) ?? []
+      for (const sid of planG) {
+        const s = creneauxParId.get(sid)
+        if (!s) continue
+        // Pénalité dégressive quand deux répés du groupe sont trop proches :
+        // -50 à 0 min d'écart, 0 à 12h d'écart et au-delà.
+        const ecart = ecartMinutesEntre(s, c)
+        if (ecart < ECART_MIN_ENTRE_REPETS) {
+          v -= Math.round(50 * (1 - ecart / ECART_MIN_ENTRE_REPETS))
+        }
       }
     }
-    // Équilibre diurne / tardif par membre : évite qu'un musicien se
-    // retrouve avec l'ensemble de ses créneaux à des heures tardives.
-    const candTardif = estTardif(c)
-    for (const pid of memP.get(g.id) ?? []) {
-      const occs = e.occPersonne.get(pid)
-      if (!occs || occs.size === 0) continue
-      let nTard = 0
-      let nDiur = 0
-      for (const cid of occs) {
-        const cc = creneauxParId.get(cid)
-        if (!cc) continue
-        if (estTardif(cc)) nTard++
-        else nDiur++
+    if (actif(reg, 'preference-equilibre-tardif')) {
+      // Évite qu'un musicien se retrouve avec l'ensemble de ses créneaux
+      // à des heures tardives.
+      const candTardif = estTardif(c)
+      for (const pid of memP.get(g.id) ?? []) {
+        const occs = e.occPersonne.get(pid)
+        if (!occs || occs.size === 0) continue
+        let nTard = 0
+        let nDiur = 0
+        for (const cid of occs) {
+          const cc = creneauxParId.get(cid)
+          if (!cc) continue
+          if (estTardif(cc)) nTard++
+          else nDiur++
+        }
+        if (candTardif && nDiur === 0 && nTard > 0) v -= 25
+        else if (!candTardif && nTard > nDiur) v += 12
       }
-      if (candTardif && nDiur === 0 && nTard > 0) v -= 25 // aggrave un « tout tardif »
-      else if (!candTardif && nTard > nDiur) v += 12 // rééquilibre
     }
     return v
   }

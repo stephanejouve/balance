@@ -30,6 +30,10 @@ export type IdContrainte =
   | 'restriction-horaire-salle'
   /** Pas deux répétitions consécutives (fin d'un = début du suivant). */
   | 'creneaux-consecutifs'
+  /** Préférence : espacer les répétitions d'un même groupe (≥ 12 h). */
+  | 'preference-espacement-12h'
+  /** Préférence : éviter qu'un musicien ait toutes ses répés en soirée. */
+  | 'preference-equilibre-tardif'
 
 export interface RegistreContraintes {
   actives: Set<IdContrainte>
@@ -46,10 +50,12 @@ export const REGISTRE_V1: readonly IdContrainte[] = [
   'restriction-horaire-salle',
 ]
 
-/** Toutes les contraintes du prototype, y compris « pas consécutif » (P6). */
+/** Toutes les contraintes du prototype + préférences ajoutées en cours d'usage. */
 export const REGISTRE_TOUT: readonly IdContrainte[] = [
   ...REGISTRE_V1,
   'creneaux-consecutifs',
+  'preference-espacement-12h',
+  'preference-equilibre-tardif',
 ]
 
 export function registreDefaut(): RegistreContraintes {
