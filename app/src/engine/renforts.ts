@@ -22,6 +22,8 @@ export interface RenfortCandidat {
   pupitres_dispo: Pupitre[]
   creneaux_compatibles: number
   creneaux_du_groupe: number
+  /** Nombre de groupes où la personne est déjà engagée. 0 = stagiaire libre. */
+  nb_engagements: number
 }
 
 function indispoBloque(p: Personne, c: Creneau, pupitres: Pupitre[]): boolean {
@@ -66,6 +68,14 @@ export function suggererRenforts(
     }
   }
 
+  // Nb de groupes où chaque personne est déjà engagée
+  const engagements = new Map<string, number>()
+  for (const g of inscriptions.groupes) {
+    for (const pid of new Set(g.membres.map((m) => m.personne_id))) {
+      engagements.set(pid, (engagements.get(pid) ?? 0) + 1)
+    }
+  }
+
   const out: RenfortCandidat[] = []
   for (const p of enrichies.personnes) {
     if (membresActuels.has(p.id)) continue
@@ -88,10 +98,16 @@ export function suggererRenforts(
       pupitres_dispo: [...new Set(pupitresCompatibles)],
       creneaux_compatibles: compatibles,
       creneaux_du_groupe: creneauxDuGroupe.length,
+      nb_engagements: engagements.get(p.id) ?? 0,
     })
   }
 
+  // Tri : les stagiaires libres (0 engagement) d'abord, puis les moins
+  // chargés, puis ceux avec le plus de créneaux compatibles.
   return out.sort(
-    (a, b) => b.creneaux_compatibles - a.creneaux_compatibles || a.nom.localeCompare(b.nom, 'fr'),
+    (a, b) =>
+      a.nb_engagements - b.nb_engagements ||
+      b.creneaux_compatibles - a.creneaux_compatibles ||
+      a.nom.localeCompare(b.nom, 'fr'),
   )
 }

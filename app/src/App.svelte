@@ -429,6 +429,15 @@
     inscriptions.groupes.splice(i, 1)
     solution = null
   }
+  /** Affecte un renfort à un groupe : ajoute aux membres, retire du postes_cherches. */
+  function affecterRenfort(groupe_id: string, personne_id: string, pupitre: string) {
+    const g = inscriptions.groupes.find((x) => x.id === groupe_id)
+    if (!g) return
+    g.membres.push({ personne_id, pupitre })
+    const idx = g.postes_cherches.indexOf(pupitre)
+    if (idx >= 0) g.postes_cherches.splice(idx, 1)
+    solution = null
+  }
 
   /* --- Édition Indispos personnes ---------------------------------------- */
 
@@ -1158,11 +1167,26 @@
                       </summary>
                       {#if suggestions.length > 0}
                         <div class="chips" style="margin-top:6px">
-                          {#each suggestions.slice(0, 10) as s}
-                            <span class="chip" title="{s.creneaux_compatibles}/{s.creneaux_du_groupe} créneaux compatibles">
-                              {s.nom}
-                              <em>{s.pupitres_dispo.join(', ')}</em>
+                          {#each suggestions.slice(0, 15) as s}
+                            <span
+                              class="chip"
+                              class:libre={s.nb_engagements === 0}
+                              title="{s.creneaux_compatibles}/{s.creneaux_du_groupe} créneaux compatibles · {s.nb_engagements} engagement(s) existant(s)"
+                            >
+                              <b>{s.nom}</b>
+                              {#if s.nb_engagements === 0}
+                                <em class="tag-libre">libre</em>
+                              {:else}
+                                <em>{s.nb_engagements} groupe(s)</em>
+                              {/if}
                               <em>{s.creneaux_compatibles}/{s.creneaux_du_groupe}</em>
+                              {#each s.pupitres_dispo as pup}
+                                <button
+                                  class="ghost mini-ajout"
+                                  onclick={() => affecterRenfort(g.id, s.personne_id, pup)}
+                                  title="Affecter {s.nom} à ce groupe au pupitre {pup}"
+                                >+ {pup}</button>
+                              {/each}
                             </span>
                           {/each}
                         </div>
@@ -1605,6 +1629,23 @@
     background: #fbf2df;
     border-color: #e6d2a6;
     border-left-color: var(--ochre);
+  }
+  .chip.libre {
+    background: #e8f1ea;
+    border-color: #bbd5c3;
+    border-left-color: var(--vert);
+  }
+  .tag-libre {
+    background: var(--vert);
+    color: white;
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 600;
+    font-style: normal;
+    font-family: var(--mono);
   }
   /* Cadenas SVG minimaliste — inline en background-image pour rester léger */
   button.lock {
