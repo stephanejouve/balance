@@ -110,6 +110,7 @@
     'restriction-horaire-salle': true,
     'creneaux-consecutifs': true,
     'preference-espacement-12h': true,
+    'preference-repos-musicien-12h': true,
     'preference-equilibre-tardif': true,
   })
 
@@ -122,7 +123,8 @@
     'salle-hors-creneau': 'Salle attribuée ouverte au créneau',
     'restriction-horaire-salle': 'Restrictions horaires par salle (dortoirs, autres usages)',
     'creneaux-consecutifs': 'Pas deux répétitions accolées pour un même groupe',
-    'preference-espacement-12h': 'Repos ≥ 12 h entre deux engagements d\'un même musicien',
+    'preference-espacement-12h': '≥ 12 h entre deux répétitions d\'un même morceau (prioritaire)',
+    'preference-repos-musicien-12h': '≥ 12 h de repos entre deux engagements d\'un même musicien (secondaire)',
     'preference-equilibre-tardif': 'Éviter qu\'un musicien ait toutes ses répés en soirée',
   }
 

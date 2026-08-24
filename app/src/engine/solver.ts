@@ -108,15 +108,20 @@ function ecartMinutesEntre(a: Creneau, b: Creneau): number {
 }
 
 /**
- * Objectif métier (Stéphane, session apéro-concert 2026, précisé le
- * 24/08) : dans la mesure du possible, deux engagements successifs d'un
- * même musicien (peu importe le morceau) sont espacés d'au moins
- * `ECART_MIN_ENTRE_REPETS` minutes — c'est la personne qui a besoin de
- * digérer, pas le groupe. Traitée en préférence pondérée (score dégressif),
- * pas en contrainte dure : quand un stage court oblige à resserrer, le
- * solveur accepte en le pénalisant.
+ * Objectifs métier (Stéphane + participants, session 2026) :
+ *  - PRIORITAIRE : deux répétitions d'un même morceau sont espacées d'au
+ *    moins 12 h — laisse aux musiciens le temps de digérer et de régler
+ *    les problèmes vus dans la répé précédente.
+ *  - SECONDAIRE : un même musicien évite d'enchaîner ses engagements —
+ *    même écart cible, mais pénalité plus faible car moins critique
+ *    pour la qualité de la répétition.
+ * Traitées en préférences pondérées (score dégressif), pas en contraintes
+ * dures : quand un stage court oblige à resserrer, le solveur accepte en
+ * pénalisant.
  */
 const ECART_MIN_ENTRE_REPETS = 12 * 60
+const PENALITE_MORCEAU_12H = 50 // règle prioritaire, poids fort
+const PENALITE_MUSICIEN_12H = 20 // règle secondaire, poids réduit
 
 /**
  * Un créneau démarrant à ou après `HEURE_TARDIVE_DEBUT` est considéré
@@ -337,18 +342,34 @@ export function repartir(
     v += (cap - occ) * 3 // préférer les créneaux avec de la marge
     v -= occ * 9 // pénaliser la saturation
     if (actif(reg, 'preference-espacement-12h')) {
-      // Pénalité dégressive pour chaque membre du groupe candidat dont un
-      // engagement précédent (peu importe le groupe) est à moins de 12 h :
-      // -50 à 0 min d'écart, 0 à partir de 12 h.
+      // Pénalité forte quand deux répés du même morceau sont trop proches
+      // — le vrai bénéfice de la répé, c'est le temps entre les deux.
+      const planG = e.plan.get(g.id) ?? []
+      for (const sid of planG) {
+        const s = creneauxParId.get(sid)
+        if (!s) continue
+        const ecart = ecartMinutesEntre(s, c)
+        if (ecart < ECART_MIN_ENTRE_REPETS) {
+          v -= Math.round(PENALITE_MORCEAU_12H * (1 - ecart / ECART_MIN_ENTRE_REPETS))
+        }
+      }
+    }
+    if (actif(reg, 'preference-repos-musicien-12h')) {
+      // Pénalité plus légère pour chaque membre du groupe dont un autre
+      // engagement (autre morceau) est à moins de 12 h. Secondaire par
+      // rapport à la précédente : dédoublonne les créneaux déjà comptés
+      // via planG (une répé du même morceau ne compte qu'une fois).
+      const setPlan = new Set(e.plan.get(g.id) ?? [])
       for (const pid of memP.get(g.id) ?? []) {
         const occs = e.occPersonne.get(pid)
         if (!occs) continue
         for (const cid of occs) {
+          if (setPlan.has(cid)) continue
           const s = creneauxParId.get(cid)
           if (!s) continue
           const ecart = ecartMinutesEntre(s, c)
           if (ecart < ECART_MIN_ENTRE_REPETS) {
-            v -= Math.round(50 * (1 - ecart / ECART_MIN_ENTRE_REPETS))
+            v -= Math.round(PENALITE_MUSICIEN_12H * (1 - ecart / ECART_MIN_ENTRE_REPETS))
           }
         }
       }

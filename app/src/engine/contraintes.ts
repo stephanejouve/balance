@@ -30,8 +30,10 @@ export type IdContrainte =
   | 'restriction-horaire-salle'
   /** Pas deux répétitions consécutives (fin d'un = début du suivant). */
   | 'creneaux-consecutifs'
-  /** Préférence : espacer les répétitions d'un même groupe (≥ 12 h). */
+  /** Préférence : espacer les répétitions d'un même morceau (≥ 12 h). */
   | 'preference-espacement-12h'
+  /** Préférence : ≥ 12 h de repos entre deux engagements d'un même musicien. */
+  | 'preference-repos-musicien-12h'
   /** Préférence : éviter qu'un musicien ait toutes ses répés en soirée. */
   | 'preference-equilibre-tardif'
 
@@ -55,6 +57,7 @@ export const REGISTRE_TOUT: readonly IdContrainte[] = [
   ...REGISTRE_V1,
   'creneaux-consecutifs',
   'preference-espacement-12h',
+  'preference-repos-musicien-12h',
   'preference-equilibre-tardif',
 ]
 
