@@ -1,6 +1,6 @@
 import type { LegacyInscriptions } from './legacy'
 import { detacherNomInstrument } from './legacy'
-import type { Groupe, Indispo, Inscriptions, MembreGroupe, Personne, Pupitre } from './model'
+import type { Groupe, Impose, Indispo, Inscriptions, MembreGroupe, Personne, Pupitre } from './model'
 import { PUPITRES_DEFAULTS, slug } from './model'
 
 /**
@@ -155,5 +155,18 @@ export function migrerInscriptions(legacy: LegacyInscriptions, session_id: strin
     }
   })
 
-  return { session_id, personnes, groupes }
+  const imposes: Impose[] = Object.entries(legacy.membresImposes).map(([morceau, membresRaw]) => {
+    const membres = (membresRaw ?? []).map((entree) => {
+      const d = decomposer(entree)
+      return cleId(d.nom, d.discriminant)
+    })
+    return {
+      id: slug(morceau),
+      morceau,
+      membres: [...new Set(membres)],
+      seances: [], // les horaires ne sont pas dans le JSON legacy — à saisir séparément
+    }
+  })
+
+  return { session_id, personnes, groupes, imposes }
 }

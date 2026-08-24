@@ -194,12 +194,43 @@ export const Groupe = z.object({
 })
 export type Groupe = z.infer<typeof Groupe>
 
+/* --------------------------------------------- Morceaux imposés ---------*/
+
+/**
+ * Séance de répétition déjà planifiée pour un morceau imposé — date, plage
+ * horaire, éventuellement salle (informative). Le solveur en dérive une
+ * `Indispo` pour chaque membre du morceau : ils sont bloqués sur cette
+ * plage-là, quel que soit leur autre engagement.
+ */
+export const Seance = z.object({
+  date: IsoDate,
+  debut: HhMm,
+  fin: HhMm,
+  salle_id: z.string().optional(),
+})
+export type Seance = z.infer<typeof Seance>
+
+/**
+ * Morceau imposé du stage (les 12 morceaux « obligatoires » du prototype
+ * en sont un exemple). Chaque imposé cite les personnes qui y jouent et
+ * les séances déjà planifiées — ces créneaux sont retirés du champ des
+ * possibles pour les groupes volontaires partageant des membres.
+ */
+export const Impose = z.object({
+  id: z.string().min(1),
+  morceau: z.string().min(1),
+  membres: z.array(z.string()).default([]),
+  seances: z.array(Seance).default([]),
+})
+export type Impose = z.infer<typeof Impose>
+
 /* ---------------------------------------------------------- Inscriptions --*/
 
 export const Inscriptions = z.object({
   session_id: z.string().min(1),
   personnes: z.array(Personne).default([]),
   groupes: z.array(Groupe).default([]),
+  imposes: z.array(Impose).default([]),
 })
 export type Inscriptions = z.infer<typeof Inscriptions>
 

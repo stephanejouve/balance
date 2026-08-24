@@ -7,6 +7,7 @@
   import { attribuerSalles } from './engine/allocate-rooms'
   import type { IdContrainte } from './engine/contraintes'
   import { REGISTRE_TOUT, registrePersonnalise } from './engine/contraintes'
+  import { enrichirIndispos } from './engine/imposes'
   import { repartir } from './engine/solver'
   import type { Assignation, Probleme } from './engine/types'
   import { couverture, verifier } from './engine/verify'
@@ -160,10 +161,13 @@
       .filter(([, v]) => v)
       .map(([k]) => k)
     const registre = registrePersonnalise(ids)
-    const { placement } = repartir(session, lieu, inscriptions, creneaux, { seed: 42, registre })
-    const assignations = attribuerSalles(placement, lieu, inscriptions, creneaux)
-    const problemes = verifier(session, lieu, inscriptions, creneaux, assignations, registre)
-    const cov = couverture(session, inscriptions, assignations)
+    // Enrichit les indispos des personnes avec les séances des imposés,
+    // pour que le solveur les évite automatiquement.
+    const inscEnrichies = enrichirIndispos(inscriptions)
+    const { placement } = repartir(session, lieu, inscEnrichies, creneaux, { seed: 42, registre })
+    const assignations = attribuerSalles(placement, lieu, inscEnrichies, creneaux)
+    const problemes = verifier(session, lieu, inscEnrichies, creneaux, assignations, registre)
+    const cov = couverture(session, inscEnrichies, assignations)
     solution = { assignations, problemes, couverture: cov, duree_ms: Math.round(performance.now() - t0) }
     calculEnCours = false
   }
@@ -230,26 +234,48 @@
     warningsImport = []
     try {
       const texte = await file.text()
-      const brut = JSON.parse(texte) as { lieu?: unknown; session?: unknown; inscriptions?: unknown; contraintesActives?: Record<IdContrainte, boolean> }
+      const brut = JSON.parse(texte) as Record<string, unknown>
+      let quelqueChoseLu = false
+
+      // Format canonique : { lieu, session, inscriptions, contraintesActives }
       if (brut.lieu) {
         const parsed = Lieu.parse(brut.lieu)
         Object.assign(lieu, parsed)
         lieu.salles.splice(0, lieu.salles.length, ...parsed.salles)
+        quelqueChoseLu = true
       }
       if (brut.session) {
         const parsed = Session.parse(brut.session)
         Object.assign(session, parsed)
         session.grille.splice(0, session.grille.length, ...parsed.grille)
+        quelqueChoseLu = true
       }
       if (brut.inscriptions) {
-        const p = brut.inscriptions as Inscriptions
-        inscriptions = p
+        inscriptions = brut.inscriptions as Inscriptions
+        quelqueChoseLu = true
       }
       if (brut.contraintesActives) {
-        contraintesActives = { ...contraintesActives, ...brut.contraintesActives }
+        contraintesActives = { ...contraintesActives, ...(brut.contraintesActives as Record<IdContrainte, boolean>) }
+        quelqueChoseLu = true
       }
-      sourceLabel = `JSON · ${file.name}`
-      solution = null
+
+      // Fallback : format legacy prototype à la racine (groupes / membresImposes / indispos / identitesConnues)
+      // — comme `apero_mercredi.json`.
+      if (!quelqueChoseLu && Array.isArray(brut.groupes)) {
+        const legacy = parseLegacyInscriptions(brut)
+        inscriptions = migrerInscriptions(legacy, session.id)
+        warningsImport.push(
+          `Format legacy détecté (${legacy.groupes.length} groupes) — migré vers le modèle canonique.`,
+        )
+        quelqueChoseLu = true
+      }
+
+      if (!quelqueChoseLu) {
+        erreurImport = 'Fichier JSON non reconnu : aucun bloc `lieu` / `session` / `inscriptions` ni `groupes` à la racine.'
+      } else {
+        sourceLabel = `JSON · ${file.name}`
+        solution = null
+      }
     } catch (err) {
       erreurImport = err instanceof Error ? err.message : String(err)
     } finally {
@@ -325,6 +351,35 @@
   function supprimerGroupe(i: number) {
     if (!confirm(`Supprimer « ${inscriptions.groupes[i].titre} » ?`)) return
     inscriptions.groupes.splice(i, 1)
+    solution = null
+  }
+
+  /* --- Édition Imposés --------------------------------------------------- */
+
+  function ajouterImpose() {
+    inscriptions.imposes.push({
+      id: `impose-${Date.now().toString(36)}`,
+      morceau: 'Nouveau morceau imposé',
+      membres: [],
+      seances: [],
+    })
+    solution = null
+  }
+  function supprimerImpose(i: number) {
+    if (!confirm(`Supprimer l'imposé « ${inscriptions.imposes[i].morceau} » ?`)) return
+    inscriptions.imposes.splice(i, 1)
+    solution = null
+  }
+  function ajouterSeance(imposeIdx: number) {
+    inscriptions.imposes[imposeIdx].seances.push({
+      date: session.date_debut,
+      debut: '14:00',
+      fin: '15:30',
+    })
+    solution = null
+  }
+  function supprimerSeance(imposeIdx: number, seanceIdx: number) {
+    inscriptions.imposes[imposeIdx].seances.splice(seanceIdx, 1)
     solution = null
   }
 </script>
@@ -412,6 +467,62 @@
         </tbody>
       </table>
       <button class="ghost" onclick={ajouterGroupe}>+ Ajouter un groupe</button>
+    </div>
+  </details>
+
+  <details class="sheet">
+    <summary>
+      <p class="eyebrow">Étape 1c · Morceaux imposés</p>
+      <h2>{inscriptions.imposes.length} imposé(s)</h2>
+      <p class="hint">
+        Morceaux « obligatoires » du stage avec leurs séances de répétition déjà planifiées.
+        Les membres listés seront bloqués sur ces créneaux — le solveur en tient compte
+        pour les groupes volontaires qui les partagent.
+      </p>
+    </summary>
+    <div class="body">
+      {#each inscriptions.imposes as imp, i}
+        <div class="impose-bloc">
+          <div class="impose-titre">
+            <input bind:value={imp.morceau} class="strong" />
+            <span class="mono ink-soft">{imp.membres.length} membres</span>
+            <button class="mini" onclick={() => supprimerImpose(i)}>×</button>
+          </div>
+          <div class="chips">
+            {#each imp.membres as pid}
+              {@const p = personnesParId.get(pid)}
+              <span class="chip">{p ? libellePersonne(p) : pid}</span>
+            {/each}
+            {#if imp.membres.length === 0}<span class="ink-soft">aucun membre</span>{/if}
+          </div>
+          <table class="seances">
+            <thead>
+              <tr>
+                <th style="width:140px">Date</th>
+                <th style="width:110px">Début</th>
+                <th style="width:110px">Fin</th>
+                <th>Salle (info)</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each imp.seances as s, si}
+                <tr>
+                  <td><input type="date" bind:value={s.date} /></td>
+                  <td><input type="time" bind:value={s.debut} /></td>
+                  <td><input type="time" bind:value={s.fin} /></td>
+                  <td><input bind:value={s.salle_id} placeholder="XVème, Le Garage…" /></td>
+                  <td class="center">
+                    <button class="mini" onclick={() => supprimerSeance(i, si)}>×</button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+          <button class="ghost mini-ajout" onclick={() => ajouterSeance(i)}>+ séance</button>
+        </div>
+      {/each}
+      <button class="ghost" onclick={ajouterImpose}>+ Ajouter un morceau imposé</button>
     </div>
   </details>
 
@@ -998,6 +1109,29 @@
     font-size: 12px;
     margin-top: 2px;
   }
+  .impose-bloc {
+    border-left: 3px solid var(--ochre);
+    padding: 12px 14px;
+    margin: 0 0 18px;
+    background: #f7f5ec;
+  }
+  .impose-titre {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .impose-titre input.strong {
+    flex: 1;
+    font-weight: 600;
+    font-size: 15px;
+    background: transparent;
+    border: none;
+    padding: 4px 0;
+  }
+  .impose-titre input.strong:focus { outline: 2px solid var(--ochre); }
+  .chips { margin-bottom: 8px; }
+  table.seances { margin-top: 4px; }
   label.check {
     display: flex;
     align-items: center;

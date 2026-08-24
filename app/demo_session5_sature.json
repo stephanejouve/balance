@@ -1,0 +1,224 @@
+{
+ "groupes": [
+  {
+   "nom": "Les Bleus du Lundi",
+   "resp": "Nadia B.",
+   "ton": "Sol M",
+   "style": "Blues",
+   "m1": "Sweet Home Chicago",
+   "m2": "Stormy Monday",
+   "membres": [
+    "Nadia B. (chant)",
+    "Pierre R. (guitare)",
+    "Tom V. (basse)",
+    "Bruno S. (batterie)",
+    "Sarah P. (saxophone)"
+   ],
+   "cherche": ""
+  },
+  {
+   "nom": "Bossa Nossa",
+   "resp": "Sofia C.",
+   "ton": "Ré m",
+   "style": "Bossa",
+   "m1": "Corcovado",
+   "m2": "Mas Que Nada",
+   "membres": [
+    "Sofia C. (chant)",
+    "Nina K. (piano)",
+    "Karim W. (basse)",
+    "Manon T. (batterie)",
+    "Chloé CC. (flûte traversière)"
+   ],
+   "cherche": ""
+  },
+  {
+   "nom": "Le Groove Étrange",
+   "resp": "Zoé R.",
+   "ton": "Mi m",
+   "style": "Funk / Groove",
+   "m1": "Cissy Strut",
+   "m2": "Chameleon",
+   "membres": [
+    "Zoé R. (batterie gauchère)",
+    "Inès X. (basse)",
+    "Yann G. (guitare)",
+    "Agnès M. (piano)",
+    "Éric Q. (saxophone)",
+    "Karim W. (basse)"
+   ],
+   "cherche": ""
+  },
+  {
+   "nom": "Trio Chanson",
+   "resp": "Élodie D.",
+   "ton": "Fa M",
+   "style": "Chanson française",
+   "m1": "La Javanaise",
+   "m2": "Ne me quitte pas",
+   "membres": [
+    "Élodie D. (chant)",
+    "Damien L. (piano)",
+    "Franck Y. (basse)",
+    "Pierre R. (guitare)"
+   ],
+   "cherche": "un batteur discret"
+  },
+  {
+   "nom": "Standards & Co",
+   "resp": "Camille A.",
+   "ton": "Si b M",
+   "style": "Jazz",
+   "m1": "Autumn Leaves",
+   "m2": "Blue Bossa",
+   "membres": [
+    "Camille A. (chant)",
+    "Pierre T. (guitare)",
+    "Olivier N. (piano)",
+    "Denis U. (batterie)",
+    "Hélène Z. (saxophone)",
+    "Nina K. (piano)"
+   ],
+   "cherche": ""
+  },
+  {
+   "nom": "Les Cuivrés",
+   "resp": "Awa F.",
+   "ton": "La b M",
+   "style": "Soul",
+   "m1": "Sir Duke",
+   "m2": "Signed Sealed Delivered",
+   "membres": [
+    "Awa F. (chant)",
+    "Lucie H. (guitare)",
+    "Julien AA. (trompette)",
+    "Nora BB. (trompette)",
+    "Samir DD. (clarinette)",
+    "Tom V. (basse)"
+   ],
+   "cherche": "une basse"
+  },
+  {
+   "nom": "Les Retardataires",
+   "resp": "Nadia B.",
+   "ton": "La m",
+   "style": "Rock",
+   "m1": "Message in a Bottle",
+   "m2": "Roxanne",
+   "membres": [
+    "Nadia B. (chant)",
+    "Yann G. (guitare)",
+    "Karim W. (basse)",
+    "Manon T. (batterie)"
+   ],
+   "cherche": ""
+  },
+  {
+   "nom": "Duo Voix-Piano",
+   "resp": "Camille A.",
+   "ton": "Do M",
+   "style": "Ballade",
+   "m1": "Georgia on My Mind",
+   "m2": "Fly Me to the Moon",
+   "membres": [
+    "Camille A. (chant)",
+    "Nina K. (piano)"
+   ],
+   "cherche": "une contrebasse"
+  }
+ ],
+ "membresImposes": {
+  "Lady Bird": [
+   "Camille A. (chant)",
+   "Pierre R. (guitare)",
+   "Nina K. (piano)",
+   "Tom V. (basse)",
+   "Zoé R. (batterie gauchère)",
+   "Sarah P. (saxophone)"
+  ],
+  "On That Morning": [
+   "Nadia B. (chant)",
+   "Pierre T. (guitare)",
+   "Damien L. (piano)",
+   "Karim W. (basse)",
+   "Bruno S. (batterie)"
+  ],
+  "Woman": [
+   "Sofia C. (chant)",
+   "Yann G. (guitare)",
+   "Agnès M. (piano)",
+   "Inès X. (basse)",
+   "Manon T. (batterie)",
+   "Éric Q. (saxophone)"
+  ],
+  "Have You Met Miss Jones": [
+   "Élodie D. (chant)",
+   "Lucie H. (guitare)",
+   "Olivier N. (piano)",
+   "Franck Y. (basse)",
+   "Denis U. (batterie)",
+   "Hélène Z. (saxophone)"
+  ],
+  "La Ballade de Jim": [
+   "Bastien E. (chant)",
+   "Serge J. (guitare)",
+   "Nina K. (piano)",
+   "Tom V. (basse)",
+   "Zoé R. (batterie gauchère)"
+  ],
+  "Where or When": [
+   "Awa F. (chant)",
+   "Pierre R. (guitare)",
+   "Damien L. (piano)",
+   "Karim W. (basse)",
+   "Bruno S. (batterie)",
+   "Julien AA. (trompette)"
+  ],
+  "Débranche": [
+   "Camille A. (chant)",
+   "Pierre T. (guitare)",
+   "Agnès M. (piano)",
+   "Inès X. (basse)",
+   "Manon T. (batterie)",
+   "Nora BB. (trompette)"
+  ],
+  "Fotografia": [
+   "Nadia B. (chant)",
+   "Yann G. (guitare)",
+   "Olivier N. (piano)",
+   "Franck Y. (basse)",
+   "Denis U. (batterie)"
+  ],
+  "Top of My Head": [
+   "Sofia C. (chant)",
+   "Lucie H. (guitare)",
+   "Nina K. (piano)",
+   "Tom V. (basse)",
+   "Zoé R. (batterie gauchère)",
+   "Chloé CC. (flûte traversière)"
+  ],
+  "Avant Toi": [
+   "Élodie D. (chant)",
+   "Serge J. (guitare)",
+   "Damien L. (piano)",
+   "Karim W. (basse)",
+   "Bruno S. (batterie)",
+   "Samir DD. (clarinette)"
+  ],
+  "Capitaine Abandonné": [
+   "Bastien E. (chant)",
+   "Pierre R. (guitare)",
+   "Agnès M. (piano)",
+   "Inès X. (basse)",
+   "Manon T. (batterie)"
+  ],
+  "Just a Song Before I Go": [
+   "Awa F. (chant)",
+   "Pierre T. (guitare)",
+   "Olivier N. (piano)",
+   "Franck Y. (basse)",
+   "Denis U. (batterie)",
+   "Sarah P. (saxophone)"
+  ]
+ }
+}
