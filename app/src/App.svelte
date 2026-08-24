@@ -101,6 +101,7 @@
   let cdDebut = $state('18:30')
   let cdDureeMorceau = $state(6)
   let cdDureeChange = $state(3)
+  let cdDureeKit = $state(7)
   /** Case libre survolée dans la carte : affiche les groupes candidats. */
   let inspecteCase = $state<{ creneauId: string; salleId: string } | null>(null)
   /** Seuil de charge par musicien et par jour au-delà duquel on alerte. */
@@ -252,27 +253,76 @@
     ordreConducteur = r.etapes
   }
 
-  /** Minutage : heure de chaque étape et durée totale du spectacle. */
+  /**
+   * Identifie le batteur d'un groupe et retourne sa latéralité (si connue).
+   * Renvoie `null` si pas de batteur ou latéralité inconnue.
+   */
+  function lateraliteBatteur(groupe_id: string): 'droitier' | 'gaucher' | null {
+    const g = groupesParId.get(groupe_id)
+    if (!g) return null
+    const batteur = g.membres.find((m) => m.pupitre === 'batterie')
+    if (!batteur) return null
+    const p = personnesParId.get(batteur.personne_id)
+    return p?.lateralite ?? null
+  }
+
+  /** Minutage : heure de chaque étape, inversions de kit, durée totale. */
   interface EtapeMinutee extends EtapeConcert {
     heure_debut: string
     heure_fin: string
     duree_min: number
+    /** Temps ajouté avant cette étape pour changement plateau et/ou inversion kit. */
+    change_min: number
+    /** True si une inversion de kit doit se faire pendant le changement précédent. */
+    inversion_kit: boolean
+    lateralite?: 'droitier' | 'gaucher'
   }
-  const conducteurMinuté = $derived.by<{ etapes: EtapeMinutee[]; duree_totale_min: number; heure_fin: string }>(() => {
+  const conducteurMinuté = $derived.by<{
+    etapes: EtapeMinutee[]
+    duree_totale_min: number
+    heure_fin: string
+    nb_inversions: number
+  }>(() => {
     const [dh, dm] = cdDebut.split(':').map(Number)
     let t = dh * 60 + dm
     const debut = t
     const hhmm = (m: number): string =>
       `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
     const etapes: EtapeMinutee[] = []
+    let dernierBatteur: { latéralité: 'droitier' | 'gaucher'; index: number } | null = null
+    let nbInversions = 0
     ordreConducteur.forEach((e, i) => {
-      // Temps de changement entre morceaux (sauf pour le premier)
-      if (i > 0) t += cdDureeChange
+      const lat = lateraliteBatteur(e.groupe_id)
+      let changeMin = 0
+      let inversion = false
+      if (i > 0) {
+        changeMin = cdDureeChange
+        if (lat && dernierBatteur && lat !== dernierBatteur.latéralité) {
+          inversion = true
+          nbInversions++
+          changeMin = Math.max(changeMin, cdDureeKit)
+        }
+      }
+      t += changeMin
       const heure_debut = hhmm(t)
       t += cdDureeMorceau
-      etapes.push({ ...e, heure_debut, heure_fin: hhmm(t), duree_min: cdDureeMorceau })
+      etapes.push({
+        ...e,
+        heure_debut,
+        heure_fin: hhmm(t),
+        duree_min: cdDureeMorceau,
+        change_min: changeMin,
+        inversion_kit: inversion,
+        lateralite: lat ?? undefined,
+      })
+      if (lat) dernierBatteur = { latéralité: lat, index: i }
     })
-    return { etapes, duree_totale_min: t - debut, heure_fin: hhmm(t) }
+    return {
+      etapes,
+      duree_totale_min: t - debut,
+      heure_fin: hhmm(t),
+      nb_inversions: nbInversions,
+    }
   })
 
   function dropOrdre(idxCible: number) {
@@ -834,6 +884,22 @@
                   <option value="chanteur">chanteur</option>
                   <option value="intervenant">intervenant</option>
                 </select>
+                {#if p.instruments.some((i) => i.pupitre === 'batterie')}
+                  <select
+                    value={p.lateralite ?? ''}
+                    onchange={(e) => {
+                      const v = (e.currentTarget as HTMLSelectElement).value
+                      p.lateralite = v === '' ? undefined : (v as 'droitier' | 'gaucher')
+                      solution = null
+                    }}
+                    style="margin-top:4px;font-size:11px"
+                    title="Latéralité (batteurs) — détermine les inversions de kit au concert"
+                  >
+                    <option value="">latéralité ?</option>
+                    <option value="droitier">droitier</option>
+                    <option value="gaucher">gaucher</option>
+                  </select>
+                {/if}
               </td>
               <td class="center mono">
                 {nGroupes}
@@ -1534,9 +1600,18 @@
             <input type="number" min="0" max="15" bind:value={cdDureeChange} style="width:60px" />
             <span class="mono">min</span>
           </label>
+          <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;font-size:12.5px;letter-spacing:0;font-weight:400">
+            <span>Inversion kit</span>
+            <input type="number" min="0" max="30" bind:value={cdDureeKit} style="width:60px" />
+            <span class="mono">min</span>
+          </label>
           <span class="grow"></span>
           <span class="mono ink-soft">
-            {stats.mouvements} mouvement(s) · fin
+            {stats.mouvements} mouvement(s)
+            {#if conducteurMinuté.nb_inversions > 0}
+              · {conducteurMinuté.nb_inversions} inversion(s) kit
+            {/if}
+            · fin
             <b>{conducteurMinuté.heure_fin}</b>
             ({Math.floor(conducteurMinuté.duree_totale_min / 60)}h{String(conducteurMinuté.duree_totale_min % 60).padStart(2, '0')})
           </span>
@@ -1547,6 +1622,13 @@
         </p>
         <ol class="conducteur">
           {#each conducteurMinuté.etapes as etape, i (etape.groupe_id)}
+            {#if etape.inversion_kit}
+              <li class="marker">
+                <span class="badge" style="background:var(--rouge);color:white;border:none">
+                  ⚙ inversion de kit ({cdDureeKit} min)
+                </span>
+              </li>
+            {/if}
             <li
               draggable="true"
               ondragstart={() => (dragIdx = i)}
@@ -1559,6 +1641,11 @@
               <span class="corps">
                 <b>{etape.titre}</b>
                 {#if etape.style}<span class="badge">{etape.style}</span>{/if}
+                {#if etape.lateralite === 'gaucher'}
+                  <span class="badge" style="background:#e3eee6;color:var(--vert);border-color:#bbd5c3">
+                    batterie gauchère
+                  </span>
+                {/if}
               </span>
               <span class="mouvements mono ink-soft">
                 {#if i > 0}
@@ -2033,6 +2120,14 @@
   ol.conducteur li:active { cursor: grabbing; }
   ol.conducteur li.dragging { opacity: 0.4; }
   ol.conducteur li:hover { background: #f0eddf; }
+  ol.conducteur li.marker {
+    background: transparent;
+    border-left: none;
+    padding: 4px 20px;
+    cursor: default;
+    justify-content: center;
+  }
+  ol.conducteur li.marker:hover { background: transparent; }
   ol.conducteur .num {
     font-family: var(--serif);
     font-size: 24px;
