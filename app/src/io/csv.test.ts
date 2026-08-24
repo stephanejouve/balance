@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { genererCreneaux } from '../domain/grille'
 import { Inscriptions, Lieu, Session } from '../domain/model'
 import type { Assignation } from '../engine/types'
-import { csvParGroupe, csvParSalle } from './csv'
+import { csvParGroupe, csvParMusicien, csvParSalle } from './csv'
 
 function fixture() {
   const lieu = Lieu.parse({
@@ -87,6 +87,23 @@ describe('csvParSalle', () => {
     // 2 jours × 2 tours × 2 salles = 8 lignes de données
     const lignes = csv.split('\r\n').filter(Boolean)
     expect(lignes.length).toBe(1 + 8)
+  })
+
+  it("groupe chaque musicien puis trie ses engagements par ordre chronologique", () => {
+    const { lieu, inscriptions, creneaux } = fixture()
+    const assignations: Assignation[] = [
+      { groupe_id: 'g1', creneau_id: creneaux[1].id, salle_id: 'B' },
+      { groupe_id: 'g1', creneau_id: creneaux[0].id, salle_id: 'A' },
+    ]
+    const csv = csvParMusicien(lieu, inscriptions, creneaux, assignations)
+    expect(csv).toContain('Musicien;Jour;Horaire;Groupe;Salle')
+    // Alice figure 2× (2 répés du groupe où elle joue)
+    const lignes = csv.split('\r\n').filter(Boolean)
+    const alice = lignes.filter((l) => l.startsWith('Alice;'))
+    expect(alice).toHaveLength(2)
+    // Ordre chronologique préservé
+    expect(alice[0]).toContain('09:00')
+    expect(alice[1]).toContain('10:00')
   })
 
   it('échappe les valeurs contenant ; ou "', () => {

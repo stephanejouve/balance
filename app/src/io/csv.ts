@@ -117,6 +117,55 @@ export function csvParSalle(
   return csvRows(rows)
 }
 
+/* --------------------------------------------- Planning par musicien ---*/
+
+export function csvParMusicien(
+  lieu: Lieu,
+  inscriptions: Inscriptions,
+  creneaux: Creneau[],
+  assignations: Assignation[],
+): string {
+  const creneauxParId = new Map(creneaux.map((c) => [c.id, c]))
+  const sallesParId = new Map(lieu.salles.map((s) => [s.id, s]))
+  const groupesParId = new Map(inscriptions.groupes.map((g) => [g.id, g]))
+
+  // Pour chaque personne, la liste triée de ses engagements
+  const parPersonne = new Map<string, Array<{ a: Assignation; c: Creneau }>>()
+  for (const a of assignations) {
+    const c = creneauxParId.get(a.creneau_id)
+    const g = groupesParId.get(a.groupe_id)
+    if (!c || !g) continue
+    const membres = new Set(g.membres.map((m) => m.personne_id))
+    for (const pid of membres) {
+      if (!parPersonne.has(pid)) parPersonne.set(pid, [])
+      parPersonne.get(pid)!.push({ a, c })
+    }
+  }
+
+  const rows: unknown[][] = [['Musicien', 'Jour', 'Horaire', 'Groupe', 'Salle']]
+  const personnesTriees = [...inscriptions.personnes].sort((a, b) =>
+    libellePersonne(a).localeCompare(libellePersonne(b), 'fr'),
+  )
+  for (const p of personnesTriees) {
+    const items = (parPersonne.get(p.id) ?? []).sort((x, y) =>
+      `${x.c.date}T${x.c.debut}`.localeCompare(`${y.c.date}T${y.c.debut}`),
+    )
+    if (items.length === 0) continue
+    for (const { a, c } of items) {
+      const g = groupesParId.get(a.groupe_id)
+      rows.push([
+        libellePersonne(p),
+        c.date,
+        `${c.debut}-${c.fin}`,
+        g?.titre ?? a.groupe_id,
+        sallesParId.get(a.salle_id)?.nom ?? a.salle_id,
+      ])
+    }
+  }
+
+  return csvRows(rows)
+}
+
 /* ------------------------------------------------ Téléchargement navigateur */
 
 /** Déclenche le téléchargement d'une chaîne CSV via un `<a href="blob:…">`. */
