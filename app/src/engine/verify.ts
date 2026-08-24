@@ -1,5 +1,5 @@
 import type { Creneau } from '../domain/grille'
-import type { Groupe, Inscriptions, Lieu, Personne, Pupitre, Session } from '../domain/model'
+import type { Groupe, Inscriptions, Lieu, Personne, Pupitre, Salle, Session } from '../domain/model'
 import { libellePersonne } from '../domain/model'
 import type { RegistreContraintes } from './contraintes'
 import { actif } from './contraintes'
@@ -20,7 +20,7 @@ interface Contexte {
   personnesParId: Map<string, Personne>
   creneauxParId: Map<string, Creneau>
   groupesParId: Map<string, Groupe>
-  sallesParId: Map<string, { id: string; nom: string; jauge: number }>
+  sallesParId: Map<string, Salle>
 }
 
 function bâtirContexte(
@@ -47,6 +47,41 @@ function personnesDe(groupe: Groupe): string[] {
 
 function pupitresDe(personne_id: string, groupe: Groupe): Pupitre[] {
   return groupe.membres.filter((m) => m.personne_id === personne_id).map((m) => m.pupitre)
+}
+
+function dureeCreneauMin(c: Creneau): number {
+  const [dh, dm] = c.debut.split(':').map(Number)
+  const [fh, fm] = c.fin.split(':').map(Number)
+  return fh * 60 + fm - (dh * 60 + dm)
+}
+
+/**
+ * Renvoie le type de restriction bloquante pour ce couple (salle, créneau),
+ * ou `null` si la salle est utilisable sans réserve.
+ *
+ * - `interdit` bloque toujours.
+ * - `pas_reduit` bloque si la durée du créneau dépasse `pas_max_minutes`.
+ * - `acoustique_seulement` n'est pas bloquant à V1 mais renvoyé comme
+ *   information (le solveur / verify le traite comme warning).
+ *
+ * `r.jours` restreint la restriction à des dates ISO précises (vide = tous
+ * les jours).
+ */
+export function salleRestreinte(
+  salle: Salle,
+  creneau: Creneau,
+): 'interdit' | 'acoustique_seulement' | 'pas_reduit' | null {
+  for (const r of salle.restrictions) {
+    if (r.jours.length > 0 && !r.jours.includes(creneau.date)) continue
+    if (creneau.debut < r.debut || creneau.debut >= r.fin) continue
+    if (r.contrainte === 'interdit') return 'interdit'
+    if (r.contrainte === 'pas_reduit') {
+      const max = r.pas_max_minutes ?? Infinity
+      if (dureeCreneauMin(creneau) > max) return 'pas_reduit'
+    }
+    if (r.contrainte === 'acoustique_seulement') return 'acoustique_seulement'
+  }
+  return null
 }
 
 function indispoBloque(personne: Personne, creneau: Creneau, pupitres: Pupitre[]): boolean {
@@ -132,6 +167,32 @@ export function verifier(
         })
       }
       sallesPrises.add(a.salle_id)
+    }
+
+    // Vérifier restrictions horaires par salle
+    if (actif(registre, 'restriction-horaire-salle')) {
+      for (const a of ass) {
+        const s = ctx.sallesParId.get(a.salle_id)
+        if (!s) continue
+        const restr = salleRestreinte(s, creneau)
+        if (restr === 'interdit') {
+          problemes.push({
+            type: 'salle-hors-creneau',
+            message: `${s.nom} est fermée au créneau ${creneau.date} ${creneau.debut} (restriction horaire)`,
+            creneau_id,
+            salle_id: a.salle_id,
+            groupe_id: a.groupe_id,
+          })
+        } else if (restr === 'pas_reduit') {
+          problemes.push({
+            type: 'salle-hors-creneau',
+            message: `${s.nom} : le créneau ${creneau.date} ${creneau.debut} (${dureeCreneauMin(creneau)} min) dépasse la durée maximale autorisée`,
+            creneau_id,
+            salle_id: a.salle_id,
+            groupe_id: a.groupe_id,
+          })
+        }
+      }
     }
 
     // Vérifier jauge par groupe

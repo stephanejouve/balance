@@ -26,6 +26,8 @@ export type IdContrainte =
   | 'avant-butoir'
   /** La salle assignée doit figurer dans la liste ouverte au créneau. */
   | 'salle-hors-creneau'
+  /** Restriction horaire propre à une salle (ex : proximité dortoirs). */
+  | 'restriction-horaire-salle'
   /** Pas deux répétitions consécutives (fin d'un = début du suivant). */
   | 'creneaux-consecutifs'
 
@@ -33,7 +35,7 @@ export interface RegistreContraintes {
   actives: Set<IdContrainte>
 }
 
-/** Cadre V1 (brief §0) : les 4 dures + intégrité salle. */
+/** Cadre V1 (brief §0) : les 4 dures + intégrité salle + restrictions horaires. */
 export const REGISTRE_V1: readonly IdContrainte[] = [
   'personne-unique-moment',
   'salle-unique-groupe',
@@ -41,6 +43,7 @@ export const REGISTRE_V1: readonly IdContrainte[] = [
   'avant-butoir',
   'jauge-salle',
   'salle-hors-creneau',
+  'restriction-horaire-salle',
 ]
 
 /** Toutes les contraintes du prototype, y compris « pas consécutif » (P6). */

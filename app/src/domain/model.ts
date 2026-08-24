@@ -93,11 +93,25 @@ export function libellePersonne(p: Personne): string {
 export const Equipement = z.enum(['batterie', 'piano', 'ampli', 'sono'])
 export type Equipement = z.infer<typeof Equipement>
 
+/**
+ * Restriction horaire d'une salle. Trois régimes :
+ *  - `interdit` : la salle est fermée dans `[debut, fin[` (dortoirs, autre
+ *    usage réservé). Aucun placement possible.
+ *  - `acoustique_seulement` : la salle reste ouverte mais uniquement pour
+ *    des pratiques discrètes (V1 = warning, pas encore de discrimination).
+ *  - `pas_reduit` : la salle est ouverte mais seulement pour des créneaux
+ *    dont la durée ≤ `pas_max_minutes`. Utile pour un régime « ateliers
+ *    30 min entre deux répétitions du concert du vendredi ».
+ *
+ * `jours` cible des dates ISO précises. Vide = tous les jours de la session
+ * (comportement historique).
+ */
 export const RestrictionHoraire = z.object({
+  jours: z.array(IsoDate).default([]),
   debut: HhMm,
   fin: HhMm,
-  /** Contrainte imposée sur cette plage. */
-  contrainte: z.enum(['acoustique_seulement', 'interdit']),
+  contrainte: z.enum(['interdit', 'acoustique_seulement', 'pas_reduit']),
+  pas_max_minutes: z.number().int().positive().optional(),
   motif: z.string().default(''),
 })
 export type RestrictionHoraire = z.infer<typeof RestrictionHoraire>

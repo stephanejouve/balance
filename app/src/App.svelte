@@ -93,6 +93,7 @@
     'personne-indispo': true,
     'avant-butoir': true,
     'salle-hors-creneau': true,
+    'restriction-horaire-salle': true,
     'creneaux-consecutifs': true,
   })
 
@@ -103,6 +104,7 @@
     'personne-indispo': 'Respect des indisponibilités déclarées',
     'avant-butoir': 'Répétitions avant la date butoir',
     'salle-hors-creneau': 'Salle attribuée ouverte au créneau',
+    'restriction-horaire-salle': 'Restrictions horaires par salle (dortoirs, autres usages)',
     'creneaux-consecutifs': 'Pas deux répétitions accolées pour un même groupe',
   }
 
@@ -199,6 +201,62 @@
     )
   }
 
+  /* --- Export / Import JSON (sauvegarde de l'état complet) --------------- */
+
+  function exporterEtat() {
+    const etat = {
+      version: 1,
+      lieu,
+      session,
+      inscriptions,
+      contraintesActives,
+    }
+    const blob = new Blob([JSON.stringify(etat, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `balance-${session.id}-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  async function importerEtat(e: Event) {
+    const cible = e.target as HTMLInputElement
+    const file = cible.files?.[0]
+    if (!file) return
+    erreurImport = ''
+    warningsImport = []
+    try {
+      const texte = await file.text()
+      const brut = JSON.parse(texte) as { lieu?: unknown; session?: unknown; inscriptions?: unknown; contraintesActives?: Record<IdContrainte, boolean> }
+      if (brut.lieu) {
+        const parsed = Lieu.parse(brut.lieu)
+        Object.assign(lieu, parsed)
+        lieu.salles.splice(0, lieu.salles.length, ...parsed.salles)
+      }
+      if (brut.session) {
+        const parsed = Session.parse(brut.session)
+        Object.assign(session, parsed)
+        session.grille.splice(0, session.grille.length, ...parsed.grille)
+      }
+      if (brut.inscriptions) {
+        const p = brut.inscriptions as Inscriptions
+        inscriptions = p
+      }
+      if (brut.contraintesActives) {
+        contraintesActives = { ...contraintesActives, ...brut.contraintesActives }
+      }
+      sourceLabel = `JSON · ${file.name}`
+      solution = null
+    } catch (err) {
+      erreurImport = err instanceof Error ? err.message : String(err)
+    } finally {
+      cible.value = ''
+    }
+  }
+
   /* --- Édition Lieu ------------------------------------------------------ */
 
   function ajouterSalle() {
@@ -214,6 +272,20 @@
   }
   function supprimerSalle(i: number) {
     lieu.salles.splice(i, 1)
+    solution = null
+  }
+  function ajouterRestriction(salleIdx: number) {
+    lieu.salles[salleIdx].restrictions.push({
+      jours: [],
+      debut: '22:00',
+      fin: '24:00',
+      contrainte: 'interdit',
+      motif: '',
+    })
+    solution = null
+  }
+  function supprimerRestriction(salleIdx: number, resIdx: number) {
+    lieu.salles[salleIdx].restrictions.splice(resIdx, 1)
     solution = null
   }
 
@@ -278,9 +350,14 @@
     <div class="toolbar">
       <button class="ghost" onclick={utiliserDemo}>Recharger la démo</button>
       <label class="fake-btn">
-        Importer un classeur .xlsx…
+        Importer .xlsx…
         <input type="file" accept=".xlsx,.xlsm" hidden onchange={importerFichier} />
       </label>
+      <label class="fake-btn">
+        Charger un état .json…
+        <input type="file" accept=".json" hidden onchange={importerEtat} />
+      </label>
+      <button class="ghost" onclick={exporterEtat}>Sauvegarder l'état .json</button>
       <span class="grow"></span>
       <span class="ink-soft mono">Chargé : {sourceLabel}</span>
     </div>
@@ -357,6 +434,7 @@
             <th>Salle</th>
             <th style="width:80px">Jauge</th>
             <th style="width:70px">Active</th>
+            <th>Restrictions horaires</th>
             <th style="width:40px"></th>
           </tr>
         </thead>
@@ -366,6 +444,53 @@
               <td><input bind:value={salle.nom} /></td>
               <td><input type="number" min="1" bind:value={salle.jauge} /></td>
               <td class="center"><input type="checkbox" bind:checked={salle.actif} /></td>
+              <td>
+                {#each salle.restrictions as res, ri}
+                  <div class="restr">
+                    <input type="time" bind:value={res.debut} />
+                    <span>→</span>
+                    <input type="time" bind:value={res.fin} />
+                    <select bind:value={res.contrainte}>
+                      <option value="interdit">fermée</option>
+                      <option value="acoustique_seulement">acoustique</option>
+                      <option value="pas_reduit">créneaux ≤</option>
+                    </select>
+                    {#if res.contrainte === 'pas_reduit'}
+                      <input
+                        type="number"
+                        min="5"
+                        max="180"
+                        step="5"
+                        bind:value={res.pas_max_minutes}
+                        placeholder="min"
+                        style="width:70px"
+                      />
+                      <span class="mono ink-soft">min</span>
+                    {/if}
+                    <input
+                      bind:value={res.motif}
+                      placeholder="motif (dortoirs, concert vendredi…)"
+                    />
+                    <button class="mini" onclick={() => supprimerRestriction(i, ri)}>×</button>
+                  </div>
+                  <div class="restr sub">
+                    <span class="ink-soft mono">jours&nbsp;:</span>
+                    <input
+                      value={res.jours.join(', ')}
+                      oninput={(e) => {
+                        const v = (e.currentTarget as HTMLInputElement).value
+                        res.jours = v
+                          .split(/[,;\s]+/)
+                          .map((s) => s.trim())
+                          .filter(Boolean)
+                        solution = null
+                      }}
+                      placeholder="tous par défaut — ou 2026-08-28, 2026-08-27…"
+                    />
+                  </div>
+                {/each}
+                <button class="ghost mini-ajout" onclick={() => ajouterRestriction(i)}>+ restriction</button>
+              </td>
               <td class="center"><button class="mini" onclick={() => supprimerSalle(i)}>×</button></td>
             </tr>
           {/each}
@@ -847,6 +972,32 @@
   button.mini:hover { background: #f8e6e3; }
   td.center { text-align: center; }
   td input { padding: 5px 7px; font-size: 12.5px; }
+  .restr {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 3px;
+    flex-wrap: wrap;
+  }
+  .restr.sub {
+    margin: 0 0 8px 8px;
+    padding-left: 8px;
+    border-left: 2px solid var(--paper-edge);
+  }
+  .restr input[type='time'] { width: 90px; }
+  .restr input:not([type]), .restr input[type='text'] { flex: 1; min-width: 100px; }
+  .restr select {
+    padding: 5px 7px;
+    font-size: 12.5px;
+    border: 1px solid #cfcbbe;
+    background: #fff;
+    border-radius: 2px;
+  }
+  button.mini-ajout {
+    padding: 3px 10px;
+    font-size: 12px;
+    margin-top: 2px;
+  }
   label.check {
     display: flex;
     align-items: center;

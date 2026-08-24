@@ -2,6 +2,7 @@ import type { Creneau } from '../domain/grille'
 import type { Inscriptions, Lieu } from '../domain/model'
 import type { PlacementItem } from './solver'
 import type { Assignation } from './types'
+import { salleRestreinte } from './verify'
 
 /**
  * Attribution des salles — passe séparée après le placement horaire
@@ -67,7 +68,15 @@ export function attribuerSalles(
   for (const cid of cids) {
     const creneau = creneauxParId.get(cid)
     if (!creneau) continue
-    const restant = new Set(creneau.salles.filter((sid) => sallesActives.has(sid)))
+    const restant = new Set(
+      creneau.salles.filter((sid) => {
+        if (!sallesActives.has(sid)) return false
+        const s = sallesParId.get(sid)
+        if (!s) return true
+        const restr = salleRestreinte(s, creneau)
+        return restr !== 'interdit' && restr !== 'pas_reduit'
+      }),
+    )
     const groupesIci = [...(parCreneau.get(cid) ?? [])]
 
     // Ordre : ceux qui enchaînent d'abord, puis les grands
@@ -96,7 +105,7 @@ export function attribuerSalles(
         continue
       }
 
-      // Candidats : jauge suffisante
+      // Candidats : jauge suffisante (restrictions déjà filtrées dans `restant`)
       const cands = [...restant].filter((sid) => {
         const s = sallesParId.get(sid)
         return s != null && s.jauge >= eff
