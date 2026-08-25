@@ -325,6 +325,42 @@
     }
   })
 
+  /** Palette dérivée du nom du style (hash → HSL) pour un rendu stable. */
+  function couleurStyle(style: string): string {
+    if (!style) return '#e8e5da'
+    let h = 0
+    for (let i = 0; i < style.length; i++) h = (h * 31 + style.charCodeAt(i)) % 360
+    return `hsl(${h}, 55%, 78%)`
+  }
+
+  /** Répartition des styles dans l'ordre conducteur, avec runs (séquences consécutives). */
+  const repartitionStyles = $derived.by(() => {
+    const compte = new Map<string, number>()
+    for (const e of ordreConducteur) {
+      const k = e.style || '(sans style)'
+      compte.set(k, (compte.get(k) ?? 0) + 1)
+    }
+    const total = ordreConducteur.length
+    const parts = [...compte.entries()]
+      .map(([style, n]) => ({ style, n, pct: total > 0 ? Math.round((n / total) * 100) : 0 }))
+      .sort((a, b) => b.n - a.n)
+    // Runs de même style ≥ 3
+    const runs: Array<{ style: string; debut: number; fin: number }> = []
+    let i = 0
+    while (i < ordreConducteur.length) {
+      let j = i
+      while (
+        j + 1 < ordreConducteur.length &&
+        ordreConducteur[j + 1].style === ordreConducteur[i].style &&
+        ordreConducteur[i].style
+      )
+        j++
+      if (j - i + 1 >= 3) runs.push({ style: ordreConducteur[i].style, debut: i, fin: j })
+      i = j + 1
+    }
+    return { parts, runs }
+  })
+
   function dropOrdre(idxCible: number) {
     if (dragIdx == null || dragIdx === idxCible) return
     const cp = [...ordreConducteur]
@@ -1620,6 +1656,29 @@
           Glisse-dépose les lignes pour réordonner à la main. Chaque étape affiche son
           heure de début. Les changements de plateau sont intercalés automatiquement.
         </p>
+        {#if repartitionStyles.parts.length > 0}
+          <div class="repart-styles">
+            <span class="ink-soft mono">Programmation :</span>
+            {#each repartitionStyles.parts as p}
+              <span class="chip-style" style="background:{couleurStyle(p.style)}">
+                {p.style} <em>{p.n} · {p.pct}%</em>
+              </span>
+            {/each}
+          </div>
+          {#if repartitionStyles.runs.length > 0}
+            <div class="msg warn" style="margin:8px 0 0">
+              <b>Séquences dominées par un style</b> — l'alternance améliore le concert.
+              <ul>
+                {#each repartitionStyles.runs as r}
+                  <li>
+                    <b>{r.style}</b> — {r.fin - r.debut + 1} morceaux d'affilée
+                    (positions {r.debut + 1} à {r.fin + 1})
+                  </li>
+                {/each}
+              </ul>
+            </div>
+          {/if}
+        {/if}
         <ol class="conducteur">
           {#each conducteurMinuté.etapes as etape, i (etape.groupe_id)}
             {#if etape.inversion_kit}
@@ -1640,7 +1699,9 @@
               <span class="heure mono">{etape.heure_debut}</span>
               <span class="corps">
                 <b>{etape.titre}</b>
-                {#if etape.style}<span class="badge">{etape.style}</span>{/if}
+                {#if etape.style}
+                  <span class="chip-style" style="background:{couleurStyle(etape.style)}">{etape.style}</span>
+                {/if}
                 {#if etape.lateralite === 'gaucher'}
                   <span class="badge" style="background:#e3eee6;color:var(--vert);border-color:#bbd5c3">
                     batterie gauchère
@@ -2128,6 +2189,30 @@
     justify-content: center;
   }
   ol.conducteur li.marker:hover { background: transparent; }
+  .repart-styles {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0 4px;
+  }
+  .chip-style {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1a211d;
+    line-height: 1.5;
+  }
+  .chip-style em {
+    font-style: normal;
+    font-weight: 400;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: rgba(26, 33, 29, 0.7);
+    margin-left: 6px;
+  }
   ol.conducteur .num {
     font-family: var(--serif);
     font-size: 24px;
