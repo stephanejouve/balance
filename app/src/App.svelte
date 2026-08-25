@@ -6,6 +6,7 @@
   import { Lieu, Session, libellePersonne } from './domain/model'
   import { attribuerSalles } from './engine/allocate-rooms'
   import { chargeParMusicien } from './engine/charge'
+  import Quotas from './vues/Quotas.svelte'
   import { ordonnerConcert } from './engine/concert'
   import type { EtapeConcert } from './engine/concert'
   import type { IdContrainte } from './engine/contraintes'
@@ -93,7 +94,9 @@
   }
   let solution = $state<Solution | null>(null)
   let calculEnCours = $state(false)
-  let vue = $state<'groupes' | 'salles' | 'musiciens' | 'carte' | 'concert'>('groupes')
+  let vue = $state<'groupes' | 'salles' | 'musiciens' | 'carte' | 'concert' | 'quotas'>('groupes')
+  /** Deltas d'exploration par pupitre (dans la vue Quotas). */
+  let deltasQuotas = $state<Record<string, number>>({})
   /** Ordre du conducteur, éditable par drag-drop. Recalculé quand solution change. */
   let ordreConducteur = $state<EtapeConcert[]>([])
   let dragIdx = $state<number | null>(null)
@@ -1447,6 +1450,7 @@
         <button class:actif={vue === 'musiciens'} onclick={() => (vue = 'musiciens')}>Par musicien</button>
         <button class:actif={vue === 'carte'} onclick={() => (vue = 'carte')}>Carte</button>
         <button class:actif={vue === 'concert'} onclick={() => (vue = 'concert')}>Concert</button>
+        <button class:actif={vue === 'quotas'} onclick={() => (vue = 'quotas')}>Quotas</button>
         <span class="grow"></span>
         {#if figeesKeys.size > 0}
           <span class="mono ink-soft">{figeesKeys.size} figée{figeesKeys.size > 1 ? 's' : ''}</span>
@@ -1618,6 +1622,14 @@
             {/each}
           </tbody>
         </table>
+      {:else if vue === 'quotas'}
+        <Quotas
+          {session}
+          {inscriptions}
+          {creneaux}
+          deltas={deltasQuotas}
+          onDelta={(pup, val) => (deltasQuotas = { ...deltasQuotas, [pup]: val })}
+        />
       {:else if vue === 'concert'}
         {@const stats = statsConducteur(ordreConducteur)}
         <div class="toolbar" style="margin-bottom:14px">
