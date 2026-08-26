@@ -11,7 +11,7 @@ import {
 
 describe('Personne', () => {
   it('accepte les defaults minimaux', () => {
-    const p = Personne.parse({ id: 'colette', nom: 'Colette' })
+    const p = Personne.parse({ id: 'colette', nom: 'Prune' })
     expect(p.role).toBe('musicien')
     expect(p.instruments).toEqual([])
     expect(p.discriminant).toBe('')
@@ -21,7 +21,7 @@ describe('Personne', () => {
   it("valide qu'un instrument porte au moins un pupitre", () => {
     const p = Personne.parse({
       id: 'c',
-      nom: 'Colette',
+      nom: 'Prune',
       instruments: [{ pupitre: 'piano' }, { pupitre: 'basse', precision: 'contrebasse' }],
     })
     expect(p.instruments).toHaveLength(2)
@@ -30,17 +30,17 @@ describe('Personne', () => {
 
   it('rejette une latéralité inconnue', () => {
     expect(() =>
-      Personne.parse({ id: 'g', nom: 'Gaël', lateralite: 'ambidextre' as never }),
+      Personne.parse({ id: 'g', nom: 'Gaspard', lateralite: 'ambidextre' as never }),
     ).toThrow()
   })
 })
 
 describe('libellePersonne', () => {
   it('assemble le nom et le discriminant', () => {
-    expect(libellePersonne(Personne.parse({ id: 'p', nom: 'Pierre', discriminant: '(SIG)' })))
-      .toBe('Pierre (SIG)')
-    expect(libellePersonne(Personne.parse({ id: 'c', nom: 'Colette' })))
-      .toBe('Colette')
+    expect(libellePersonne(Personne.parse({ id: 'p', nom: 'Zoltan', discriminant: '(SIG)' })))
+      .toBe('Zoltan (SIG)')
+    expect(libellePersonne(Personne.parse({ id: 'c', nom: 'Prune' })))
+      .toBe('Prune')
   })
 })
 
@@ -105,8 +105,8 @@ describe('Inscriptions', () => {
 
 describe('slug', () => {
   it('normalise accents et espaces', () => {
-    expect(slug('Emmanuelle (B)')).toBe('emmanuelle-b')
-    expect(slug('Élisabeth')).toBe('elisabeth')
+    expect(slug('Emma (B)')).toBe('emma-b')
+    expect(slug('Anaïs')).toBe('anais')
     expect(slug('02 · For Me Formidable')).toBe('02-for-me-formidable')
     expect(slug("L'Espérance")).toBe('l-esperance')
   })

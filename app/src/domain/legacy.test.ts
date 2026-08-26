@@ -25,21 +25,21 @@ describe('parseLegacyInscriptions', () => {
 
 describe('detacherNomInstrument', () => {
   it('sépare nom et instrument reconnu', () => {
-    expect(detacherNomInstrument('Colette (piano)')).toEqual({
-      nom: 'Colette',
+    expect(detacherNomInstrument('Prune (piano)')).toEqual({
+      nom: 'Prune',
       instrument: 'piano',
     })
   })
 
   it("conserve la parenthèse dans le nom quand ce n'est pas un instrument", () => {
-    // Piège prototype : `Pierre (SIG)` et `Emmanuelle (B)` distinguent des
+    // Piège prototype : `Zoltan (SIG)` et `Emma (B)` distinguent des
     // homonymes, pas des instruments — donc la parenthèse reste dans le nom.
-    expect(detacherNomInstrument('Pierre (SIG)')).toEqual({
-      nom: 'Pierre (SIG)',
+    expect(detacherNomInstrument('Zoltan (SIG)')).toEqual({
+      nom: 'Zoltan (SIG)',
       instrument: '',
     })
-    expect(detacherNomInstrument('Emmanuelle (B)')).toEqual({
-      nom: 'Emmanuelle (B)',
+    expect(detacherNomInstrument('Emma (B)')).toEqual({
+      nom: 'Emma (B)',
       instrument: '',
     })
   })
@@ -50,8 +50,8 @@ describe('detacherNomInstrument', () => {
   })
 
   it('normalise les espaces', () => {
-    expect(detacherNomInstrument('  Colette   (piano)  ')).toEqual({
-      nom: 'Colette',
+    expect(detacherNomInstrument('  Prune   (piano)  ')).toEqual({
+      nom: 'Prune',
       instrument: 'piano',
     })
   })

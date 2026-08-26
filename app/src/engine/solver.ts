@@ -108,7 +108,7 @@ function ecartMinutesEntre(a: Creneau, b: Creneau): number {
 }
 
 /**
- * Objectifs métier (Stéphane + participants, session 2026) :
+ * Objectifs métier (retours terrain, session 2026) :
  *  - PRIORITAIRE : deux répétitions d'un même morceau sont espacées d'au
  *    moins 12 h — laisse aux musiciens le temps de digérer et de régler
  *    les problèmes vus dans la répé précédente.

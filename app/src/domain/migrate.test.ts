@@ -33,33 +33,33 @@ describe('migrerInscriptions', () => {
     expect(canonique.groupes[0].titre).toContain('Sur La Place')
   })
 
-  it("préserve le discriminant d'Emmanuelle (B) et Beate (B)", () => {
-    const emma = canonique.personnes.find((p) => p.nom === 'Emmanuelle' && p.discriminant === '(B)')
-    const beate = canonique.personnes.find((p) => p.nom === 'Beate' && p.discriminant === '(B)')
+  it("préserve le discriminant d'Emma (B) et Bianca (B)", () => {
+    const emma = canonique.personnes.find((p) => p.nom === 'Emma' && p.discriminant === '(B)')
+    const beate = canonique.personnes.find((p) => p.nom === 'Bianca' && p.discriminant === '(B)')
     expect(emma).toBeDefined()
     expect(beate).toBeDefined()
-    expect(emma!.id).toBe('emmanuelle-b')
-    expect(beate!.id).toBe('beate-b')
+    expect(emma!.id).toBe('emma-b')
+    expect(beate!.id).toBe('bianca-b')
   })
 
-  it('distingue Pierre (SIG) et Pierre (L) comme deux personnes', () => {
+  it('distingue Zoltan (SIG) et Zoltan (L) comme deux personnes', () => {
     const sig = canonique.personnes.find((p) => p.discriminant === '(SIG)')
     const l = canonique.personnes.find((p) => p.discriminant === '(L)')
-    expect(sig?.nom).toBe('Pierre')
-    expect(l?.nom).toBe('Pierre')
+    expect(sig?.nom).toBe('Zoltan')
+    expect(l?.nom).toBe('Zoltan')
     expect(sig?.id).not.toBe(l?.id)
   })
 
-  it('regroupe Colette en une seule personne polyvalente (piano + basse)', () => {
-    const colette = canonique.personnes.find((p) => p.nom === 'Colette' && !p.discriminant)
+  it('regroupe Prune en une seule personne polyvalente (piano + basse)', () => {
+    const colette = canonique.personnes.find((p) => p.nom === 'Prune' && !p.discriminant)
     expect(colette).toBeDefined()
     const pupitres = new Set(colette!.instruments.map((i) => i.pupitre))
     expect(pupitres).toContain('piano')
     expect(pupitres).toContain('basse')
   })
 
-  it('regroupe Sylvain avec chant + guitare (polyvalence cross-groupes)', () => {
-    const sylvain = canonique.personnes.find((p) => p.nom === 'Sylvain')
+  it('regroupe Denis avec chant + guitare (polyvalence cross-groupes)', () => {
+    const sylvain = canonique.personnes.find((p) => p.nom === 'Denis')
     expect(sylvain).toBeDefined()
     const pupitres = new Set(sylvain!.instruments.map((i) => i.pupitre))
     expect(pupitres).toContain('chant')
@@ -67,7 +67,7 @@ describe('migrerInscriptions', () => {
   })
 
   it("dépose les indispos legacy sur les personnes concernées avec le rôle 'chant'", () => {
-    const jocelyne = canonique.personnes.find((p) => p.nom === 'Jocelyne')
+    const jocelyne = canonique.personnes.find((p) => p.nom === 'Léa')
     expect(jocelyne).toBeDefined()
     expect(jocelyne!.indispos.length).toBeGreaterThan(0)
     const ind = jocelyne!.indispos[0]
@@ -84,10 +84,10 @@ describe('migrerInscriptions', () => {
     expect(oye?.postes_cherches).toEqual(expect.arrayContaining(['guitare', 'vents']))
   })
 
-  it('conserve Pierre-yves 2× dans Boys Don\'t Cry (chant + guitare, même personne)', () => {
+  it('conserve Adrien 2× dans Boys Don\'t Cry (chant + guitare, même personne)', () => {
     const boys = canonique.groupes.find((g) => g.titre.toLowerCase().includes('boys'))
     expect(boys).toBeDefined()
-    const py = boys!.membres.filter((m) => m.personne_id === 'pierre-yves')
+    const py = boys!.membres.filter((m) => m.personne_id === 'adrien')
     // le prototype dédoublonne par personne dans le solveur, mais côté modèle
     // on conserve les deux mentions pour préserver l'info instrument.
     expect(py.length).toBe(2)
@@ -96,7 +96,7 @@ describe('migrerInscriptions', () => {
     expect(pupitres).toContain('guitare')
   })
 
-  it('substitue Autre batteur pour Gaël dans Love (patch P0 conservé)', () => {
+  it('substitue Autre batteur pour Gaspard dans Love (patch P0 conservé)', () => {
     const love = canonique.groupes.find((g) => g.titre.startsWith('Love'))
     expect(love).toBeDefined()
     const batteur = love!.membres.find((m) => m.pupitre === 'batterie')
