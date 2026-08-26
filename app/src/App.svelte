@@ -6,6 +6,11 @@
   import { Lieu, Session, libellePersonne } from './domain/model'
   import { attribuerSalles } from './engine/allocate-rooms'
   import { chargeParMusicien } from './engine/charge'
+  import Carte from './vues/Carte.svelte'
+  import Concert from './vues/Concert.svelte'
+  import ParGroupe from './vues/ParGroupe.svelte'
+  import ParMusicien from './vues/ParMusicien.svelte'
+  import ParSalle from './vues/ParSalle.svelte'
   import Quotas from './vues/Quotas.svelte'
   import { ordonnerConcert } from './engine/concert'
   import type { EtapeConcert } from './engine/concert'
@@ -1479,149 +1484,34 @@
       {/if}
 
       {#if vue === 'groupes'}
-        <table>
-          <thead>
-            <tr>
-              <th>Groupe</th>
-              <th>Resp.</th>
-              <th>Répétitions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each inscriptions.groupes as g}
-              {@const cs = solution.assignations
-                .filter((a) => a.groupe_id === g.id)
-                .map((a) => ({ a, c: creneauxParId.get(a.creneau_id) }))
-                .filter((x) => x.c != null)
-                .sort((x, y) => `${x.c!.date}T${x.c!.debut}`.localeCompare(`${y.c!.date}T${y.c!.debut}`))}
-              <tr>
-                <td><b>{g.titre}</b></td>
-                <td>{g.responsable_id}</td>
-                <td>
-                  {#if g.postes_cherches.length > 0}
-                    {@const suggestions = suggererRenforts(g, inscriptions, creneaux, solution.assignations)}
-                    <details class="renforts">
-                      <summary>
-                        <span class="badge">cherche {g.postes_cherches.join(', ')}</span>
-                        <span class="mono ink-soft">{suggestions.length} candidat(s)</span>
-                      </summary>
-                      {#if suggestions.length > 0}
-                        <div class="chips" style="margin-top:6px">
-                          {#each suggestions.slice(0, 15) as s}
-                            <span
-                              class="chip"
-                              class:libre={s.nb_engagements === 0}
-                              title="{s.creneaux_compatibles}/{s.creneaux_du_groupe} créneaux compatibles · {s.nb_engagements} engagement(s) existant(s)"
-                            >
-                              <b>{s.nom}</b>
-                              {#if s.nb_engagements === 0}
-                                <em class="tag-libre">libre</em>
-                              {:else}
-                                <em>{s.nb_engagements} groupe(s)</em>
-                              {/if}
-                              <em>{s.creneaux_compatibles}/{s.creneaux_du_groupe}</em>
-                              {#each s.pupitres_dispo as pup}
-                                <button
-                                  class="ghost mini-ajout"
-                                  onclick={() => affecterRenfort(g.id, s.personne_id, pup)}
-                                  title="Affecter {s.nom} à ce groupe au pupitre {pup}"
-                                >+ {pup}</button>
-                              {/each}
-                            </span>
-                          {/each}
-                        </div>
-                      {:else}
-                        <p class="hint" style="margin:6px 0 0;font-size:12px">
-                          Personne d'autre ne joue les pupitres cherchés et n'est libre sur ces créneaux.
-                        </p>
-                      {/if}
-                    </details>
-                  {/if}
-                  {#each cs as { a, c }}
-                    <span class="chip" class:figee={estFigee(a)}>
-                      {c!.date.slice(5).replace('-', '/')} · {c!.debut}
-                      <em>{sallesParId.get(a.salle_id)?.nom ?? a.salle_id}</em>
-                      <button
-                        class="lock"
-                        class:on={estFigee(a)}
-                        onclick={() => toggleFigee(a)}
-                        title={estFigee(a) ? 'Dégeler' : 'Figer cette répétition'}
-                        aria-label={estFigee(a) ? 'Dégeler' : 'Figer'}
-                      ></button>
-                      <button
-                        class="move"
-                        class:on={deplacementEnCours && keyFigee(deplacementEnCours) === keyFigee(a)}
-                        onclick={() => demarrerDeplacement(a)}
-                        title="Déplacer cette répétition"
-                        aria-label="Déplacer"
-                      ></button>
-                    </span>
-                  {/each}
-                  {#if cs.length === 0}
-                    <span class="rouge">— non placé —</span>
-                  {/if}
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <ParGroupe
+          {inscriptions}
+          {creneaux}
+          assignations={solution.assignations}
+          {sallesParId}
+          {creneauxParId}
+          {estFigee}
+          {toggleFigee}
+          {demarrerDeplacement}
+          {deplacementEnCours}
+          {keyFigee}
+          onAffecterRenfort={affecterRenfort}
+        />
       {:else if vue === 'salles'}
-        <table>
-          <thead>
-            <tr>
-              <th>Salle</th>
-              <th>Créneau</th>
-              <th>Groupe</th>
-              <th>Responsable</th>
-              <th style="width:40px"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each lieu.salles.filter((s) => s.actif) as salle}
-              {#each creneaux
-                .filter((c) => c.salles.includes(salle.id))
-                .sort((a, b) => `${a.date}T${a.debut}`.localeCompare(`${b.date}T${b.debut}`)) as c}
-                {@const ass = solution.assignations.find((a) => a.creneau_id === c.id && a.salle_id === salle.id)}
-                {@const g = ass ? groupesParId.get(ass.groupe_id) : undefined}
-                {@const resp = g ? personnesParId.get(g.responsable_id) : undefined}
-                <tr
-                  class:libre={!ass}
-                  class:figee={ass && estFigee(ass)}
-                  class:cible={deplacementEnCours && estCibleValide(c.id, salle.id)}
-                >
-                  <td>{salle.nom}</td>
-                  <td class="mono">{c.date.slice(5).replace('-', '/')} · {c.debut}–{c.fin}</td>
-                  <td>{g ? g.titre : '—'}</td>
-                  <td>{resp ? libellePersonne(resp) : g?.responsable_id ?? ''}</td>
-                  <td class="center">
-                    {#if ass}
-                      <button
-                        class="lock"
-                        class:on={estFigee(ass)}
-                        onclick={() => toggleFigee(ass)}
-                        title={estFigee(ass) ? 'Dégeler' : 'Figer cette répétition'}
-                        aria-label={estFigee(ass) ? 'Dégeler' : 'Figer'}
-                      ></button>
-                      <button
-                        class="move"
-                        class:on={deplacementEnCours && keyFigee(deplacementEnCours) === keyFigee(ass)}
-                        onclick={() => demarrerDeplacement(ass)}
-                        title="Déplacer cette répétition"
-                        aria-label="Déplacer"
-                      ></button>
-                    {:else if deplacementEnCours && estCibleValide(c.id, salle.id)}
-                      <button
-                        class="drop-target"
-                        onclick={() => appliquerDeplacement(c.id, salle.id)}
-                        title="Déplacer ici"
-                      >poser ici</button>
-                    {/if}
-                  </td>
-                </tr>
-              {/each}
-            {/each}
-          </tbody>
-        </table>
+        <ParSalle
+          {lieu}
+          {creneaux}
+          assignations={solution.assignations}
+          {groupesParId}
+          {personnesParId}
+          {estFigee}
+          {toggleFigee}
+          {deplacementEnCours}
+          {demarrerDeplacement}
+          {estCibleValide}
+          {appliquerDeplacement}
+          {keyFigee}
+        />
       {:else if vue === 'quotas'}
         <Quotas
           {session}
@@ -1631,247 +1521,50 @@
           onDelta={(pup, val) => (deltasQuotas = { ...deltasQuotas, [pup]: val })}
         />
       {:else if vue === 'concert'}
-        {@const stats = statsConducteur(ordreConducteur)}
-        <div class="toolbar" style="margin-bottom:14px">
-          <button class="ghost" onclick={reordonnerAuto}>Recalculer l'ordre optimal</button>
-          <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;font-size:12.5px;letter-spacing:0;font-weight:400">
-            <span>Début</span>
-            <input type="time" bind:value={cdDebut} style="width:100px" />
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;font-size:12.5px;letter-spacing:0;font-weight:400">
-            <span>Durée / morceau</span>
-            <input type="number" min="1" max="30" bind:value={cdDureeMorceau} style="width:60px" />
-            <span class="mono">min</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;font-size:12.5px;letter-spacing:0;font-weight:400">
-            <span>Changement plateau</span>
-            <input type="number" min="0" max="15" bind:value={cdDureeChange} style="width:60px" />
-            <span class="mono">min</span>
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;margin:0;text-transform:none;font-size:12.5px;letter-spacing:0;font-weight:400">
-            <span>Inversion kit</span>
-            <input type="number" min="0" max="30" bind:value={cdDureeKit} style="width:60px" />
-            <span class="mono">min</span>
-          </label>
-          <span class="grow"></span>
-          <span class="mono ink-soft">
-            {stats.mouvements} mouvement(s)
-            {#if conducteurMinuté.nb_inversions > 0}
-              · {conducteurMinuté.nb_inversions} inversion(s) kit
-            {/if}
-            · fin
-            <b>{conducteurMinuté.heure_fin}</b>
-            ({Math.floor(conducteurMinuté.duree_totale_min / 60)}h{String(conducteurMinuté.duree_totale_min % 60).padStart(2, '0')})
-          </span>
-        </div>
-        <p class="hint">
-          Glisse-dépose les lignes pour réordonner à la main. Chaque étape affiche son
-          heure de début. Les changements de plateau sont intercalés automatiquement.
-        </p>
-        {#if repartitionStyles.parts.length > 0}
-          <div class="repart-styles">
-            <span class="ink-soft mono">Programmation :</span>
-            {#each repartitionStyles.parts as p}
-              <span class="chip-style" style="background:{couleurStyle(p.style)}">
-                {p.style} <em>{p.n} · {p.pct}%</em>
-              </span>
-            {/each}
-          </div>
-          {#if repartitionStyles.runs.length > 0}
-            <div class="msg warn" style="margin:8px 0 0">
-              <b>Séquences dominées par un style</b> — l'alternance améliore le concert.
-              <ul>
-                {#each repartitionStyles.runs as r}
-                  <li>
-                    <b>{r.style}</b> — {r.fin - r.debut + 1} morceaux d'affilée
-                    (positions {r.debut + 1} à {r.fin + 1})
-                  </li>
-                {/each}
-              </ul>
-            </div>
-          {/if}
-        {/if}
-        <ol class="conducteur">
-          {#each conducteurMinuté.etapes as etape, i (etape.groupe_id)}
-            {#if etape.inversion_kit}
-              <li class="marker">
-                <span class="badge" style="background:var(--rouge);color:white;border:none">
-                  ⚙ inversion de kit ({cdDureeKit} min)
-                </span>
-              </li>
-            {/if}
-            <li
-              draggable="true"
-              ondragstart={() => (dragIdx = i)}
-              ondragover={(e) => e.preventDefault()}
-              ondrop={(e) => { e.preventDefault(); dropOrdre(i) }}
-              class:dragging={dragIdx === i}
-            >
-              <span class="num">{i + 1}</span>
-              <span class="heure mono">{etape.heure_debut}</span>
-              <span class="corps">
-                <b>{etape.titre}</b>
-                {#if etape.style}
-                  <span class="chip-style" style="background:{couleurStyle(etape.style)}">{etape.style}</span>
-                {/if}
-                {#if etape.lateralite === 'gaucher'}
-                  <span class="badge" style="background:#e3eee6;color:var(--vert);border-color:#bbd5c3">
-                    batterie gauchère
-                  </span>
-                {/if}
-              </span>
-              <span class="mouvements mono ink-soft">
-                {#if i > 0}
-                  ↑ {etape.musiciens_qui_montent.length}
-                  ↓ {etape.musiciens_qui_descendent.length}
-                {:else}
-                  démarrage
-                {/if}
-              </span>
-            </li>
-          {/each}
-        </ol>
+        <Concert
+          ordre={ordreConducteur}
+          {conducteurMinuté}
+          {repartitionStyles}
+          stats={statsConducteur(ordreConducteur)}
+          {cdDebut}
+          {cdDureeMorceau}
+          {cdDureeChange}
+          {cdDureeKit}
+          onDebut={(v) => (cdDebut = v)}
+          onDureeMorceau={(v) => (cdDureeMorceau = v)}
+          onDureeChange={(v) => (cdDureeChange = v)}
+          onDureeKit={(v) => (cdDureeKit = v)}
+          onReordonnerAuto={reordonnerAuto}
+          onDragStart={(i) => (dragIdx = i)}
+          onDrop={dropOrdre}
+          {dragIdx}
+          {couleurStyle}
+        />
       {:else if vue === 'carte'}
-        {@const sallesAffichees = lieu.salles.filter((s) => s.actif)}
-        {@const creneauxTries = [...creneaux].sort((a, b) =>
-          `${a.date}T${a.debut}`.localeCompare(`${b.date}T${b.debut}`),
-        )}
-        <table class="carte">
-          <thead>
-            <tr>
-              <th style="width:150px">Créneau</th>
-              {#each sallesAffichees as s}
-                <th class="mono" style="text-align:center;font-size:11px">{s.nom}</th>
-              {/each}
-              <th style="width:60px">Occ.</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each creneauxTries as c}
-              {@const assCr = solution.assignations.filter((a) => a.creneau_id === c.id)}
-              {@const parSalle = new Map(assCr.map((a) => [a.salle_id, a]))}
-              {@const salleOuverte = new Set(c.salles)}
-              {@const nbOuvertes = sallesAffichees.filter((s) => salleOuverte.has(s.id)).length}
-              {@const nbOccupees = assCr.length}
-              <tr>
-                <td class="mono">{c.date.slice(5).replace('-', '/')} · {c.debut}–{c.fin}</td>
-                {#each sallesAffichees as s}
-                  {@const ass = parSalle.get(s.id)}
-                  {@const ouvert = salleOuverte.has(s.id)}
-                  {#if !ouvert}
-                    <td class="fermee">—</td>
-                  {:else if ass}
-                    {@const g = groupesParId.get(ass.groupe_id)}
-                    <td class="occ" class:figee={estFigee(ass)}>{g?.titre ?? ass.groupe_id}</td>
-                  {:else}
-                    <td
-                      class="libre-cell"
-                      class:inspecte={inspecteCase &&
-                        inspecteCase.creneauId === c.id &&
-                        inspecteCase.salleId === s.id}
-                      onclick={() =>
-                        (inspecteCase =
-                          inspecteCase && inspecteCase.creneauId === c.id && inspecteCase.salleId === s.id
-                            ? null
-                            : { creneauId: c.id, salleId: s.id })}
-                      role="button"
-                      tabindex="0"
-                    >libre</td>
-                  {/if}
-                {/each}
-                <td class="mono taux" class:hot={nbOccupees === nbOuvertes && nbOuvertes > 0}>
-                  {nbOccupees}/{nbOuvertes}
-                </td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-        {#if inspecteCase}
-          {@const c = creneauxParId.get(inspecteCase.creneauId)}
-          {@const s = sallesParId.get(inspecteCase.salleId)}
-          <div class="candidats">
-            <b>{s?.nom} · {c?.date.slice(5).replace('-', '/')} · {c?.debut}–{c?.fin}</b>
-            <span class="ink-soft mono"> — {candidatsCase.length} groupe(s) compatible(s)</span>
-            {#if candidatsCase.length > 0}
-              <div class="chips" style="margin-top:8px">
-                {#each candidatsCase as gc}
-                  <span class="chip">{gc.titre}</span>
-                {/each}
-              </div>
-            {:else}
-              <p class="hint" style="margin-top:6px">
-                Aucun groupe ne peut occuper cette case (tous ont un membre déjà pris,
-                indisponible, ou la salle est restreinte).
-              </p>
-            {/if}
-          </div>
-        {/if}
+        <Carte
+          {session}
+          {lieu}
+          {inscriptions}
+          {creneaux}
+          assignations={solution.assignations}
+          {groupesParId}
+          {sallesParId}
+          {creneauxParId}
+          {estFigee}
+          {inspecteCase}
+          onInspect={(v) => (inspecteCase = v)}
+        />
       {:else}
-        {@const chargeMap = chargeParMusicien(inscriptions, creneaux, solution.assignations)}
-        {@const parPersonne = (() => {
-          const m = new Map<string, Array<{ a: Assignation; c: (typeof creneaux)[number] }>>()
-          for (const a of solution.assignations) {
-            const c = creneauxParId.get(a.creneau_id)
-            const g = groupesParId.get(a.groupe_id)
-            if (!c || !g) continue
-            const membres = new Set(g.membres.map((m) => m.personne_id))
-            for (const pid of membres) {
-              if (!m.has(pid)) m.set(pid, [])
-              m.get(pid)!.push({ a, c })
-            }
-          }
-          for (const l of m.values())
-            l.sort((x, y) => `${x.c.date}T${x.c.debut}`.localeCompare(`${y.c.date}T${y.c.debut}`))
-          return m
-        })()}
-        {@const surcharges = [...chargeMap.values()].filter((c) => c.max_jour > seuilChargeJour)}
-        <div class="toolbar" style="margin-bottom:12px">
-          <label class="line" style="margin:0;display:flex;align-items:center;gap:8px">
-            <span>Seuil charge / jour</span>
-            <input type="number" min="1" max="12" bind:value={seuilChargeJour} style="width:70px" />
-          </label>
-          <span class="grow"></span>
-          {#if surcharges.length > 0}
-            <span class="badge">⚠ {surcharges.length} musicien(s) au-delà du seuil</span>
-          {/if}
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Musicien</th>
-              <th style="width:70px">Total</th>
-              <th style="width:100px">Max/jour</th>
-              <th>Planning chronologique</th>
-            </tr>
-          </thead>
-          <tbody>
-            {#each [...inscriptions.personnes].sort((a, b) => libellePersonne(a).localeCompare(libellePersonne(b), 'fr')) as p}
-              {@const items = parPersonne.get(p.id) ?? []}
-              {@const ch = chargeMap.get(p.id)}
-              {#if items.length > 0 || (ch && ch.total > 0)}
-                {@const surcharge = ch && ch.max_jour > seuilChargeJour}
-                <tr class:surcharge>
-                  <td><b>{libellePersonne(p)}</b></td>
-                  <td class="mono">{ch?.total ?? items.length}</td>
-                  <td class="mono">
-                    {ch?.max_jour ?? 0}
-                    {#if surcharge}<span class="rouge"> ⚠</span>{/if}
-                  </td>
-                  <td>
-                    {#each items as { a, c }}
-                      {@const g = groupesParId.get(a.groupe_id)}
-                      <span class="chip">
-                        {c.date.slice(5).replace('-', '/')} · {c.debut}
-                        <em>{g?.titre ?? a.groupe_id}</em>
-                        <em>{sallesParId.get(a.salle_id)?.nom ?? a.salle_id}</em>
-                      </span>
-                    {/each}
-                  </td>
-                </tr>
-              {/if}
-            {/each}
-          </tbody>
-        </table>
+        <ParMusicien
+          {inscriptions}
+          {creneaux}
+          assignations={solution.assignations}
+          {groupesParId}
+          {sallesParId}
+          {creneauxParId}
+          {seuilChargeJour}
+          onSeuilChange={(v) => (seuilChargeJour = v)}
+        />
       {/if}
     </section>
   {/if}
