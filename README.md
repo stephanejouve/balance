@@ -132,11 +132,47 @@ différents.
 
 1. Tu duplicates ton classeur habituel, tu vérifies que l'onglet s'appelle
    `Liste` et que les colonnes matchent (renomme au besoin)
-2. Dans Balance : **« Étape 1 · Source »** → **« Importer .xlsx… »**
+2. Dans Balance : **« Étape 1 · Source »** → **« Importer .xlsx (Liste)… »**
 3. L'UI affiche le nombre de groupes lus + les éventuels avertissements
    (colonne manquante, cellule ambiguë)
 4. Tu peux ensuite éditer inline dans **« Étape 1b · Inscriptions »** avant
    de lancer la répartition
+
+### Import complémentaire — onglet `Stagiaires`
+
+Cas d'usage : à l'inscription du stage, on veut charger la liste complète
+des inscrits **avant** que les groupes soient composés. Ces stagiaires
+apparaissent alors comme « libres » dans la vue Personnes et deviennent
+automatiquement candidats aux renforts.
+
+**Onglet Excel `Stagiaires`** — une ligne par personne :
+
+| Colonne | Rôle |
+|---|---|
+| `Nom` (obligatoire) | Prénom + éventuel discriminant `(B)` pour distinguer un homonyme |
+| `Pupitre` | Un pupitre parmi les 6 (`chant`, `piano`, `basse`, `batterie`, `guitare`, `vents`) |
+| `Pupitres additionnels` | Optionnel, virgulés (`basse, guitare`) pour les polyvalents |
+| `Instrument` | Optionnel, precision libre (`sax alto`, `contrebasse`) |
+| `Latéralité` | `droitier` / `gaucher` (batteurs seulement) |
+| `Indispos` | Format libre, plusieurs séparées par `;` |
+
+**Format libre des indispos** : Balance extrait au mieux les jours de la
+semaine FR (`lundi`, `mardi`…), les plages horaires (`9h-10h`, `14:30-16:00`)
+et les pupitres cités (`chant`, `piano`…). Le texte brut est toujours
+conservé pour relecture humaine. Exemples reconnus :
+
+- `mercredi 09h-10h chant` → jour mercredi, plage 09:00-10:00, rôle chant
+- `mardi 14:30 - 16:00` → jour mardi, plage 14:30-16:00
+- `convalescence` → texte conservé sans horaire spécifique
+
+**Workflow** :
+
+1. Bouton **« Importer stagiaires .xlsx… »** dans la section Source
+2. Fusion avec l'existant — les personnes déjà présentes (même id) sont
+   ignorées et signalées
+3. La vue Personnes montre les nouveaux stagiaires avec le badge « libre »
+4. La vue Quotas devient immédiatement utile pour évaluer les tensions
+   par pupitre (« combien de batteurs pour combien de groupes possibles ? »)
 
 ## Cible technique
 

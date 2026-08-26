@@ -6,6 +6,7 @@
     onNouvelleSession: () => void
     onUtiliserDemo: () => void
     onImporterXlsx: (e: Event) => void
+    onImporterStagiaires: (e: Event) => void
     onImporterJson: (e: Event) => void
     onExporterJson: () => void
   }
@@ -16,6 +17,7 @@
     onNouvelleSession,
     onUtiliserDemo,
     onImporterXlsx,
+    onImporterStagiaires,
     onImporterJson,
     onExporterJson,
   }: Props = $props()
@@ -32,8 +34,12 @@
     <button class="ghost" onclick={onNouvelleSession}>Nouvelle session (garde le lieu)</button>
     <button class="ghost" onclick={onUtiliserDemo}>Recharger la démo</button>
     <label class="fake-btn">
-      Importer .xlsx…
+      Importer .xlsx (Liste)…
       <input type="file" accept=".xlsx,.xlsm" hidden onchange={onImporterXlsx} />
+    </label>
+    <label class="fake-btn">
+      Importer stagiaires .xlsx…
+      <input type="file" accept=".xlsx,.xlsm" hidden onchange={onImporterStagiaires} />
     </label>
     <label class="fake-btn">
       Charger un état .json…

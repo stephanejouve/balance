@@ -33,8 +33,9 @@
   import { couverture, verifier } from './engine/verify'
   import { csvParGroupe, csvParMusicien, csvParSalle, telechargerCsv } from './io/csv'
   import { exporterClasseurExcel } from './io/excel-export'
-  import { importerListeExcel } from './io/excel-io'
+  import { importerListeExcel, importerStagiairesExcel } from './io/excel-io'
   import type { MappingListe } from './io/liste-adapter'
+  import type { MappingStagiaires } from './io/stagiaires-adapter'
   import fixture from './fixtures/apero_mercredi.json'
 
   /* --- Données de démarrage --------------------------------------------- */
@@ -85,6 +86,14 @@
       guitare: 'Guitare',
       vents: 'Vents',
     },
+  }
+  const MAPPING_STAGIAIRES: MappingStagiaires = {
+    colonneNom: 'Nom',
+    colonnePupitrePrincipal: 'Pupitre',
+    colonnePupitresAdditionnels: 'Pupitres additionnels',
+    colonneInstrument: 'Instrument',
+    colonneLateralite: 'Latéralité',
+    colonneIndispos: 'Indispos',
   }
 
   function chargerDemo(): Inscriptions {
@@ -241,6 +250,33 @@
       )
       sourceLabel = `Excel · ${file.name}`
       warningsImport = warnings
+      solution = null
+    } catch (err) {
+      erreurImport = err instanceof Error ? err.message : String(err)
+    } finally {
+      cible.value = ''
+    }
+  }
+
+  async function importerStagiaires(e: Event) {
+    const cible = e.target as HTMLInputElement
+    const file = cible.files?.[0]
+    if (!file) return
+    warningsImport = []
+    erreurImport = ''
+    try {
+      const { personnes, warnings } = await importerStagiairesExcel(file, 'Stagiaires', MAPPING_STAGIAIRES)
+      // Fusion : ajoute les nouveaux stagiaires sans écraser les existants
+      // (même id = doublon signalé).
+      const existants = new Set(inscriptions.personnes.map((p) => p.id))
+      const nouveaux = personnes.filter((p) => !existants.has(p.id))
+      const doublons = personnes.length - nouveaux.length
+      inscriptions.personnes.push(...nouveaux)
+      sourceLabel = `Stagiaires · ${file.name} (+${nouveaux.length})`
+      warningsImport = [
+        ...warnings,
+        ...(doublons > 0 ? [`${doublons} personne(s) déjà présente(s), ignorée(s)`] : []),
+      ]
       solution = null
     } catch (err) {
       erreurImport = err instanceof Error ? err.message : String(err)
@@ -861,6 +897,7 @@
     onNouvelleSession={nouvelleSessionVide}
     onUtiliserDemo={utiliserDemo}
     onImporterXlsx={importerFichier}
+    onImporterStagiaires={importerStagiaires}
     onImporterJson={importerEtat}
     onExporterJson={exporterEtat}
   />
