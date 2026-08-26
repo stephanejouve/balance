@@ -33,7 +33,8 @@
   import { couverture, verifier } from './engine/verify'
   import { csvParGroupe, csvParMusicien, csvParSalle, telechargerCsv } from './io/csv'
   import { exporterClasseurExcel } from './io/excel-export'
-  import { importerListeExcel, importerStagiairesExcel } from './io/excel-io'
+  import { importerListeExcel, importerProposesExcel, importerStagiairesExcel } from './io/excel-io'
+  import { MAPPING_PROPOSES_DEFAUT } from './io/proposes-adapter'
   import type { MappingListe } from './io/liste-adapter'
   import type { MappingStagiaires } from './io/stagiaires-adapter'
   import fixture from './fixtures/apero_mercredi.json'
@@ -277,6 +278,38 @@
       warningsImport = [
         ...warnings,
         ...(doublons > 0 ? [`${doublons} personne(s) déjà présente(s), ignorée(s)`] : []),
+      ]
+      solution = null
+    } catch (err) {
+      erreurImport = err instanceof Error ? err.message : String(err)
+    } finally {
+      cible.value = ''
+    }
+  }
+
+  async function importerProposes(e: Event) {
+    const cible = e.target as HTMLInputElement
+    const file = cible.files?.[0]
+    if (!file) return
+    warningsImport = []
+    erreurImport = ''
+    try {
+      const { imposes, warnings } = await importerProposesExcel(
+        file,
+        'Proposés',
+        MAPPING_PROPOSES_DEFAUT,
+        inscriptions.personnes,
+      )
+      // Fusion : ajoute les morceaux proposés sans écraser (même id = ignoré).
+      const existants = new Set(inscriptions.imposes.map((imp) => imp.id))
+      const nouveaux = imposes.filter((imp) => !existants.has(imp.id))
+      const doublons = imposes.length - nouveaux.length
+      inscriptions.imposes.push(...nouveaux)
+      const nSeances = nouveaux.reduce((s, imp) => s + imp.seances.length, 0)
+      sourceLabel = `Proposés · ${file.name} (+${nouveaux.length} morceaux, ${nSeances} séances)`
+      warningsImport = [
+        ...warnings,
+        ...(doublons > 0 ? [`${doublons} morceau(x) déjà présent(s), ignoré(s)`] : []),
       ]
       solution = null
     } catch (err) {
@@ -899,6 +932,7 @@
     onUtiliserDemo={utiliserDemo}
     onImporterXlsx={importerFichier}
     onImporterStagiaires={importerStagiaires}
+    onImporterProposes={importerProposes}
     onImporterJson={importerEtat}
     onExporterJson={exporterEtat}
   />

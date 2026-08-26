@@ -1,6 +1,9 @@
 import readXlsxFile from 'read-excel-file/browser'
+import type { Personne } from '../domain/model'
 import type { ExtractionListe, MappingListe } from './liste-adapter'
 import { extraireListe } from './liste-adapter'
+import type { ExtractionProposes, MappingProposes } from './proposes-adapter'
+import { extraireProposes } from './proposes-adapter'
 import type { ExtractionStagiaires, MappingStagiaires } from './stagiaires-adapter'
 import { extraireStagiaires } from './stagiaires-adapter'
 
@@ -34,4 +37,21 @@ export async function importerStagiairesExcel(
 ): Promise<ExtractionStagiaires> {
   const rows = (await readXlsxFile(file, { sheet: onglet })) as unknown[][]
   return extraireStagiaires(rows, mapping)
+}
+
+/**
+ * Import de l'onglet `Proposés` (morceaux du concert du vendredi
+ * proposés par l'intervenant). Chaque ligne = une séance ; les lignes
+ * de même titre sont fusionnées en un `Impose` avec plusieurs séances.
+ * Les membres sont résolus contre `personnesConnues` — importer d'abord
+ * l'onglet `Liste` ou `Stagiaires` pour peupler le référentiel.
+ */
+export async function importerProposesExcel(
+  file: Blob | File,
+  onglet: string,
+  mapping: MappingProposes,
+  personnesConnues: readonly Personne[],
+): Promise<ExtractionProposes> {
+  const rows = (await readXlsxFile(file, { sheet: onglet })) as unknown[][]
+  return extraireProposes(rows, mapping, personnesConnues)
 }

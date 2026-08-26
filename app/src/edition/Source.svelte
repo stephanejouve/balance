@@ -7,6 +7,7 @@
     onUtiliserDemo: () => void
     onImporterXlsx: (e: Event) => void
     onImporterStagiaires: (e: Event) => void
+    onImporterProposes: (e: Event) => void
     onImporterJson: (e: Event) => void
     onExporterJson: () => void
   }
@@ -18,6 +19,7 @@
     onUtiliserDemo,
     onImporterXlsx,
     onImporterStagiaires,
+    onImporterProposes,
     onImporterJson,
     onExporterJson,
   }: Props = $props()
@@ -40,6 +42,10 @@
     <label class="fake-btn">
       Importer stagiaires .xlsx…
       <input type="file" accept=".xlsx,.xlsm" hidden onchange={onImporterStagiaires} />
+    </label>
+    <label class="fake-btn" title="Onglet « Proposés » : morceaux du concert du vendredi (1 ligne = 1 séance)">
+      Importer proposés (concert) .xlsx…
+      <input type="file" accept=".xlsx,.xlsm" hidden onchange={onImporterProposes} />
     </label>
     <label class="fake-btn">
       Charger un état .json…

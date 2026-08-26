@@ -24,12 +24,12 @@
 
 <details class="sheet">
   <summary>
-    <p class="eyebrow">Étape 1c · Morceaux imposés</p>
-    <h2>{inscriptions.imposes.length} imposé(s)</h2>
+    <p class="eyebrow">Étape 1c · Concert du vendredi</p>
+    <h2>{inscriptions.imposes.length} morceau(x) proposé(s) par l'intervenant</h2>
     <p class="hint">
-      Morceaux « obligatoires » du stage avec leurs séances de répétition déjà planifiées.
-      Les membres listés seront bloqués sur ces créneaux — le solveur en tient compte
-      pour les groupes volontaires qui les partagent.
+      Morceaux proposés par l'intervenant pour le concert du vendredi, avec leurs séances
+      de répétition déjà planifiées. Les membres listés seront bloqués sur ces créneaux —
+      le solveur en tient compte pour les groupes volontaires qui les partagent.
     </p>
   </summary>
   <div class="body">
@@ -74,6 +74,6 @@
         <button class="ghost mini-ajout" onclick={() => onAjouterSeance(i)}>+ séance</button>
       </div>
     {/each}
-    <button class="ghost" onclick={onAjouterImpose}>+ Ajouter un morceau imposé</button>
+    <button class="ghost" onclick={onAjouterImpose}>+ Ajouter un morceau du concert</button>
   </div>
 </details>
