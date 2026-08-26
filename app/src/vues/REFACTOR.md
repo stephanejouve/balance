@@ -11,27 +11,41 @@ cohabitation avec plusieurs auteurs difficile.
 
 ## État courant
 
-- Extraction faite : `vues/Quotas.svelte` (preuve de concept)
-- 5 vues Résultat restantes à extraire (Par groupe, Par salle, Par
-  musicien, Carte, Concert)
-- 8 sections d'édition à extraire (Source, Personnes, Inscriptions,
-  Imposés, Indispos, Lieu, Session, Contraintes)
+App.svelte est passé de **2510 → 1736 lignes** (−31%) après extraction
+complète des vues et des sections d'édition en composants dédiés :
 
-## Cible
+- ✅ 6 vues Résultat : `vues/{ParGroupe,ParSalle,ParMusicien,Carte,Concert,Quotas}.svelte`
+- ✅ 8 sections d'édition : `edition/{Source,Personnes,Inscriptions,Imposes,Indispos,Lieu,Session,Contraintes}.svelte`
+
+Pattern retenu : props explicites (données + callbacks). Rétro-compat
+totale — les composants qui portent le nom d'un type Zod (`Inscriptions`,
+`Lieu`, `Session`, `Imposes`, `Indispos`, `Personnes`) sont importés avec
+un alias `XxxEdit` pour éviter les collisions.
+
+## Ce qu'App.svelte contient encore
+
+- `<script>` : ~830 lignes de state + handlers + $derived
+- `<main>` : ~100 lignes d'orchestration (header, section Placement,
+  section Résultats avec toolbar/toggle vue)
+- `<style>` : ~570 lignes de styles globaux partagés par les composants
+  (via cascade normale, pas de `:global()`)
+
+## Extensions ultérieures possibles
+
+## Structure actuelle
 
 ```
 app/src/
-├── App.svelte                (orchestrateur + state, ~300 lignes)
-├── stores.ts                 (state réactif partagé si besoin)
-├── vues/
+├── App.svelte                (orchestrateur + state, 1736 lignes — cible ~800)
+├── vues/                     ✓ 6 composants
 │   ├── ParGroupe.svelte
 │   ├── ParSalle.svelte
 │   ├── ParMusicien.svelte
 │   ├── Carte.svelte
 │   ├── Concert.svelte
-│   └── Quotas.svelte         ✓ fait
-└── edition/
-    ├── Source.svelte         (import Excel / JSON / démo / nouvelle)
+│   └── Quotas.svelte
+└── edition/                  ✓ 8 composants
+    ├── Source.svelte
     ├── Personnes.svelte
     ├── Inscriptions.svelte
     ├── Imposes.svelte
@@ -40,6 +54,14 @@ app/src/
     ├── Session.svelte
     └── Contraintes.svelte
 ```
+
+## Reste à faire
+
+- Extraire les styles CSS globaux dans `app.css` (571 lignes)
+- Extraire les handlers d'action (`ajouterX`, `supprimerX`, `importerY`) en modules utils
+- Éventuellement passer à un store partagé `state.svelte.ts` (Svelte 5)
+  pour supprimer la cascade de props/callbacks — à évaluer si l'ajout
+  d'un composant devient récurrent
 
 ## Convention props
 

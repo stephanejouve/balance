@@ -6,6 +6,14 @@
   import { Lieu, Session, libellePersonne } from './domain/model'
   import { attribuerSalles } from './engine/allocate-rooms'
   import { chargeParMusicien } from './engine/charge'
+  import Contraintes from './edition/Contraintes.svelte'
+  import ImposesEdit from './edition/Imposes.svelte'
+  import IndisposEdit from './edition/Indispos.svelte'
+  import InscriptionsEdit from './edition/Inscriptions.svelte'
+  import LieuEdit from './edition/Lieu.svelte'
+  import PersonnesEdit from './edition/Personnes.svelte'
+  import SessionEdit from './edition/Session.svelte'
+  import Source from './edition/Source.svelte'
   import Carte from './vues/Carte.svelte'
   import Concert from './vues/Concert.svelte'
   import ParGroupe from './vues/ParGroupe.svelte'
@@ -846,497 +854,79 @@
     </p>
   </header>
 
-  <section class="sheet">
-    <p class="eyebrow">Étape 1 · Source</p>
-    <h2>Inscriptions</h2>
-    <p class="hint">
-      Lecture directe de l'onglet <code>Liste</code> du classeur Excel de l'association,
-      ou du jeu de démonstration.
-    </p>
-    <div class="toolbar">
-      <button class="ghost" onclick={nouvelleSessionVide}>Nouvelle session (garde le lieu)</button>
-      <button class="ghost" onclick={utiliserDemo}>Recharger la démo</button>
-      <label class="fake-btn">
-        Importer .xlsx…
-        <input type="file" accept=".xlsx,.xlsm" hidden onchange={importerFichier} />
-      </label>
-      <label class="fake-btn">
-        Charger un état .json…
-        <input type="file" accept=".json" hidden onchange={importerEtat} />
-      </label>
-      <button class="ghost" onclick={exporterEtat}>Sauvegarder l'état .json</button>
-      <span class="grow"></span>
-      <span class="ink-soft mono">Chargé : {sourceLabel}</span>
-    </div>
-    {#if erreurImport}
-      <div class="msg err"><b>Import échoué :</b> {erreurImport}</div>
-    {/if}
-    {#if warningsImport.length > 0}
-      <div class="msg warn">
-        <b>Avertissements d'import :</b>
-        <ul>
-          {#each warningsImport as w}<li>{w}</li>{/each}
-        </ul>
-      </div>
-    {/if}
-  </section>
+  <Source
+    {sourceLabel}
+    {erreurImport}
+    {warningsImport}
+    onNouvelleSession={nouvelleSessionVide}
+    onUtiliserDemo={utiliserDemo}
+    onImporterXlsx={importerFichier}
+    onImporterJson={importerEtat}
+    onExporterJson={exporterEtat}
+  />
 
-  <details class="sheet">
-    <summary>
-      <p class="eyebrow">Étape 1a · Personnes</p>
-      <h2>{inscriptions.personnes.length} personne(s) — dont {nbPersonnesLibres} sans engagement</h2>
-      <p class="hint">
-        Musiciens et chanteurs du stage. Un stagiaire sans groupe reste utilisable
-        comme renfort quand un groupe cherche son pupitre.
-      </p>
-    </summary>
-    <div class="body">
-      <table>
-        <thead>
-          <tr>
-            <th style="width:180px">Nom</th>
-            <th style="width:100px">Discriminant</th>
-            <th>Instruments</th>
-            <th style="width:110px">Rôle</th>
-            <th style="width:70px">Groupes</th>
-            <th style="width:40px"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each inscriptions.personnes as p}
-            {@const nGroupes = inscriptions.groupes.filter((g) => g.membres.some((m) => m.personne_id === p.id)).length}
-            <tr>
-              <td><input bind:value={p.nom} /></td>
-              <td><input bind:value={p.discriminant} placeholder="(B), R., L…" /></td>
-              <td>
-                {#each p.instruments as ins, ii}
-                  <span class="chip">
-                    <select bind:value={ins.pupitre} style="border:none;background:transparent;font-size:12.5px">
-                      {#each lieu.pupitres as pup}
-                        <option value={pup}>{pup}</option>
-                      {/each}
-                    </select>
-                    <input bind:value={ins.precision} placeholder="précision" style="width:100px;font-size:11px" />
-                    <button class="mini" onclick={() => supprimerInstrument(p.id, ii)}>×</button>
-                  </span>
-                {/each}
-                <button class="ghost mini-ajout" onclick={() => ajouterInstrument(p.id)}>+ instrument</button>
-              </td>
-              <td>
-                <select bind:value={p.role}>
-                  <option value="musicien">musicien</option>
-                  <option value="chanteur">chanteur</option>
-                  <option value="intervenant">intervenant</option>
-                </select>
-                {#if p.instruments.some((i) => i.pupitre === 'batterie')}
-                  <select
-                    value={p.lateralite ?? ''}
-                    onchange={(e) => {
-                      const v = (e.currentTarget as HTMLSelectElement).value
-                      p.lateralite = v === '' ? undefined : (v as 'droitier' | 'gaucher')
-                      solution = null
-                    }}
-                    style="margin-top:4px;font-size:11px"
-                    title="Latéralité (batteurs) — détermine les inversions de kit au concert"
-                  >
-                    <option value="">latéralité ?</option>
-                    <option value="droitier">droitier</option>
-                    <option value="gaucher">gaucher</option>
-                  </select>
-                {/if}
-              </td>
-              <td class="center mono">
-                {nGroupes}
-                {#if nGroupes === 0}<span class="tag-libre">libre</span>{/if}
-              </td>
-              <td class="center"><button class="mini" onclick={() => supprimerPersonne(p.id)}>×</button></td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-      <button class="ghost" onclick={ajouterPersonne}>+ Ajouter une personne</button>
-    </div>
-  </details>
+  <PersonnesEdit
+    {inscriptions}
+    {lieu}
+    {nbPersonnesLibres}
+    onAjouterPersonne={ajouterPersonne}
+    onSupprimerPersonne={supprimerPersonne}
+    onAjouterInstrument={ajouterInstrument}
+    onSupprimerInstrument={supprimerInstrument}
+    onInvalider={() => (solution = null)}
+  />
 
-  <details class="sheet">
-    <summary>
-      <p class="eyebrow">Étape 1b · Inscriptions</p>
-      <h2>{inscriptions.groupes.length} groupes, {inscriptions.personnes.length} musiciens</h2>
-      <p class="hint">
-        Édition inline titre / responsable / style / tonalité. Les membres se saisissent
-        via le classeur Excel importé — édition détaillée pupitre par pupitre à venir.
-      </p>
-    </summary>
-    <div class="body">
-      <table>
-        <thead>
-          <tr>
-            <th style="width:30px">N°</th>
-            <th style="width:200px">Titre</th>
-            <th style="width:110px">Resp.</th>
-            <th style="width:90px">Style</th>
-            <th style="width:55px">Tona</th>
-            <th>Membres</th>
-            <th style="width:65px" title="Répétitions déjà effectuées">Déjà fait</th>
-            <th style="width:40px"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each inscriptions.groupes as g, i}
-            <tr>
-              <td class="mono">{i + 1}</td>
-              <td><input bind:value={g.titre} /></td>
-              <td><input bind:value={g.responsable_id} /></td>
-              <td><input bind:value={g.style} /></td>
-              <td><input bind:value={g.tonalite} /></td>
-              <td>
-                {#each g.membres as m, mi}
-                  {@const p = personnesParId.get(m.personne_id)}
-                  <span class="chip">
-                    {p ? libellePersonne(p) : m.personne_id}
-                    <em>{m.pupitre}{m.precision ? ` · ${m.precision}` : ''}</em>
-                    <button
-                      class="mini"
-                      onclick={() => retirerMembre(g.id, mi)}
-                      title="Retirer ce membre du groupe"
-                    >×</button>
-                  </span>
-                {/each}
-                {#if g.postes_cherches.length > 0}
-                  {#each g.postes_cherches as pup}
-                    <span class="badge">cherche {pup}</span>
-                  {/each}
-                {/if}
-              </td>
-              <td class="center"><input type="number" min="0" max={session.repetitions_visees} bind:value={g.repetitions_deja_faites} style="width:60px" /></td>
-              <td class="center"><button class="mini" onclick={() => supprimerGroupe(i)}>×</button></td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-      <button class="ghost" onclick={ajouterGroupe}>+ Ajouter un groupe</button>
-    </div>
-  </details>
+  <InscriptionsEdit
+    {inscriptions}
+    {session}
+    {personnesParId}
+    onAjouterGroupe={ajouterGroupe}
+    onSupprimerGroupe={supprimerGroupe}
+    onRetirerMembre={retirerMembre}
+    onInvalider={() => (solution = null)}
+  />
 
-  <details class="sheet">
-    <summary>
-      <p class="eyebrow">Étape 1d · Indisponibilités déclarées</p>
-      <h2>{nbIndispoTotal} règle(s) d'indisponibilité</h2>
-      <p class="hint">
-        Créneaux où une personne ne peut pas être placée. Un rôle (chant, piano…)
-        restreint la règle à ce pupitre uniquement — utile pour un chanteur qui suit
-        un atelier de chant à 9h mais reste disponible pour son autre instrument.
-      </p>
-    </summary>
-    <div class="body">
-      {#each personnesAvecIndispo as p}
-        <div class="impose-bloc">
-          <div class="impose-titre">
-            <span class="strong">{libellePersonne(p)}</span>
-            <span class="mono ink-soft">{p.indispos.length} règle(s)</span>
-            <button class="ghost mini-ajout" onclick={() => ajouterIndispo(p.id)}>+ règle</button>
-          </div>
-          {#each p.indispos as ind, i}
-            <div class="restr">
-              <input
-                value={ind.jours.join(', ')}
-                oninput={(e) => {
-                  ind.jours = (e.currentTarget as HTMLInputElement).value
-                    .split(/[,;\s]+/)
-                    .map((s) => s.trim())
-                    .filter(Boolean)
-                  solution = null
-                }}
-                placeholder="jours ISO (vide = tous)"
-                style="flex:1;min-width:150px"
-              />
-              <input type="time" bind:value={ind.debut} placeholder="début" />
-              <span>→</span>
-              <input
-                type="time"
-                value={ind.fin ?? ''}
-                oninput={(e) => {
-                  const v = (e.currentTarget as HTMLInputElement).value
-                  ind.fin = v || undefined
-                  solution = null
-                }}
-                placeholder="fin (vide = match exact)"
-              />
-              <input
-                value={ind.roles.join(', ')}
-                oninput={(e) => {
-                  ind.roles = (e.currentTarget as HTMLInputElement).value
-                    .split(/[,;\s]+/)
-                    .map((s) => s.trim().toLowerCase())
-                    .filter(Boolean)
-                  solution = null
-                }}
-                placeholder="rôles (chant, piano… vide = tous)"
-                style="flex:1;min-width:120px"
-              />
-              <input bind:value={ind.motif} placeholder="motif" style="flex:1;min-width:120px" />
-              <button class="mini" onclick={() => supprimerIndispo(p.id, i)}>×</button>
-            </div>
-          {/each}
-        </div>
-      {/each}
-      {#if personnesSansIndispo.length > 0}
-        <details class="renforts" style="margin-top:14px">
-          <summary>
-            <span class="mono ink-soft">Ajouter une indispo à une personne sans règle ({personnesSansIndispo.length})</span>
-          </summary>
-          <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px">
-            {#each personnesSansIndispo as p}
-              <button class="ghost mini-ajout" onclick={() => ajouterIndispo(p.id)}>
-                {libellePersonne(p)}
-              </button>
-            {/each}
-          </div>
-        </details>
-      {/if}
-    </div>
-  </details>
+  <IndisposEdit
+    {personnesAvecIndispo}
+    {personnesSansIndispo}
+    {nbIndispoTotal}
+    onAjouterIndispo={ajouterIndispo}
+    onSupprimerIndispo={supprimerIndispo}
+    onInvalider={() => (solution = null)}
+  />
 
-  <details class="sheet">
-    <summary>
-      <p class="eyebrow">Étape 1c · Morceaux imposés</p>
-      <h2>{inscriptions.imposes.length} imposé(s)</h2>
-      <p class="hint">
-        Morceaux « obligatoires » du stage avec leurs séances de répétition déjà planifiées.
-        Les membres listés seront bloqués sur ces créneaux — le solveur en tient compte
-        pour les groupes volontaires qui les partagent.
-      </p>
-    </summary>
-    <div class="body">
-      {#each inscriptions.imposes as imp, i}
-        <div class="impose-bloc">
-          <div class="impose-titre">
-            <input bind:value={imp.morceau} class="strong" />
-            <span class="mono ink-soft">{imp.membres.length} membres</span>
-            <button class="mini" onclick={() => supprimerImpose(i)}>×</button>
-          </div>
-          <div class="chips">
-            {#each imp.membres as pid}
-              {@const p = personnesParId.get(pid)}
-              <span class="chip">{p ? libellePersonne(p) : pid}</span>
-            {/each}
-            {#if imp.membres.length === 0}<span class="ink-soft">aucun membre</span>{/if}
-          </div>
-          <table class="seances">
-            <thead>
-              <tr>
-                <th style="width:140px">Date</th>
-                <th style="width:110px">Début</th>
-                <th style="width:110px">Fin</th>
-                <th>Salle (info)</th>
-                <th style="width:40px"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each imp.seances as s, si}
-                <tr>
-                  <td><input type="date" bind:value={s.date} /></td>
-                  <td><input type="time" bind:value={s.debut} /></td>
-                  <td><input type="time" bind:value={s.fin} /></td>
-                  <td><input bind:value={s.salle_id} placeholder="XVème, Le Garage…" /></td>
-                  <td class="center">
-                    <button class="mini" onclick={() => supprimerSeance(i, si)}>×</button>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-          <button class="ghost mini-ajout" onclick={() => ajouterSeance(i)}>+ séance</button>
-        </div>
-      {/each}
-      <button class="ghost" onclick={ajouterImpose}>+ Ajouter un morceau imposé</button>
-    </div>
-  </details>
+  <ImposesEdit
+    {inscriptions}
+    {personnesParId}
+    onAjouterImpose={ajouterImpose}
+    onSupprimerImpose={supprimerImpose}
+    onAjouterSeance={ajouterSeance}
+    onSupprimerSeance={supprimerSeance}
+    onInvalider={() => (solution = null)}
+  />
 
-  <details class="sheet" open>
-    <summary>
-      <p class="eyebrow">Étape 2a · Lieu</p>
-      <h2>{lieu.nom}</h2>
-      <p class="hint">
-        {lieu.salles.filter((s) => s.actif).length} salle(s) active(s) sur {lieu.salles.length}.
-        Cliquer pour déplier / modifier.
-      </p>
-    </summary>
-    <div class="body">
-      <label class="line">
-        Nom du lieu <input bind:value={lieu.nom} />
-      </label>
-      <table>
-        <thead>
-          <tr>
-            <th>Salle</th>
-            <th style="width:80px">Jauge</th>
-            <th style="width:70px">Active</th>
-            <th>Restrictions horaires</th>
-            <th style="width:40px"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each lieu.salles as salle, i}
-            <tr>
-              <td><input bind:value={salle.nom} /></td>
-              <td><input type="number" min="1" bind:value={salle.jauge} /></td>
-              <td class="center"><input type="checkbox" bind:checked={salle.actif} /></td>
-              <td>
-                {#each salle.restrictions as res, ri}
-                  <div class="restr">
-                    <input type="time" bind:value={res.debut} />
-                    <span>→</span>
-                    <input type="time" bind:value={res.fin} />
-                    <select bind:value={res.contrainte}>
-                      <option value="interdit">fermée</option>
-                      <option value="acoustique_seulement">acoustique</option>
-                      <option value="pas_reduit">créneaux ≤</option>
-                    </select>
-                    {#if res.contrainte === 'pas_reduit'}
-                      <input
-                        type="number"
-                        min="5"
-                        max="180"
-                        step="5"
-                        bind:value={res.pas_max_minutes}
-                        placeholder="min"
-                        style="width:70px"
-                      />
-                      <span class="mono ink-soft">min</span>
-                    {/if}
-                    <input
-                      bind:value={res.motif}
-                      placeholder="motif (dortoirs, concert vendredi…)"
-                    />
-                    <button class="mini" onclick={() => supprimerRestriction(i, ri)}>×</button>
-                  </div>
-                  <div class="restr sub">
-                    <span class="ink-soft mono">jours&nbsp;:</span>
-                    <input
-                      value={res.jours.join(', ')}
-                      oninput={(e) => {
-                        const v = (e.currentTarget as HTMLInputElement).value
-                        res.jours = v
-                          .split(/[,;\s]+/)
-                          .map((s) => s.trim())
-                          .filter(Boolean)
-                        solution = null
-                      }}
-                      placeholder="tous par défaut — ou 2026-08-28, 2026-08-27…"
-                    />
-                  </div>
-                {/each}
-                <button class="ghost mini-ajout" onclick={() => ajouterRestriction(i)}>+ restriction</button>
-              </td>
-              <td class="center"><button class="mini" onclick={() => supprimerSalle(i)}>×</button></td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-      <button class="ghost" onclick={ajouterSalle}>+ Ajouter une salle</button>
-    </div>
-  </details>
+  <LieuEdit
+    {lieu}
+    onAjouterSalle={ajouterSalle}
+    onSupprimerSalle={supprimerSalle}
+    onAjouterRestriction={ajouterRestriction}
+    onSupprimerRestriction={supprimerRestriction}
+    onInvalider={() => (solution = null)}
+  />
 
-  <details class="sheet" open>
-    <summary>
-      <p class="eyebrow">Étape 2b · Session</p>
-      <h2>{session.nom}</h2>
-      <p class="hint">
-        {session.date_debut} → {session.date_fin}, butoir {session.date_butoir} {session.butoir_heure}.
-        {session.grille.filter((r) => !r.bloque).length} règle(s) créatrice(s),
-        {session.grille.filter((r) => r.bloque).length} règle(s) de blocage —
-        <b>{creneaux.length}</b> créneaux générés.
-      </p>
-    </summary>
-    <div class="body">
-      <label class="line">
-        Nom de session <input bind:value={session.nom} />
-      </label>
-      <div class="fields">
-        <label>Début <input type="date" bind:value={session.date_debut} /></label>
-        <label>Fin <input type="date" bind:value={session.date_fin} /></label>
-        <label>Butoir <input type="date" bind:value={session.date_butoir} /></label>
-        <label>Butoir heure <input type="time" bind:value={session.butoir_heure} /></label>
-        <label>Répétitions visées <input type="number" min="1" max="10" bind:value={session.repetitions_visees} /></label>
-        <label>Minimum acceptable <input type="number" min="1" max="10" bind:value={session.repetitions_min} /></label>
-        <label>
-          Marge d'occupation ({session.marge_pct}%)
-          <input type="range" min="0" max="50" step="5" bind:value={session.marge_pct} />
-        </label>
-      </div>
-      <p class="hint" style="margin:6px 0 0;font-size:12.5px">
-        <b>Marge {session.marge_pct}%</b> — le solveur ne remplira pas plus de
-        {100 - session.marge_pct}% des salles disponibles à chaque créneau. À 0%,
-        il peut saturer à 100% (moins de tolérance aux imprévus).
-      </p>
-      <h3>Grille de créneaux</h3>
-      <p class="hint">
-        Chaque règle génère des créneaux sur les jours ciblés (colonne <b>Jours</b> —
-        vide = tous les jours de la session). Accepte des dates ISO (<code>2026-08-26</code>)
-        ou des noms de jour FR (<code>mercredi</code>, <code>lundi</code>…).
-        « Bloque » retire les créneaux qui tombent dans la plage. Pour minuit, saisis
-        <code>24:00</code> plutôt que <code>00:00</code> (mieux compris par le solveur).
-      </p>
-      <table>
-        <thead>
-          <tr>
-            <th>Jours (ISO, CSV)</th>
-            <th style="width:110px">Début</th>
-            <th style="width:110px">Fin</th>
-            <th style="width:80px">Pas (min)</th>
-            <th style="width:80px">Bloque</th>
-            <th style="width:40px"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each session.grille as regle, i}
-            <tr>
-              <td>
-                <input
-                  value={regle.jours.join(', ')}
-                  oninput={(e) => {
-                    regle.jours = (e.currentTarget as HTMLInputElement).value
-                      .split(/[,;\s]+/)
-                      .map((s) => s.trim())
-                      .filter(Boolean)
-                    solution = null
-                  }}
-                  placeholder="tous les jours"
-                />
-              </td>
-              <td><input type="time" bind:value={regle.debut} /></td>
-              <td><input type="time" bind:value={regle.fin} /></td>
-              <td><input type="number" min="10" max="240" step="15" bind:value={regle.pas_minutes} /></td>
-              <td class="center"><input type="checkbox" bind:checked={regle.bloque} /></td>
-              <td class="center"><button class="mini" onclick={() => supprimerRegle(i)}>×</button></td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-      <button class="ghost" onclick={ajouterRegle}>+ Ajouter une règle</button>
-    </div>
-  </details>
+  <SessionEdit
+    {session}
+    nbCreneaux={creneaux.length}
+    onAjouterRegle={ajouterRegle}
+    onSupprimerRegle={supprimerRegle}
+    onInvalider={() => (solution = null)}
+  />
 
-  <details class="sheet">
-    <summary>
-      <p class="eyebrow">Étape 2c · Contraintes</p>
-      <h2>Règles activées</h2>
-      <p class="hint">
-        {Object.values(contraintesActives).filter(Boolean).length} / {REGISTRE_TOUT.length}
-        contraintes actives. Désactive une règle pour tester ce qui bloque.
-      </p>
-    </summary>
-    <div class="body">
-      {#each REGISTRE_TOUT as id}
-        <label class="check">
-          <input type="checkbox" bind:checked={contraintesActives[id]} />
-          <span>{LIBELLE_CONTRAINTE[id]}</span>
-          <code>{id}</code>
-        </label>
-      {/each}
-    </div>
-  </details>
+  <Contraintes
+    {contraintesActives}
+    libelles={LIBELLE_CONTRAINTE}
+    onToggle={(id, actif) => (contraintesActives = { ...contraintesActives, [id]: actif })}
+  />
 
   <section class="sheet">
     <p class="eyebrow">Étape 3 · Placement</p>
