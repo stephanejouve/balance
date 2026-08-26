@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { MappingStagiaires } from './stagiaires-adapter'
 import { extraireStagiaires, parserIndispoLibre } from './stagiaires-adapter'
 
+/** Mapping complet (utilisé quand toutes les colonnes optionnelles sont
+ *  présentes dans le classeur — sinon un warning est émis par colonne
+ *  configurée mais introuvable). */
 const MAPPING: MappingStagiaires = {
   colonneNom: 'Nom',
   colonnePupitrePrincipal: 'Pupitre',
@@ -17,11 +20,16 @@ describe('extraireStagiaires', () => {
       ['Nom', 'Pupitre'],
       ['Alice', 'chant'],
     ]
-    const { personnes, warnings } = extraireStagiaires(rows, MAPPING)
+    const { personnes, warnings } = extraireStagiaires(rows, {
+      colonneNom: 'Nom',
+      colonnePupitrePrincipal: 'Pupitre',
+    })
     expect(warnings).toEqual([])
     expect(personnes).toHaveLength(1)
     expect(personnes[0].nom).toBe('Alice')
-    expect(personnes[0].instruments).toEqual([{ pupitre: 'chant', precision: undefined }])
+    expect(personnes[0].instruments).toEqual([
+      { pupitre: 'chant', precision: undefined, lourd: false },
+    ])
     expect(personnes[0].indispos).toEqual([])
   })
 
@@ -30,7 +38,7 @@ describe('extraireStagiaires', () => {
       ['Nom', 'Pupitre'],
       ['Emma (B)', 'chant'],
     ]
-    const { personnes } = extraireStagiaires(rows, MAPPING)
+    const { personnes } = extraireStagiaires(rows, { colonneNom: 'Nom', colonnePupitrePrincipal: 'Pupitre' })
     expect(personnes[0].nom).toBe('Emma')
     expect(personnes[0].discriminant).toBe('(B)')
     expect(personnes[0].id).toBe('emma-b')
@@ -41,7 +49,11 @@ describe('extraireStagiaires', () => {
       ['Nom', 'Pupitre', 'Pupitres additionnels'],
       ['Prune', 'piano', 'basse, guitare'],
     ]
-    const { personnes } = extraireStagiaires(rows, MAPPING)
+    const { personnes } = extraireStagiaires(rows, {
+      colonneNom: 'Nom',
+      colonnePupitrePrincipal: 'Pupitre',
+      colonnePupitresAdditionnels: 'Pupitres additionnels',
+    })
     expect(personnes[0].instruments.map((i) => i.pupitre)).toEqual(['piano', 'basse', 'guitare'])
   })
 
@@ -52,7 +64,11 @@ describe('extraireStagiaires', () => {
       ['Ben', 'batterie', 'gauche'],
       ['Dan', 'batterie', 'D'],
     ]
-    const { personnes, warnings } = extraireStagiaires(rows, MAPPING)
+    const { personnes, warnings } = extraireStagiaires(rows, {
+      colonneNom: 'Nom',
+      colonnePupitrePrincipal: 'Pupitre',
+      colonneLateralite: 'Latéralité',
+    })
     expect(personnes[0].lateralite).toBeUndefined()
     expect(warnings.some((w) => w.includes('gauchère'))).toBe(true)
     expect(personnes[1].lateralite).toBe('gaucher')
@@ -65,9 +81,80 @@ describe('extraireStagiaires', () => {
       ['Alice', 'chant'],
       ['Alice', 'piano'],
     ]
-    const { personnes, warnings } = extraireStagiaires(rows, MAPPING)
+    const { personnes, warnings } = extraireStagiaires(rows, {
+      colonneNom: 'Nom',
+      colonnePupitrePrincipal: 'Pupitre',
+    })
     expect(personnes).toHaveLength(1)
     expect(warnings.some((w) => w.includes('doublon'))).toBe(true)
+  })
+})
+
+describe('extraireStagiaires — validation (nouveau)', () => {
+  it("warn quand une colonne optionnelle configurée est absente de l'en-tête", () => {
+    const rows: unknown[][] = [
+      ['Nom', 'Pupitre'], // pas de « Latéralité » ni « Indispos »
+      ['Alice', 'chant'],
+    ]
+    const { warnings } = extraireStagiaires(rows, MAPPING)
+    expect(warnings.some((w) => w.includes('Latéralité') && w.includes('introuvable'))).toBe(true)
+    expect(warnings.some((w) => w.includes('Indispos') && w.includes('introuvable'))).toBe(true)
+    // Colonnes présentes → pas de warning
+    expect(warnings.some((w) => w.includes('« Pupitre »') && w.includes('introuvable'))).toBe(false)
+  })
+
+  it('warn quand un pupitre n\'est pas dans PUPITRES_DEFAULTS (typo)', () => {
+    const rows: unknown[][] = [
+      ['Nom', 'Pupitre'],
+      ['Alice', 'guitar'], // typo — attendu 'guitare'
+    ]
+    const { personnes, warnings } = extraireStagiaires(rows, {
+      colonneNom: 'Nom',
+      colonnePupitrePrincipal: 'Pupitre',
+    })
+    expect(warnings.some((w) => w.includes('guitar') && w.includes('non reconnu'))).toBe(true)
+    // La personne est toujours créée — la validation est un warning, pas un blocage
+    expect(personnes).toHaveLength(1)
+  })
+
+  it('accepte les pupitres customs via `pupitresValides`', () => {
+    const rows: unknown[][] = [
+      ['Nom', 'Pupitre'],
+      ['Alice', 'accordeon'],
+    ]
+    const { warnings } = extraireStagiaires(
+      rows,
+      { colonneNom: 'Nom', colonnePupitrePrincipal: 'Pupitre' },
+      ['chant', 'piano', 'basse', 'batterie', 'guitare', 'vents', 'accordeon'],
+    )
+    expect(warnings.some((w) => w.includes('non reconnu'))).toBe(false)
+  })
+
+  it('warn stagiaire sans aucun pupitre déclaré', () => {
+    const rows: unknown[][] = [
+      ['Nom', 'Pupitre'],
+      ['Alice', ''],
+    ]
+    const { personnes, warnings } = extraireStagiaires(rows, {
+      colonneNom: 'Nom',
+      colonnePupitrePrincipal: 'Pupitre',
+    })
+    expect(warnings.some((w) => w.includes('aucun pupitre'))).toBe(true)
+    // La personne est créée sans instrument — le solveur ne pourra pas la placer
+    expect(personnes[0].instruments).toEqual([])
+  })
+
+  it('marque `lourd: false` par défaut sur chaque instrument créé', () => {
+    const rows: unknown[][] = [
+      ['Nom', 'Pupitre', 'Pupitres additionnels'],
+      ['Prune', 'piano', 'basse'],
+    ]
+    const { personnes } = extraireStagiaires(rows, {
+      colonneNom: 'Nom',
+      colonnePupitrePrincipal: 'Pupitre',
+      colonnePupitresAdditionnels: 'Pupitres additionnels',
+    })
+    expect(personnes[0].instruments.every((i) => i.lourd === false)).toBe(true)
   })
 })
 
