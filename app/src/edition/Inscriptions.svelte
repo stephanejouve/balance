@@ -54,19 +54,34 @@
             <td><input bind:value={g.style} onchange={onInvalider} /></td>
             <td><input bind:value={g.tonalite} onchange={onInvalider} /></td>
             <td>
-              {#each g.membres as m, mi}
-                {@const p = personnesParId.get(m.personne_id)}
-                <span class="chip">
-                  {p ? libellePersonne(p) : m.personne_id}
-                  <em>{m.pupitre}{m.precision ? ` · ${m.precision}` : ''}</em>
-                  <button class="mini" onclick={() => onRetirerMembre(g.id, mi)} title="Retirer ce membre du groupe">×</button>
-                </span>
-              {/each}
-              {#if g.postes_cherches.length > 0}
-                {#each g.postes_cherches as pup}
-                  <span class="badge">cherche {pup}</span>
-                {/each}
-              {/if}
+              <details class="membres-drop">
+                <summary>
+                  <span class="mono">{g.membres.length}</span>
+                  membre{g.membres.length > 1 ? 's' : ''}
+                  {#if g.membres.length > 0}
+                    <span class="ink-soft">·</span>
+                    <span class="ink-soft">{g.membres.map((m) => m.pupitre).join(', ')}</span>
+                  {/if}
+                  {#if g.postes_cherches.length > 0}
+                    <span class="badge">cherche {g.postes_cherches.join(', ')}</span>
+                  {/if}
+                </summary>
+                <div class="membres-list">
+                  {#each g.membres as m, mi}
+                    {@const p = personnesParId.get(m.personne_id)}
+                    <span class="chip">
+                      {p ? libellePersonne(p) : m.personne_id}
+                      <em>{m.pupitre}{m.precision ? ` · ${m.precision}` : ''}</em>
+                      <button class="mini" onclick={() => onRetirerMembre(g.id, mi)} title="Retirer ce membre du groupe">×</button>
+                    </span>
+                  {/each}
+                  {#if g.postes_cherches.length > 0}
+                    {#each g.postes_cherches as pup}
+                      <span class="badge">cherche {pup}</span>
+                    {/each}
+                  {/if}
+                </div>
+              </details>
             </td>
             <td class="center">
               <input type="number" min="0" max={session.repetitions_visees} bind:value={g.repetitions_deja_faites} onchange={onInvalider} style="width:60px" />
@@ -79,3 +94,42 @@
     <button class="ghost" onclick={onAjouterGroupe}>+ Ajouter un groupe</button>
   </div>
 </details>
+
+<style>
+  .membres-drop {
+    margin: 0;
+  }
+  .membres-drop > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 13px;
+  }
+  .membres-drop > summary::-webkit-details-marker {
+    display: none;
+  }
+  .membres-drop > summary::before {
+    content: '▸';
+    display: inline-block;
+    width: 12px;
+    color: var(--ink-soft, #888);
+    transition: transform 0.15s;
+  }
+  .membres-drop[open] > summary::before {
+    transform: rotate(90deg);
+  }
+  .membres-drop > summary:hover {
+    background: rgba(0, 0, 0, 0.04);
+  }
+  .membres-list {
+    padding: 8px 0 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+</style>
