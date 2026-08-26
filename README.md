@@ -20,6 +20,124 @@ entre les salles.
 - Inclut un conducteur du spectacle avec minutage, mouvements de plateau,
   inversions de kit et programmation par style
 
+## Concepts clés
+
+### Pupitre vs precision
+
+Chaque musicien déclare un ou plusieurs **instruments**. Chaque instrument a
+deux champs :
+
+- **`pupitre`** — la catégorie que le solveur connaît. 6 par défaut, éditables
+  par lieu : `chant`, `piano`, `basse`, `batterie`, `guitare`, `vents`.
+- **`precision`** — le libellé exact de l'instrument, facultatif.
+
+**Règle simple** : *si le pupitre décrit déjà bien l'instrument, laisse la
+precision vide*. Utilise-la quand le pupitre est trop large (les « vents »
+regroupent bois, cuivres, saxos…) ou quand tu veux distinguer une variante
+(contrebasse vs basse électrique).
+
+| Cas | Pupitre | Precision |
+|---|---|---|
+| Un pianiste standard | `piano` | *(vide)* |
+| Un guitariste standard | `guitare` | *(vide)* |
+| Une contrebassiste | `basse` | `contrebasse` |
+| Un clarinettiste basse | `vents` | `clarinette basse` |
+| Un saxophoniste alto | `vents` | `sax alto` |
+| Une flûtiste | `vents` | `flûte traversière` |
+
+**Comment c'est utilisé** :
+
+- **Par le solveur** : uniquement le `pupitre`. Deux musiciens qui partagent un
+  pupitre sont interchangeables du point de vue placement. Les indisponibilités
+  ciblées par rôle (« indispo en chant à 9h ») travaillent aussi au niveau
+  pupitre — pas de ciblage plus fin en v1.
+- **Par les humains** : la `precision` s'affiche partout où on parle du
+  musicien — chips membres, feuille de route imprimée, exports CSV et XLSX.
+  Le musicien sait *quel* instrument amener.
+
+**Cas typique — une personne polyvalente** :
+
+```json
+{
+  "nom": "Prune",
+  "instruments": [
+    { "pupitre": "piano" },
+    { "pupitre": "basse", "precision": "contrebasse" }
+  ]
+}
+```
+
+Le solveur voit deux compétences (piano, basse). L'affichage montre « Prune
+au piano » ou « Prune à la contrebasse » selon le morceau.
+
+À l'import Excel, la precision est remplie automatiquement quand un nom entre
+parenthèses ne matche pas un pupitre standard : `Cédric (sax sop)` devient
+`pupitre: vents, precision: "sax sop"`.
+
+### Format du classeur Excel d'entrée
+
+Balance lit un onglet nommé **`Liste`** dans le classeur `.xlsx`. Convention
+héritée de la feuille papier utilisée sur place — une ligne par morceau, une
+colonne par pupitre.
+
+**Colonnes attendues** (le mapping par défaut peut être adapté) :
+
+| Colonne | Rôle | Obligatoire |
+|---|---|---|
+| `Morceau` | Titre du morceau | ✓ |
+| `Auteur` | Auteur / compositeur | facultatif |
+| `Style` | Genre (Jazz, Rock, Latin…) | facultatif |
+| `Tona` | Tonalité (`C`, `Bb`, `A-`…) | facultatif |
+| `Resp` | Responsable du groupe | facultatif |
+| `Cherche` | Postes à pourvoir en libellé libre | facultatif |
+| `Chant`, `Piano`, `Basse`, `Batterie`, `Guitare`, `Vents` | Un pupitre chacune | au moins un |
+
+**Ce qu'on met dans une cellule pupitre** :
+
+- **vide** — pas de personne à ce pupitre pour ce morceau (par défaut)
+- **`NON`** — explicitement pas ce pupitre (équivalent à vide, plus lisible)
+- **`CHERCHE`** — poste à pourvoir → apparaîtra dans `postes_cherches`, les
+  renforts compatibles seront suggérés dans l'UI
+- **Un nom** — la personne joue à ce pupitre : `Alice`, `Éric`
+- **Plusieurs noms** séparés par virgules — plusieurs personnes au même pupitre :
+  `Emma, Bianca` (deux chanteuses)
+- **Nom + instrument entre parenthèses** — precise l'instrument :
+  `Colette (contrebasse)` → pupitre `basse`, precision `contrebasse`
+- **Nom + discriminant entre parenthèses (non-instrument)** — pour distinguer
+  des homonymes : `Pierre (SIG)` et `Pierre (L)` sont deux personnes différentes
+
+**Exemple concret** (colonnes ordinaires + les 6 pupitres) :
+
+| Morceau | Auteur | Style | Tona | Resp | Chant | Piano | Basse | Batterie | Guitare | Vents |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Love | Nat King Cole | Jazz |  | Emma | Emma (B), Bianca (B) | Prune | Rose | CHERCHE | Cyril | Serge |
+| Autumn Leaves | Cosma | Jazz | Bb | Karl | Léa | Karl | Prune (contrebasse) | Zoltan (SIG) | NON | Cédric (sax alto) |
+| Boys Don't Cry | The Cure | Rock |  | Adrien | Adrien, Damien | Hector | Fabien | Gaspard | Basile |  |
+
+Ce que Balance en tire, pour la première ligne :
+
+- Morceau **Love**, style Jazz, responsable Emma
+- 6 membres : Emma (B) au chant, Bianca (B) au chant, Prune au piano, Rose à
+  la basse, Cyril à la guitare, Serge aux vents
+- Poste **batterie** cherché → les batteurs libres seront suggérés en renforts
+- `Emma (B)` et `Bianca (B)` = deux personnes distinctes (discriminants `(B)`
+  différents ; utile parce que ce sont deux Emma / Beate homonymes dans
+  d'autres morceaux)
+
+Pour la troisième ligne, `Zoltan (SIG)` sera reconnu comme un homonyme de
+`Zoltan (L)` s'il apparaît ailleurs — Balance les traite comme deux batteurs
+différents.
+
+**Cas d'usage typique** :
+
+1. Tu duplicates ton classeur habituel, tu vérifies que l'onglet s'appelle
+   `Liste` et que les colonnes matchent (renomme au besoin)
+2. Dans Balance : **« Étape 1 · Source »** → **« Importer .xlsx… »**
+3. L'UI affiche le nombre de groupes lus + les éventuels avertissements
+   (colonne manquante, cellule ambiguë)
+4. Tu peux ensuite éditer inline dans **« Étape 1b · Inscriptions »** avant
+   de lancer la répartition
+
 ## Cible technique
 
 Un **fichier HTML unique** (`balance.html`) ouvrable par double-clic sur PC, Mac
