@@ -34,17 +34,19 @@ export async function exporterClasseurExcel(
 ): Promise<void> {
   const sheets = [
     {
-      name: 'Par groupe',
+      sheet: 'Par groupe',
       data: toSheetData(tableauParGroupe(session, lieu, inscriptions, creneaux, assignations)),
     },
     {
-      name: 'Résa salles',
+      sheet: 'Résa salles',
       data: toSheetData(tableauParSalle(lieu, inscriptions, creneaux, assignations)),
     },
     {
-      name: 'Par musicien',
+      sheet: 'Par musicien',
       data: toSheetData(tableauParMusicien(lieu, inscriptions, creneaux, assignations)),
     },
   ]
-  await writeXlsxFile(sheets, { fileName: nomFichier })
+  // API v4 : `.toFile(name)` explicite au lieu de `{ fileName }` en options.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (writeXlsxFile as any)(sheets).toFile(nomFichier)
 }
