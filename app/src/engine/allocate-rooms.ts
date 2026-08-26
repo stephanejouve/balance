@@ -1,5 +1,7 @@
 import type { Creneau } from '../domain/grille'
-import type { Inscriptions, Lieu } from '../domain/model'
+import type { Inscriptions, Lieu, Pupitre } from '../domain/model'
+import type { RegistreContraintes } from './contraintes'
+import { actif } from './contraintes'
 import type { PlacementItem } from './solver'
 import type { Assignation } from './types'
 import { salleRestreinte } from './verify'
@@ -18,6 +20,13 @@ import { salleRestreinte } from './verify'
  */
 
 const SEUIL_GRAND_GROUPE = 6
+/**
+ * Coût ajouté à une salle candidate quand elle ferait « voyager » un musicien
+ * lourd de plus (i.e. c'est une nouvelle salle pour lui, alors qu'il en a déjà
+ * une). Volontairement supérieur à `100` (coût "déjà vue") pour que la
+ * stabilité l'emporte sur la rotation esthétique.
+ */
+const COUT_SALLE_NOUVELLE_LOURD = 140
 
 export interface AttribuerOptions {
   seuil_grand_groupe?: number
@@ -27,6 +36,9 @@ export interface AttribuerOptions {
    * qu'elles occupent est aussi retirée du pool disponible sur leur créneau.
    */
   figees?: readonly Assignation[]
+  /** Registre des contraintes actives — utilisé pour la stabilité salle des
+   *  musiciens à instrument lourd (préférence `preference-salle-stable-lourd`). */
+  registre?: RegistreContraintes
 }
 
 export function attribuerSalles(
@@ -37,15 +49,53 @@ export function attribuerSalles(
   options: AttribuerOptions = {},
 ): Assignation[] {
   const seuilGrand = options.seuil_grand_groupe ?? SEUIL_GRAND_GROUPE
+  const reg = options.registre
   const groupesParId = new Map(inscriptions.groupes.map((g) => [g.id, g]))
   const creneauxParId = new Map(creneaux.map((c) => [c.id, c]))
   const sallesParId = new Map(lieu.salles.map((s) => [s.id, s]))
   const sallesActives = new Set(lieu.salles.filter((s) => s.actif).map((s) => s.id))
 
+  // Précalcule les pupitres marqués « lourds » pour chaque personne : on
+  // scorera la stabilité de salle uniquement quand la personne joue son
+  // instrument lourd dans le groupe considéré (ex. Prune est lourde en
+  // contrebasse mais pas quand elle est au piano).
+  const pupitresLourdsParPersonne = new Map<string, Set<Pupitre>>()
+  for (const p of inscriptions.personnes) {
+    const set = new Set<Pupitre>()
+    for (const ins of p.instruments) if (ins.lourd) set.add(ins.pupitre)
+    if (set.size > 0) pupitresLourdsParPersonne.set(p.id, set)
+  }
+  const stabiliteLourdActive =
+    actif(reg, 'preference-salle-stable-lourd') && pupitresLourdsParPersonne.size > 0
+
+  // Salles déjà utilisées par une personne lourde (toutes ses répés cumulées,
+  // tous groupes confondus). Sert à pénaliser une salle « nouvelle » pour elle.
+  const sallesParPersonneLourd = new Map<string, Set<string>>()
+
   const taille = (gid: string): number => {
     const g = groupesParId.get(gid)
     if (!g) return 0
     return new Set(g.membres.map((m) => m.personne_id)).size
+  }
+
+  /** Personnes du groupe qui jouent un instrument marqué lourd sur ce morceau. */
+  const personnesLourdesDuGroupe = (gid: string): string[] => {
+    const g = groupesParId.get(gid)
+    if (!g) return []
+    const out = new Set<string>()
+    for (const m of g.membres) {
+      const lourds = pupitresLourdsParPersonne.get(m.personne_id)
+      if (lourds && lourds.has(m.pupitre)) out.add(m.personne_id)
+    }
+    return [...out]
+  }
+
+  const marquerLourdsSurSalle = (gid: string, salleId: string) => {
+    if (!stabiliteLourdActive) return
+    for (const pid of personnesLourdesDuGroupe(gid)) {
+      if (!sallesParPersonneLourd.has(pid)) sallesParPersonneLourd.set(pid, new Set())
+      sallesParPersonneLourd.get(pid)!.add(salleId)
+    }
   }
 
   const parCreneau = new Map<string, string[]>()
@@ -76,6 +126,7 @@ export function attribuerSalles(
     dernier.set(f.groupe_id, { date: c.date, fin: c.fin, salle: f.salle_id })
     if (!dejaVues.has(f.groupe_id)) dejaVues.set(f.groupe_id, new Set())
     dejaVues.get(f.groupe_id)!.add(f.salle_id)
+    marquerLourdsSurSalle(f.groupe_id, f.salle_id)
   }
 
   const cids = [...parCreneau.keys()].sort((a, b) => {
@@ -123,6 +174,7 @@ export function attribuerSalles(
         if (!dejaVues.has(gid)) dejaVues.set(gid, new Set())
         dejaVues.get(gid)!.add(d.salle)
         dernier.set(gid, { date: creneau.date, fin: creneau.fin, salle: d.salle })
+        marquerLourdsSurSalle(gid, d.salle)
         continue
       }
 
@@ -133,6 +185,9 @@ export function attribuerSalles(
       })
       if (cands.length === 0) continue // pas de salle possible : le groupe est perdu
 
+      // Personnes lourdes du groupe (calcul une seule fois par (groupe, créneau)).
+      const lourdsGroupe = stabiliteLourdActive ? personnesLourdesDuGroupe(gid) : []
+
       const scored = cands.map((sid) => {
         const s = sallesParId.get(sid)!
         let cost = 0
@@ -140,6 +195,16 @@ export function attribuerSalles(
         if (!grand && s.jauge >= seuilGrand + 4) cost += 6
         // léger bonus pour attribuer les grandes salles aux grands groupes
         if (grand && s.jauge < seuilGrand + 2) cost += 4
+        // Stabilité salle des musiciens lourds : coût par personne lourde
+        // pour qui cette salle serait nouvelle (au-delà de sa 1ʳᵉ). La 1ʳᵉ
+        // salle est gratuite (il faut bien commencer quelque part).
+        if (lourdsGroupe.length > 0) {
+          for (const pid of lourdsGroupe) {
+            const dejaSalles = sallesParPersonneLourd.get(pid)
+            if (!dejaSalles || dejaSalles.size === 0) continue // 1ʳᵉ répé
+            if (!dejaSalles.has(sid)) cost += COUT_SALLE_NOUVELLE_LOURD
+          }
+        }
         return { sid, cost }
       })
       scored.sort((a, b) => a.cost - b.cost)
@@ -150,6 +215,7 @@ export function attribuerSalles(
       if (!dejaVues.has(gid)) dejaVues.set(gid, new Set())
       dejaVues.get(gid)!.add(chosen)
       dernier.set(gid, { date: creneau.date, fin: creneau.fin, salle: chosen })
+      marquerLourdsSurSalle(gid, chosen)
     }
   }
 

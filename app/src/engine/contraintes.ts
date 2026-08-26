@@ -36,6 +36,9 @@ export type IdContrainte =
   | 'preference-repos-musicien-12h'
   /** Préférence : éviter qu'un musicien ait toutes ses répés en soirée. */
   | 'preference-equilibre-tardif'
+  /** Préférence : regrouper les répés d'une personne qui joue un instrument lourd
+   *  (contrebasse, ampli lourd…) dans la même salle. Évite de trimballer. */
+  | 'preference-salle-stable-lourd'
 
 export interface RegistreContraintes {
   actives: Set<IdContrainte>
@@ -59,6 +62,7 @@ export const REGISTRE_TOUT: readonly IdContrainte[] = [
   'preference-espacement-12h',
   'preference-repos-musicien-12h',
   'preference-equilibre-tardif',
+  'preference-salle-stable-lourd',
 ]
 
 export function registreDefaut(): RegistreContraintes {

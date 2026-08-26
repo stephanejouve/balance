@@ -163,6 +163,7 @@
     'preference-espacement-12h': '≥ 12 h entre deux répétitions d\'un même morceau (prioritaire)',
     'preference-repos-musicien-12h': '≥ 12 h de repos entre deux engagements d\'un même musicien (secondaire)',
     'preference-equilibre-tardif': 'Éviter qu\'un musicien ait toutes ses répés en soirée',
+    'preference-salle-stable-lourd': 'Regrouper les répés d\'un musicien à instrument lourd (contrebasse…) dans la même salle',
   }
 
   const creneaux = $derived.by(() => {
@@ -440,7 +441,7 @@
       registre,
       figees,
     })
-    const assignations = attribuerSalles(placement, lieu, inscEnrichies, creneaux, { figees })
+    const assignations = attribuerSalles(placement, lieu, inscEnrichies, creneaux, { figees, registre })
     const problemes = verifier(session, lieu, inscEnrichies, creneaux, assignations, registre)
     const cov = couverture(session, inscEnrichies, assignations)
     const diagnostics = diagnostiquer(session, inscriptions, creneaux, placement)
@@ -963,6 +964,10 @@
     {contraintesActives}
     libelles={LIBELLE_CONTRAINTE}
     onToggle={(id, actif) => (contraintesActives = { ...contraintesActives, [id]: actif })}
+    onReplace={(nouv) => {
+      contraintesActives = nouv
+      solution = null
+    }}
   />
 
   <section class="sheet">

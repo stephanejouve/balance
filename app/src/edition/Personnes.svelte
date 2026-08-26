@@ -53,13 +53,17 @@
             <td><input bind:value={p.discriminant} onchange={onInvalider} placeholder="(B), R., L…" /></td>
             <td>
               {#each p.instruments as ins, ii}
-                <span class="chip">
+                <span class="chip" class:chip-lourd={ins.lourd}>
                   <select bind:value={ins.pupitre} onchange={onInvalider} style="border:none;background:transparent;font-size:12.5px">
                     {#each lieu.pupitres as pup}
                       <option value={pup}>{pup}</option>
                     {/each}
                   </select>
                   <input bind:value={ins.precision} onchange={onInvalider} placeholder="précision" style="width:100px;font-size:11px" />
+                  <label class="mini-lourd" title="Instrument lourd / difficile à déplacer — le solveur préfère alors regrouper les répés dans la même salle">
+                    <input type="checkbox" bind:checked={ins.lourd} onchange={onInvalider} />
+                    lourd
+                  </label>
                   <button class="mini" onclick={() => onSupprimerInstrument(p.id, ii)}>×</button>
                 </span>
               {/each}
@@ -100,3 +104,24 @@
     <button class="ghost" onclick={onAjouterPersonne}>+ Ajouter une personne</button>
   </div>
 </details>
+
+<style>
+  .mini-lourd {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10.5px;
+    color: var(--ink-soft, #888);
+    cursor: pointer;
+    user-select: none;
+  }
+  .mini-lourd input[type='checkbox'] {
+    margin: 0;
+    transform: scale(0.85);
+    accent-color: #b45309;
+  }
+  .chip-lourd {
+    background: linear-gradient(180deg, rgba(180, 83, 9, 0.08), rgba(180, 83, 9, 0.03));
+    border-color: rgba(180, 83, 9, 0.35) !important;
+  }
+</style>

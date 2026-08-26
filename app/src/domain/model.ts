@@ -38,6 +38,13 @@ export const Instrument = z.object({
   pupitre: Pupitre,
   /** Précision libre (ex. « clarinette basse », « contrebasse ») — facultative. */
   precision: z.string().optional(),
+  /**
+   * Instrument encombrant / difficile à déplacer (contrebasse, ampli lourd, kit
+   * atypique…). Le solveur préfère alors regrouper les répétitions de cette
+   * personne (pour cet instrument-là) dans une même salle — évite de trimballer
+   * l'instrument à travers le lieu à chaque changement de créneau.
+   */
+  lourd: z.boolean().default(false),
 })
 export type Instrument = z.infer<typeof Instrument>
 
