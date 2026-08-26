@@ -474,7 +474,13 @@
       registre,
       figees,
     })
-    const assignations = attribuerSalles(placement, lieu, inscEnrichies, creneaux, { figees, registre })
+    const { assignations, groupesPerdus } = attribuerSalles(
+      placement,
+      lieu,
+      inscEnrichies,
+      creneaux,
+      { figees, registre },
+    )
     const problemes = verifier(session, lieu, inscEnrichies, creneaux, assignations, registre)
     const cov = couverture(session, inscEnrichies, assignations)
     const diagnostics = diagnostiquer(session, inscriptions, creneaux, placement)
@@ -483,6 +489,7 @@
       problemes,
       couverture: cov,
       diagnostics,
+      groupesPerdus,
       duree_ms: Math.round(performance.now() - t0),
     }
     ordreConducteur = ordonnerConcert(inscriptions.groupes).etapes
@@ -1064,6 +1071,18 @@
         </div>
       {:else}
         <div class="msg ok">Aucun conflit détecté par la vérification indépendante.</div>
+      {/if}
+      {#if solution.groupesPerdus && solution.groupesPerdus.length > 0}
+        <div class="msg warn">
+          <b>Groupes non logés :</b> {solution.groupesPerdus.length} groupe(s) placé(s) horairement
+          mais l'attribution des salles n'a pas trouvé de place — jauge ou concurrence.
+          <ul>
+            {#each solution.groupesPerdus.slice(0, 8) as gp}<li>{gp.raison}</li>{/each}
+            {#if solution.groupesPerdus.length > 8}
+              <li>… et {solution.groupesPerdus.length - 8} autres</li>
+            {/if}
+          </ul>
+        </div>
       {/if}
       {#if solution.diagnostics.length > 0}
         <div class="msg warn">

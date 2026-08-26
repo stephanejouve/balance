@@ -3,7 +3,7 @@ import type { Inscriptions, Lieu, Pupitre } from '../domain/model'
 import type { RegistreContraintes } from './contraintes'
 import { actif } from './contraintes'
 import type { PlacementItem } from './solver'
-import type { Assignation } from './types'
+import type { Assignation, GroupeSansSalle } from './types'
 import { salleRestreinte } from './verify'
 
 /**
@@ -41,15 +41,26 @@ export interface AttribuerOptions {
   registre?: RegistreContraintes
 }
 
+export interface AttribuerResultat {
+  assignations: Assignation[]
+  /** Groupes que le solveur a placés horairement mais que l'attribution
+   *  n'a pas pu loger — signalés au lieu d'être perdus silencieusement
+   *  (bug identifié à l'audit Leader). */
+  groupesPerdus: GroupeSansSalle[]
+  /** Warnings textuels (dérivés de `groupesPerdus` pour affichage UI). */
+  warnings: string[]
+}
+
 export function attribuerSalles(
   placement: PlacementItem[],
   lieu: Lieu,
   inscriptions: Inscriptions,
   creneaux: Creneau[],
   options: AttribuerOptions = {},
-): Assignation[] {
+): AttribuerResultat {
   const seuilGrand = options.seuil_grand_groupe ?? SEUIL_GRAND_GROUPE
   const reg = options.registre
+  const groupesPerdus: GroupeSansSalle[] = []
   const groupesParId = new Map(inscriptions.groupes.map((g) => [g.id, g]))
   const creneauxParId = new Map(creneaux.map((c) => [c.id, c]))
   const sallesParId = new Map(lieu.salles.map((s) => [s.id, s]))
@@ -183,7 +194,28 @@ export function attribuerSalles(
         const s = sallesParId.get(sid)
         return s != null && s.jauge >= eff
       })
-      if (cands.length === 0) continue // pas de salle possible : le groupe est perdu
+      if (cands.length === 0) {
+        // Groupe perdu : le solveur l'a placé à ce créneau mais aucune salle
+        // active n'accueille son effectif ici. On signale au lieu de swallow
+        // (bug identifié à l'audit Leader — auparavant silent `continue`).
+        const sallesOuvertes = restant.size
+        const sallesTropPetites = [...restant].filter((sid) => {
+          const s = sallesParId.get(sid)
+          return s != null && s.jauge < eff
+        }).length
+        const raison =
+          sallesOuvertes === 0
+            ? 'aucune salle disponible sur ce créneau (toutes prises par des groupes précédents)'
+            : `effectif ${eff} > jauge de toutes les salles restantes (${sallesTropPetites} salle(s) trop petite(s))`
+        const g = groupesParId.get(gid)
+        groupesPerdus.push({
+          groupe_id: gid,
+          creneau_id: cid,
+          effectif: eff,
+          raison: g ? `${g.titre} (${eff} musiciens) : ${raison}` : raison,
+        })
+        continue
+      }
 
       // Personnes lourdes du groupe (calcul une seule fois par (groupe, créneau)).
       const lourdsGroupe = stabiliteLourdActive ? personnesLourdesDuGroupe(gid) : []
@@ -219,5 +251,6 @@ export function attribuerSalles(
     }
   }
 
-  return assignations
+  const warnings = groupesPerdus.map((gp) => `Groupe non logé : ${gp.raison}`)
+  return { assignations, groupesPerdus, warnings }
 }

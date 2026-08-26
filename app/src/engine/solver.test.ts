@@ -114,7 +114,8 @@ describe('attribuerSalles + verifier (intégration)', () => {
   it("le pipeline complet ne produit aucun problème sur la fixture simple", () => {
     const { lieu, session, inscriptions, creneaux } = fixtureSimple()
     const { placement } = repartir(session, lieu, inscriptions, creneaux, { seed: 7 })
-    const assignations = attribuerSalles(placement, lieu, inscriptions, creneaux)
+    const { assignations, groupesPerdus } = attribuerSalles(placement, lieu, inscriptions, creneaux)
+    expect(groupesPerdus).toEqual([])
     const problemes = verifier(session, lieu, inscriptions, creneaux, assignations)
     expect(problemes).toEqual([])
   })
@@ -122,7 +123,7 @@ describe('attribuerSalles + verifier (intégration)', () => {
   it("évite deux fois la même salle pour un même groupe quand c'est possible", () => {
     const { lieu, session, inscriptions, creneaux } = fixtureSimple()
     const { placement } = repartir(session, lieu, inscriptions, creneaux, { seed: 2 })
-    const assignations = attribuerSalles(placement, lieu, inscriptions, creneaux)
+    const { assignations } = attribuerSalles(placement, lieu, inscriptions, creneaux)
     const parGroupe = new Map<string, string[]>()
     for (const a of assignations) {
       if (!parGroupe.has(a.groupe_id)) parGroupe.set(a.groupe_id, [])
