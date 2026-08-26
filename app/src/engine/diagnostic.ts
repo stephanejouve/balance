@@ -1,7 +1,8 @@
 import type { Creneau } from '../domain/grille'
-import type { Groupe, Inscriptions, Personne, Pupitre, Session } from '../domain/model'
+import type { Groupe, Inscriptions, Pupitre, Session } from '../domain/model'
 import { libellePersonne } from '../domain/model'
 import { enrichirIndispos } from './imposes'
+import { indispoBloque } from './indispo'
 import type { PlacementItem } from './solver'
 
 /**
@@ -32,18 +33,6 @@ export interface DiagCharge {
 
 function pupitresDePersonneDansGroupe(g: Groupe, pid: string): Pupitre[] {
   return g.membres.filter((m) => m.personne_id === pid).map((m) => m.pupitre)
-}
-
-function indispoBloque(p: Personne, c: Creneau, pupitres: Pupitre[]): boolean {
-  return p.indispos.some((ind) => {
-    if (ind.jours.length > 0 && !ind.jours.includes(c.date)) return false
-    if (ind.roles.length > 0 && !pupitres.some((r) => ind.roles.includes(r))) return false
-    if (!ind.debut && !ind.fin) return true
-    if (ind.debut && !ind.fin) return c.debut === ind.debut
-    if (ind.debut && c.debut < ind.debut) return false
-    if (ind.fin && c.debut >= ind.fin) return false
-    return true
-  })
 }
 
 export function analyserInfaisabilite(

@@ -3,6 +3,7 @@ import type { Groupe, Inscriptions, Lieu, Personne, Pupitre, Salle, Session } fr
 import { libellePersonne } from '../domain/model'
 import type { RegistreContraintes } from './contraintes'
 import { actif } from './contraintes'
+import { indispoBloque } from './indispo'
 import type { Assignation, Probleme, Solution } from './types'
 
 /**
@@ -87,18 +88,6 @@ export function salleRestreinte(
   return null
 }
 
-function indispoBloque(personne: Personne, creneau: Creneau, pupitres: Pupitre[]): boolean {
-  return personne.indispos.some((ind) => {
-    if (ind.jours.length > 0 && !ind.jours.includes(creneau.date)) return false
-    if (ind.roles.length > 0 && !pupitres.some((p) => ind.roles.includes(p))) return false
-    // Cf. commentaire sémantique dans solver.ts::indispoBloque
-    if (!ind.debut && !ind.fin) return true
-    if (ind.debut && !ind.fin) return creneau.debut === ind.debut
-    if (ind.debut && creneau.debut < ind.debut) return false
-    if (ind.fin && creneau.debut >= ind.fin) return false
-    return true
-  })
-}
 
 export function verifier(
   session: Session,
