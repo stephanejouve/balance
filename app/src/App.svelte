@@ -34,13 +34,10 @@
   import { csvParGroupe, csvParMusicien, csvParSalle, telechargerCsv } from './io/csv'
   import { exporterClasseurExcel } from './io/excel-export'
   import { importerListeExcel, importerProposesExcel, importerStagiairesExcel } from './io/excel-io'
+  import { MAPPING_LISTE_DEFAUT } from './io/liste-adapter'
   import { MAPPING_PROPOSES_DEFAUT } from './io/proposes-adapter'
-  import {
-    CONTRAINTES_ACTIVES_DEFAUT,
-    LIBELLE_CONTRAINTE,
-    MAPPING_LISTE_DEFAUT,
-    MAPPING_STAGIAIRES_DEFAUT,
-  } from './stores/app-config'
+  import { MAPPING_STAGIAIRES_DEFAUT } from './io/stagiaires-adapter'
+  import { CONTRAINTES_ACTIVES_DEFAUT, LIBELLE_CONTRAINTE } from './stores/app-config'
   import {
     calculerConducteurMinuté,
     calculerRepartitionStyles,

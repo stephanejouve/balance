@@ -32,6 +32,21 @@ export interface MappingStagiaires {
   colonneIndispos?: string
 }
 
+/**
+ * Mapping par défaut aligné sur la convention Musiques Festives.
+ * Descendu depuis `App.svelte` en 2026-08-27 (brief import unique § « prérequis
+ * du classeur modèle ») pour que le générateur de modèle vive à la même source
+ * que l'importeur.
+ */
+export const MAPPING_STAGIAIRES_DEFAUT: MappingStagiaires = {
+  colonneNom: 'Nom',
+  colonnePupitrePrincipal: 'Pupitre',
+  colonnePupitresAdditionnels: 'Pupitres additionnels',
+  colonneInstrument: 'Instrument',
+  colonneLateralite: 'Latéralité',
+  colonneIndispos: 'Indispos',
+}
+
 type Cellule = unknown
 
 function texte(c: Cellule): string {

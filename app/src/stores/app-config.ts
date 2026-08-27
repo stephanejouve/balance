@@ -1,16 +1,16 @@
 import type { IdContrainte } from '../engine/contraintes'
-import type { MappingListe } from '../io/liste-adapter'
-import type { MappingStagiaires } from '../io/stagiaires-adapter'
 
 /**
- * Configuration statique de l'app Balance : libellés des contraintes,
- * mappings Excel par défaut, état initial des contraintes activables.
+ * Configuration statique de l'app Balance : libellés des contraintes et
+ * état initial des contraintes activables.
  *
  * Extrait de App.svelte (audit Leader — P1 « God script »). Contient
  * uniquement des constantes pures — pas de state, pas de logique.
- * Le state réactif reste dans App.svelte pour cette 1ʳᵉ passe ;
- * la migration vers un `AppStore` class-based est prévue dans une PR
- * ultérieure une fois les fondations posées.
+ *
+ * Les mappings Excel (`MAPPING_LISTE_DEFAUT`, `MAPPING_STAGIAIRES_DEFAUT`,
+ * `MAPPING_PROPOSES_DEFAUT`) ont été redescendus dans leur module `io/`
+ * respectif (brief « import unique » § « prérequis du classeur modèle »)
+ * pour que le générateur de modèle vive à la même source que l'importeur.
  */
 
 export const LIBELLE_CONTRAINTE: Record<IdContrainte, string> = {
@@ -42,32 +42,4 @@ export const CONTRAINTES_ACTIVES_DEFAUT: Record<IdContrainte, boolean> = {
   'preference-repos-musicien-12h': true,
   'preference-equilibre-tardif': true,
   'preference-salle-stable-lourd': true,
-}
-
-/** Mapping par défaut du classeur `Liste` (onglet principal des morceaux). */
-export const MAPPING_LISTE_DEFAUT: MappingListe = {
-  colonneMorceau: 'Morceau',
-  colonneAuteur: 'Auteur',
-  colonneStyle: 'Style',
-  colonneTona: 'Tona',
-  colonneResp: 'Resp',
-  colonneCherche: 'Cherche',
-  colonnesPupitres: {
-    chant: 'Chant',
-    piano: 'Piano',
-    basse: 'Basse',
-    batterie: 'Batterie',
-    guitare: 'Guitare',
-    vents: 'Vents',
-  },
-}
-
-/** Mapping par défaut du classeur `Stagiaires` (référentiel des inscrits). */
-export const MAPPING_STAGIAIRES_DEFAUT: MappingStagiaires = {
-  colonneNom: 'Nom',
-  colonnePupitrePrincipal: 'Pupitre',
-  colonnePupitresAdditionnels: 'Pupitres additionnels',
-  colonneInstrument: 'Instrument',
-  colonneLateralite: 'Latéralité',
-  colonneIndispos: 'Indispos',
 }
