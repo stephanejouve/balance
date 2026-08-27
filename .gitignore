@@ -6,3 +6,9 @@ dist/
 .env.local
 coverage/
 .vite/
+
+# Fichiers de travail vitrine (brief + sources maquette Claude Desktop) —
+# gardés en local comme référence, hors dépôt public.
+/briefpagesbalance2vitrine.md
+/build.py
+/page.src.html

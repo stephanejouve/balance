@@ -5,6 +5,9 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 
 export default defineConfig({
+  // Base relative : permet à `dist/balance.html` de fonctionner quel que soit
+  // le chemin de service (double-clic file:// ou GitHub Pages sous /balance/).
+  base: './',
   plugins: [svelte(), viteSingleFile()],
   build: {
     target: 'es2020',
