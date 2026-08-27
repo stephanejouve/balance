@@ -35,8 +35,18 @@
   import { exporterClasseurExcel } from './io/excel-export'
   import { importerListeExcel, importerProposesExcel, importerStagiairesExcel } from './io/excel-io'
   import { MAPPING_PROPOSES_DEFAUT } from './io/proposes-adapter'
-  import type { MappingListe } from './io/liste-adapter'
-  import type { MappingStagiaires } from './io/stagiaires-adapter'
+  import {
+    CONTRAINTES_ACTIVES_DEFAUT,
+    LIBELLE_CONTRAINTE,
+    MAPPING_LISTE_DEFAUT,
+    MAPPING_STAGIAIRES_DEFAUT,
+  } from './stores/app-config'
+  import {
+    calculerConducteurMinuté,
+    calculerRepartitionStyles,
+    couleurStyle,
+    statsConducteur,
+  } from './stores/app-conducteur'
   import fixture from './fixtures/apero_mercredi.json'
 
   /* --- Données de démarrage --------------------------------------------- */
@@ -71,31 +81,6 @@
       repetitions_visees: 3,
     }),
   )
-
-  const MAPPING_DEFAUT: MappingListe = {
-    colonneMorceau: 'Morceau',
-    colonneAuteur: 'Auteur',
-    colonneStyle: 'Style',
-    colonneTona: 'Tona',
-    colonneResp: 'Resp',
-    colonneCherche: 'Cherche',
-    colonnesPupitres: {
-      chant: 'Chant',
-      piano: 'Piano',
-      basse: 'Basse',
-      batterie: 'Batterie',
-      guitare: 'Guitare',
-      vents: 'Vents',
-    },
-  }
-  const MAPPING_STAGIAIRES: MappingStagiaires = {
-    colonneNom: 'Nom',
-    colonnePupitrePrincipal: 'Pupitre',
-    colonnePupitresAdditionnels: 'Pupitres additionnels',
-    colonneInstrument: 'Instrument',
-    colonneLateralite: 'Latéralité',
-    colonneIndispos: 'Indispos',
-  }
 
   function chargerDemo(): Inscriptions {
     return migrerInscriptions(parseLegacyInscriptions(fixture), session.id)
@@ -138,34 +123,7 @@
   let figeesKeys = $state(new Set<string>())
   /** Assignation en cours de déplacement (bascule la vue Par salle en mode cibles). */
   let deplacementEnCours = $state<Assignation | null>(null)
-  let contraintesActives = $state<Record<IdContrainte, boolean>>({
-    'personne-unique-moment': true,
-    'salle-unique-groupe': true,
-    'jauge-salle': true,
-    'personne-indispo': true,
-    'avant-butoir': true,
-    'salle-hors-creneau': true,
-    'restriction-horaire-salle': true,
-    'creneaux-consecutifs': true,
-    'preference-espacement-12h': true,
-    'preference-repos-musicien-12h': true,
-    'preference-equilibre-tardif': true,
-  })
-
-  const LIBELLE_CONTRAINTE: Record<IdContrainte, string> = {
-    'personne-unique-moment': 'Une personne à un seul endroit à la fois',
-    'salle-unique-groupe': 'Une salle à un seul groupe à la fois',
-    'jauge-salle': 'Effectif ≤ jauge de la salle',
-    'personne-indispo': 'Respect des indisponibilités déclarées',
-    'avant-butoir': 'Répétitions avant la date butoir',
-    'salle-hors-creneau': 'Salle attribuée ouverte au créneau',
-    'restriction-horaire-salle': 'Restrictions horaires par salle (dortoirs, autres usages)',
-    'creneaux-consecutifs': 'Pas deux répétitions accolées pour un même groupe',
-    'preference-espacement-12h': '≥ 12 h entre deux répétitions d\'un même morceau (prioritaire)',
-    'preference-repos-musicien-12h': '≥ 12 h de repos entre deux engagements d\'un même musicien (secondaire)',
-    'preference-equilibre-tardif': 'Éviter qu\'un musicien ait toutes ses répés en soirée',
-    'preference-salle-stable-lourd': 'Regrouper les répés d\'un musicien à instrument lourd (contrebasse…) dans la même salle',
-  }
+  let contraintesActives = $state<Record<IdContrainte, boolean>>({ ...CONTRAINTES_ACTIVES_DEFAUT })
 
   const creneaux = $derived.by(() => {
     try {
@@ -245,7 +203,7 @@
     warningsImport = []
     erreurImport = ''
     try {
-      const { groupes, warnings } = await importerListeExcel(file, 'Liste', MAPPING_DEFAUT)
+      const { groupes, warnings } = await importerListeExcel(file, 'Liste', MAPPING_LISTE_DEFAUT)
       inscriptions = migrerInscriptions(
         { groupes, membresImposes: {}, indispos: [], identitesConnues: [] },
         session.id,
@@ -267,7 +225,7 @@
     warningsImport = []
     erreurImport = ''
     try {
-      const { personnes, warnings } = await importerStagiairesExcel(file, 'Stagiaires', MAPPING_STAGIAIRES)
+      const { personnes, warnings } = await importerStagiairesExcel(file, 'Stagiaires', MAPPING_STAGIAIRES_DEFAUT)
       // Fusion : ajoute les nouveaux stagiaires sans écraser les existants
       // (même id = doublon signalé).
       const existants = new Set(inscriptions.personnes.map((p) => p.id))
@@ -319,133 +277,22 @@
     }
   }
 
-  /** Recalcule les stats d'un ordre du conducteur (mouvements) à partir des groupes. */
-  function statsConducteur(ordre: EtapeConcert[]): { mouvements: number } {
-    let mouvements = 0
-    let precedents = new Set<string>()
-    for (const e of ordre) {
-      const g = groupesParId.get(e.groupe_id)
-      const m = g ? new Set(g.membres.map((mm) => mm.personne_id)) : new Set<string>()
-      const montent = [...m].filter((x) => !precedents.has(x)).length
-      const descendent = [...precedents].filter((x) => !m.has(x)).length
-      mouvements += montent + descendent
-      precedents = m
-    }
-    return { mouvements }
-  }
-
   function reordonnerAuto() {
     const r = ordonnerConcert(inscriptions.groupes)
     ordreConducteur = r.etapes
   }
 
-  /**
-   * Identifie le batteur d'un groupe et retourne sa latéralité (si connue).
-   * Renvoie `null` si pas de batteur ou latéralité inconnue.
-   */
-  function lateraliteBatteur(groupe_id: string): 'droitier' | 'gaucher' | null {
-    const g = groupesParId.get(groupe_id)
-    if (!g) return null
-    const batteur = g.membres.find((m) => m.pupitre === 'batterie')
-    if (!batteur) return null
-    const p = personnesParId.get(batteur.personne_id)
-    return p?.lateralite ?? null
-  }
-
-  /** Minutage : heure de chaque étape, inversions de kit, durée totale. */
-  interface EtapeMinutee extends EtapeConcert {
-    heure_debut: string
-    heure_fin: string
-    duree_min: number
-    /** Temps ajouté avant cette étape pour changement plateau et/ou inversion kit. */
-    change_min: number
-    /** True si une inversion de kit doit se faire pendant le changement précédent. */
-    inversion_kit: boolean
-    lateralite?: 'droitier' | 'gaucher'
-  }
-  const conducteurMinuté = $derived.by<{
-    etapes: EtapeMinutee[]
-    duree_totale_min: number
-    heure_fin: string
-    nb_inversions: number
-  }>(() => {
-    const [dh, dm] = cdDebut.split(':').map(Number)
-    let t = dh * 60 + dm
-    const debut = t
-    const hhmm = (m: number): string =>
-      `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
-    const etapes: EtapeMinutee[] = []
-    let dernierBatteur: { latéralité: 'droitier' | 'gaucher'; index: number } | null = null
-    let nbInversions = 0
-    ordreConducteur.forEach((e, i) => {
-      const lat = lateraliteBatteur(e.groupe_id)
-      let changeMin = 0
-      let inversion = false
-      if (i > 0) {
-        changeMin = cdDureeChange
-        if (lat && dernierBatteur && lat !== dernierBatteur.latéralité) {
-          inversion = true
-          nbInversions++
-          changeMin = Math.max(changeMin, cdDureeKit)
-        }
-      }
-      t += changeMin
-      const heure_debut = hhmm(t)
-      t += cdDureeMorceau
-      etapes.push({
-        ...e,
-        heure_debut,
-        heure_fin: hhmm(t),
-        duree_min: cdDureeMorceau,
-        change_min: changeMin,
-        inversion_kit: inversion,
-        lateralite: lat ?? undefined,
-      })
-      if (lat) dernierBatteur = { latéralité: lat, index: i }
-    })
-    return {
-      etapes,
-      duree_totale_min: t - debut,
-      heure_fin: hhmm(t),
-      nb_inversions: nbInversions,
-    }
-  })
-
-  /** Palette dérivée du nom du style (hash → HSL) pour un rendu stable. */
-  function couleurStyle(style: string): string {
-    if (!style) return '#e8e5da'
-    let h = 0
-    for (let i = 0; i < style.length; i++) h = (h * 31 + style.charCodeAt(i)) % 360
-    return `hsl(${h}, 55%, 78%)`
-  }
-
-  /** Répartition des styles dans l'ordre conducteur, avec runs (séquences consécutives). */
-  const repartitionStyles = $derived.by(() => {
-    const compte = new Map<string, number>()
-    for (const e of ordreConducteur) {
-      const k = e.style || '(sans style)'
-      compte.set(k, (compte.get(k) ?? 0) + 1)
-    }
-    const total = ordreConducteur.length
-    const parts = [...compte.entries()]
-      .map(([style, n]) => ({ style, n, pct: total > 0 ? Math.round((n / total) * 100) : 0 }))
-      .sort((a, b) => b.n - a.n)
-    // Runs de même style ≥ 3
-    const runs: Array<{ style: string; debut: number; fin: number }> = []
-    let i = 0
-    while (i < ordreConducteur.length) {
-      let j = i
-      while (
-        j + 1 < ordreConducteur.length &&
-        ordreConducteur[j + 1].style === ordreConducteur[i].style &&
-        ordreConducteur[i].style
-      )
-        j++
-      if (j - i + 1 >= 3) runs.push({ style: ordreConducteur[i].style, debut: i, fin: j })
-      i = j + 1
-    }
-    return { parts, runs }
-  })
+  // Minutage + répartition styles : logique pure extraite dans `stores/app-conducteur.ts`
+  // (audit Leader — dérivés critiques inline dans App.svelte).
+  const conducteurMinuté = $derived(
+    calculerConducteurMinuté(
+      ordreConducteur,
+      { debut: cdDebut, dureeMorceau: cdDureeMorceau, dureeChange: cdDureeChange, dureeKit: cdDureeKit },
+      groupesParId,
+      personnesParId,
+    ),
+  )
+  const repartitionStyles = $derived(calculerRepartitionStyles(ordreConducteur))
 
   function dropOrdre(idxCible: number) {
     if (dragIdx == null || dragIdx === idxCible) return
@@ -1210,7 +1057,7 @@
           ordre={ordreConducteur}
           {conducteurMinuté}
           {repartitionStyles}
-          stats={statsConducteur(ordreConducteur)}
+          stats={statsConducteur(ordreConducteur, groupesParId)}
           {cdDebut}
           {cdDureeMorceau}
           {cdDureeChange}
