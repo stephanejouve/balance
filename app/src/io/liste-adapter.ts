@@ -36,6 +36,30 @@ export interface MappingListe {
   colonnesPupitres: Partial<Record<Pupitre, string>>
 }
 
+/**
+ * Mapping par défaut aligné sur la convention Musiques Festives.
+ * Descendu depuis `App.svelte` en 2026-08-27 (brief import unique § « prérequis
+ * du classeur modèle ») pour que le générateur de modèle vive à la même source
+ * que l'importeur — un renommage de colonne dans un lieu ne peut plus
+ * désynchroniser le modèle qu'on distribue.
+ */
+export const MAPPING_LISTE_DEFAUT: MappingListe = {
+  colonneMorceau: 'Morceau',
+  colonneAuteur: 'Auteur',
+  colonneStyle: 'Style',
+  colonneTona: 'Tona',
+  colonneResp: 'Resp',
+  colonneCherche: 'Cherche',
+  colonnesPupitres: {
+    chant: 'Chant',
+    piano: 'Piano',
+    basse: 'Basse',
+    batterie: 'Batterie',
+    guitare: 'Guitare',
+    vents: 'Vents',
+  },
+}
+
 type Cellule = unknown
 
 function texte(c: Cellule): string {
