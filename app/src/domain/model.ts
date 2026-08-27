@@ -133,12 +133,70 @@ export const Salle = z.object({
 })
 export type Salle = z.infer<typeof Salle>
 
+/**
+ * Fonctions débrayables du lieu — brief « import unique » §
+ * « Précision étape 1c débrayable ».
+ *
+ * Un lieu peut ne pas héberger un concert du vendredi, ne pas produire
+ * de spectacle final, ne pas suivre la charge par musicien, etc. Ces
+ * bascules pilotent à la fois l'UI (sections cachées) ET la cascade
+ * du solveur (les données correspondantes n'entrent pas dans le calcul).
+ * Une contrainte invisible mais active serait le pire résultat possible.
+ *
+ * Persistées avec le profil du lieu (§12 : changer de lieu emporte sa
+ * configuration).
+ *
+ * **Piège migration** : un `.json` antérieur à cette version n'a pas ce
+ * champ. Défaut = tout à `true` — le comportement historique est
+ * strictement préservé, une session ancienne rouvrira sans perte
+ * silencieuse de contrainte.
+ *
+ * Dépendance UI (non exprimée en Zod, appliquée par
+ * `normaliserFonctionsActivees`) : `conducteur` implique
+ * `ordre_passage` — on ne minute pas un spectacle sans savoir dans
+ * quel ordre il passe.
+ */
+export const FonctionsActivees = z.object({
+  /** Étape 1c — morceaux imposés du concert du vendredi. Décoché → le
+   *  solveur ignore les imposés dans `enrichirIndispos`. */
+  proposes: z.boolean().default(true),
+  /** Conducteur du spectacle — vue Concert + minutage + inversions kit. */
+  conducteur: z.boolean().default(true),
+  /** Ordre de passage — drag/drop et scoring d'un ordre du concert. */
+  ordre_passage: z.boolean().default(true),
+  /** Charge par musicien — vue Quotas + alertes seuil charge/jour. */
+  charge: z.boolean().default(true),
+  /** Suggestions de renforts — quand un groupe cherche un pupitre. */
+  renforts: z.boolean().default(true),
+})
+export type FonctionsActivees = z.infer<typeof FonctionsActivees>
+
+/**
+ * Valeur par défaut de `FonctionsActivees` : tout à `true`.
+ *
+ * Explicite (plutôt que dérivée de `FonctionsActivees.parse({})`) parce
+ * que Zod v4 applique `.default()` sur la valeur *output*, pas sur
+ * l'input — un default `{}` littéral resterait `{}` sans se remplir des
+ * defaults intérieurs. On expose donc cette constante et on la passe à
+ * `Lieu.parse` en default du champ `fonctionsActivees`.
+ */
+export const FONCTIONS_ACTIVEES_TOUT_ACTIF: FonctionsActivees = {
+  proposes: true,
+  conducteur: true,
+  ordre_passage: true,
+  charge: true,
+  renforts: true,
+}
+
 export const Lieu = z.object({
   id: z.string().min(1),
   nom: z.string().min(1),
   salles: z.array(Salle),
   /** Pupitres reconnus sur ce lieu (défaut = `PUPITRES_DEFAULTS`). */
   pupitres: z.array(Pupitre).default([...PUPITRES_DEFAULTS]),
+  /** Fonctions du lieu activées. Voir `FonctionsActivees` pour le piège
+   *  migration : absent → tout à `true`. */
+  fonctionsActivees: FonctionsActivees.default(FONCTIONS_ACTIVEES_TOUT_ACTIF),
 })
 export type Lieu = z.infer<typeof Lieu>
 

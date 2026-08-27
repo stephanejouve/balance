@@ -25,6 +25,7 @@
   import type { IdContrainte } from './engine/contraintes'
   import { REGISTRE_TOUT, registrePersonnalise } from './engine/contraintes'
   import { analyserInfaisabilite, diagnostiquer } from './engine/diagnostic'
+  import { preparerInscriptionsPourSolveur } from './engine/fonctions-activees'
   import { enrichirIndispos } from './engine/imposes'
   import { ciblesValides } from './engine/manuel'
   import { suggererRenforts } from './engine/renforts'
@@ -176,7 +177,7 @@
   })
   const infaisabilites = $derived.by(() => {
     try {
-      return analyserInfaisabilite(session, inscriptions, creneaux)
+      return analyserInfaisabilite(session, preparerInscriptionsPourSolveur(inscriptions, lieu), creneaux)
     } catch {
       return []
     }
@@ -466,9 +467,14 @@
     const registre = registrePersonnalise(ids)
     // Récupère les assignations figées depuis la solution précédente
     const figees = (solution?.assignations ?? []).filter((a) => figeesKeys.has(`${a.groupe_id}|${a.creneau_id}`))
-    // Enrichit les indispos des personnes avec les séances des imposés,
-    // pour que le solveur les évite automatiquement.
-    const inscEnrichies = enrichirIndispos(inscriptions)
+    // Cascade fonctions activées → solveur : quand `lieu.fonctionsActivees.proposes`
+    // est décoché, les imposés sont retirés avant `enrichirIndispos` (sinon le
+    // solveur poserait des contraintes invisibles côté UI, cf. brief §
+    // « décoché doit signifier n'entre pas dans le calcul »).
+    // Puis on enrichit les indispos des personnes avec les séances des
+    // imposés restants, pour que le solveur les évite automatiquement.
+    const inscFiltrees = preparerInscriptionsPourSolveur(inscriptions, lieu)
+    const inscEnrichies = enrichirIndispos(inscFiltrees)
     const { placement } = repartir(session, lieu, inscEnrichies, creneaux, {
       seed: 42,
       registre,
@@ -477,7 +483,7 @@
     const assignations = attribuerSalles(placement, lieu, inscEnrichies, creneaux, { figees, registre })
     const problemes = verifier(session, lieu, inscEnrichies, creneaux, assignations, registre)
     const cov = couverture(session, inscEnrichies, assignations)
-    const diagnostics = diagnostiquer(session, inscriptions, creneaux, placement)
+    const diagnostics = diagnostiquer(session, inscFiltrees, creneaux, placement)
     solution = {
       assignations,
       problemes,
@@ -831,10 +837,15 @@
     const autres = solution.assignations.filter(
       (a) => !(a.groupe_id === deplacementEnCours!.groupe_id && a.creneau_id === deplacementEnCours!.creneau_id),
     )
-    const cibles = ciblesValides(deplacementEnCours!, g, lieu, inscriptions, creneaux, autres, {
-      date: session.date_butoir,
-      heure: session.butoir_heure,
-    })
+    const cibles = ciblesValides(
+      deplacementEnCours!,
+      g,
+      lieu,
+      preparerInscriptionsPourSolveur(inscriptions, lieu),
+      creneaux,
+      autres,
+      { date: session.date_butoir, heure: session.butoir_heure },
+    )
     return new Set(cibles.map((c) => `${c.creneau.id}|${c.salle_id}`))
   })
 
@@ -865,10 +876,11 @@
       figeesKeys = next
     }
     // Recalcule couverture + vérification pour l'affichage post-hoc
+    // (même cascade fonctionsActivees que dans `lancer()`).
     const problemes = verifier(
       session,
       lieu,
-      enrichirIndispos(inscriptions),
+      enrichirIndispos(preparerInscriptionsPourSolveur(inscriptions, lieu)),
       creneaux,
       solution.assignations,
       registrePersonnalise(
@@ -901,10 +913,15 @@
     for (const g of inscriptions.groupes) {
       // Simule un "déplacement fictif" depuis nulle part — pas d'assignation d'origine
       const fictif: Assignation = { groupe_id: g.id, creneau_id: '__none__', salle_id: '__none__' }
-      const cibles = ciblesValides(fictif, g, lieu, inscriptions, creneaux, autres, {
-        date: session.date_butoir,
-        heure: session.butoir_heure,
-      })
+      const cibles = ciblesValides(
+        fictif,
+        g,
+        lieu,
+        preparerInscriptionsPourSolveur(inscriptions, lieu),
+        creneaux,
+        autres,
+        { date: session.date_butoir, heure: session.butoir_heure },
+      )
       if (cibles.some((x) => x.creneau.id === inspecteCase!.creneauId && x.salle_id === inspecteCase!.salleId)) {
         out.push({ groupe_id: g.id, titre: g.titre })
       }
