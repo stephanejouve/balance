@@ -10,5 +10,6 @@ coverage/
 # Fichiers de travail vitrine (brief + sources maquette Claude Desktop) —
 # gardés en local comme référence, hors dépôt public.
 /briefpagesbalance2vitrine.md
+/briefimportunique.md
 /build.py
 /page.src.html

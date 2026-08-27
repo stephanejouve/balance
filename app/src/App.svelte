@@ -101,10 +101,33 @@
     return migrerInscriptions(parseLegacyInscriptions(fixture), session.id)
   }
 
+  function inscriptionsVides(): Inscriptions {
+    return { session_id: session.id, personnes: [], groupes: [], imposes: [] }
+  }
+
+  /**
+   * Amorçage par URL : `?demo=apero` charge le jeu d'essai + active la
+   * bannière permanente « prénoms fictifs ». Sans le paramètre, l'app
+   * démarre vide — l'utilisateur importe son propre classeur. Le bouton
+   * « Recharger la démo » de l'Étape 1 reste l'échappatoire.
+   *
+   * Cette lecture d'URL se fait une seule fois, à l'initialisation du
+   * script — elle n'est pas réactive à un changement d'URL en cours de
+   * session (l'app n'est pas SPA-router).
+   */
+  function initialDemo(): boolean {
+    if (typeof window === 'undefined' || !window.location) return false
+    return new URLSearchParams(window.location.search).get('demo') === 'apero'
+  }
+
   /* --- État réactif ----------------------------------------------------- */
 
-  let inscriptions = $state<Inscriptions>(chargerDemo())
-  let sourceLabel = $state<string>('démo · apero_mercredi.json')
+  const _demoInit = initialDemo()
+  let inscriptions = $state<Inscriptions>(_demoInit ? chargerDemo() : inscriptionsVides())
+  let modeDemo = $state<boolean>(_demoInit)
+  let sourceLabel = $state<string>(
+    _demoInit ? 'démo · apero_mercredi.json (via ?demo=apero)' : 'session vide',
+  )
   let warningsImport = $state<string[]>([])
   let erreurImport = $state<string>('')
 
@@ -194,6 +217,7 @@
     warningsImport = []
     erreurImport = ''
     solution = null
+    modeDemo = true
   }
   function nouvelleSessionVide() {
     if (
@@ -236,6 +260,7 @@
     erreurImport = ''
     solution = null
     figeesKeys = new Set()
+    modeDemo = false
   }
 
   async function importerFichier(e: Event) {
@@ -253,6 +278,7 @@
       sourceLabel = `Excel · ${file.name}`
       warningsImport = warnings
       solution = null
+      modeDemo = false
     } catch (err) {
       erreurImport = err instanceof Error ? err.message : String(err)
     } finally {
@@ -592,6 +618,7 @@
       } else {
         sourceLabel = `JSON · ${file.name}`
         solution = null
+        modeDemo = false
       }
     } catch (err) {
       erreurImport = err instanceof Error ? err.message : String(err)
@@ -914,6 +941,13 @@
 </script>
 
 <main>
+  {#if modeDemo}
+    <div class="banniere-demo" role="status">
+      <strong>Jeu d'essai chargé</strong> — les prénoms sont fictifs, la structure est
+      celle d'une vraie session (polyvalences, homonymes, indispos par rôle). Utilisez
+      « Nouvelle session (garde le lieu) » pour repartir de zéro avec votre vrai groupe.
+    </div>
+  {/if}
   <header>
     <p class="eyebrow">Balance · V1</p>
     <h1>Qui répète <em>où</em>, et <em>quand</em></h1>
