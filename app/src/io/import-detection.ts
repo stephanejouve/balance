@@ -113,14 +113,23 @@ function normaliser(s: string): string {
 }
 
 /**
- * Table de synonymes acceptés pour chaque destination. Le matching est
- * sur la forme normalisée (trim + lowercase + accents retirés) —
- * couvre `LISTE`, `liste`, `Liste `, `PROPOSES`, `proposés`, etc.
+ * Noms canoniques acceptés pour chaque destination. Le matching se fait
+ * sur la forme normalisée (trim + lowercase + accents retirés) — couvre
+ * `LISTE`, `liste`, `Liste `, `PROPOSES`, `proposés`, etc.
+ *
+ * Volontairement pas de synonymes ni d'heuristiques : ne pas reconnaître
+ * un onglet ne coûte rien (il apparaît « non reconnu » avec le sélecteur
+ * d'association manuelle, un clic explicite). Reconnaître à tort coûte
+ * cher : la case arrive pré-cochée et des données entrent dans un
+ * emplacement qui n'est pas le leur sans que personne ne le voie. Un
+ * onglet nommé `Concert` peut contenir l'ordre de passage, la liste
+ * des invités ou les contacts techniques — deviner ici, c'est parier
+ * sur du silence.
  */
-const SYNONYMES_ONGLETS: Record<DestinationOnglet, string[]> = {
-  liste: ['liste', 'morceaux', 'repertoire'],
-  stagiaires: ['stagiaires', 'stagiaire', 'inscrits', 'participants'],
-  proposes: ['proposes', 'concert', 'concert vendredi', 'imposes', 'imposes vendredi'],
+const NOMS_CANONIQUES: Record<DestinationOnglet, string> = {
+  liste: 'liste',
+  stagiaires: 'stagiaires',
+  proposes: 'proposes',
 }
 
 const EFFET_PAR_DESTINATION: Record<DestinationOnglet, EffetOnglet> = {
@@ -131,8 +140,8 @@ const EFFET_PAR_DESTINATION: Record<DestinationOnglet, EffetOnglet> = {
 
 export function reconnaitreDestination(nomOnglet: string): DestinationOnglet | null {
   const n = normaliser(nomOnglet)
-  for (const [dest, syns] of Object.entries(SYNONYMES_ONGLETS) as Array<[DestinationOnglet, string[]]>) {
-    if (syns.includes(n)) return dest
+  for (const [dest, canon] of Object.entries(NOMS_CANONIQUES) as Array<[DestinationOnglet, string]>) {
+    if (n === canon) return dest
   }
   return null
 }
@@ -155,7 +164,22 @@ export async function preparerImportExcel(
   // paramètre `sheet` n'est fourni.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sheets = (await (readXlsxFile as any)(file)) as Array<{ sheet: string; data: unknown[][] }>
+  return analyserSheetsExcel(sheets, file.name, file.size, mappings, personnesConnues)
+}
 
+/**
+ * Analyse un ensemble de feuilles déjà lues — même logique que
+ * `preparerImportExcel` mais sans l'appel IO. Isolé pour la testabilité :
+ * on peut simuler un classeur (Liste avec colonnes non conformes,
+ * Stagiaires vide, mix reconnus / non reconnus…) sans binaire réel.
+ */
+export function analyserSheetsExcel(
+  sheets: Array<{ sheet: string; data: unknown[][] }>,
+  nomFichier: string,
+  taille: number,
+  mappings: MappingsImport,
+  personnesConnues: readonly Personne[],
+): DetectionExcel {
   const onglets: OngletDetecte[] = []
   const warningsGlobaux: string[] = []
   const payloads: DetectionExcel['_payloads'] = new Map()
@@ -250,8 +274,8 @@ export async function preparerImportExcel(
 
   return {
     type: 'xlsx',
-    nomFichier: file.name,
-    taille: file.size,
+    nomFichier,
+    taille,
     onglets,
     warningsGlobaux,
     _payloads: payloads,
@@ -286,6 +310,14 @@ export function construireCandidatExcel(
 
   // Point de départ : l'état actuel (dupliqué en surface — on va remplacer
   // les tableaux qui bougent).
+  //
+  // INVARIANT — cette fonction ne modifie JAMAIS un champ d'un objet
+  // partagé (personne, groupe, imposé). Elle remplace les tableaux ou
+  // ajoute des éléments neufs. Le jour où une fusion devra corriger un
+  // pupitre sur une personne existante (par exemple), il faudra cloner
+  // cette personne — pas l'éditer. Sinon l'appelant qui a gardé une
+  // référence à l'ancien état verrait ce changement et « état intact
+  // en cas d'échec » deviendrait faux.
   const candidat: Inscriptions = {
     session_id,
     personnes: [...inscriptionsActuelles.personnes],

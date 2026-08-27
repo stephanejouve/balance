@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import type { Inscriptions } from '../domain/model'
+import { MAPPING_LISTE_DEFAUT } from './liste-adapter'
+import { MAPPING_PROPOSES_DEFAUT } from './proposes-adapter'
+import { MAPPING_STAGIAIRES_DEFAUT } from './stagiaires-adapter'
 import {
+  analyserSheetsExcel,
   construireCandidatExcel,
   reconnaitreDestination,
 } from './import-detection'
 import type { DetectionExcel, SelectionExcel } from './import-detection'
+
+const MAPPINGS = {
+  liste: MAPPING_LISTE_DEFAUT,
+  stagiaires: MAPPING_STAGIAIRES_DEFAUT,
+  proposes: MAPPING_PROPOSES_DEFAUT,
+}
 
 describe('reconnaitreDestination — casse, accents, espaces', () => {
   it('reconnaît la casse basse', () => {
@@ -30,15 +40,59 @@ describe('reconnaitreDestination — casse, accents, espaces', () => {
     expect(reconnaitreDestination('  Proposés  ')).toBe('proposes')
   })
 
-  it('accepte quelques synonymes utiles', () => {
-    expect(reconnaitreDestination('morceaux')).toBe('liste')
-    expect(reconnaitreDestination('inscrits')).toBe('stagiaires')
-    expect(reconnaitreDestination('concert')).toBe('proposes')
+  it('ne devine PAS les synonymes courants — reconnaître à tort coûte cher', () => {
+    // Volontairement : pas de reconnaissance de morceaux/inscrits/concert.
+    // Le sélecteur manuel prendra le relais à l'écran de détection.
+    expect(reconnaitreDestination('morceaux')).toBeNull()
+    expect(reconnaitreDestination('inscrits')).toBeNull()
+    expect(reconnaitreDestination('concert')).toBeNull()
+    expect(reconnaitreDestination('imposes')).toBeNull()
   })
 
-  it('renvoie null pour un nom inconnu', () => {
+  it('renvoie null pour un nom inconnu ou vide', () => {
     expect(reconnaitreDestination('Autre')).toBeNull()
     expect(reconnaitreDestination('')).toBeNull()
+  })
+})
+
+describe('analyserSheetsExcel — verrouille les défauts latents du brief', () => {
+  it('défaut #1 : Liste avec colonnes non conformes → statut echec, actifParDefaut false', () => {
+    // Onglet nommé « Liste » (reconnu) mais dont la colonne « Morceau »
+    // manque. `extraireListe` retourne { groupes: [], warnings: […] } sans
+    // lever d'exception. On veut que la détection classe ça en `echec`,
+    // pas en import vide silencieux.
+    const sheets = [
+      { sheet: 'Liste', data: [['ColonneAutre'], ['ligne 1']] },
+    ]
+    const det = analyserSheetsExcel(sheets, 'test.xlsx', 100, MAPPINGS, [])
+    const ongletListe = det.onglets.find((o) => o.nom === 'Liste')!
+    expect(ongletListe.destination).toBe('liste')
+    expect(ongletListe.statut).toBe('echec')
+    expect(ongletListe.actifParDefaut).toBe(false)
+    expect(ongletListe.warnings.some((w) => w.includes('Morceau'))).toBe(true)
+  })
+
+  it('défaut #2 : LISTE, Liste , Proposés (accents) reconnus par la détection', () => {
+    const sheets = [
+      { sheet: 'LISTE', data: [['Morceau'], ['Love']] },
+      { sheet: 'Proposés', data: [['Morceau', 'Membres', 'Date', 'Début', 'Fin'], []] },
+    ]
+    const det = analyserSheetsExcel(sheets, 't.xlsx', 100, MAPPINGS, [])
+    expect(det.onglets.find((o) => o.nom === 'LISTE')?.destination).toBe('liste')
+    expect(det.onglets.find((o) => o.nom === 'Proposés')?.destination).toBe('proposes')
+  })
+
+  it("aucun onglet reconnu → warning global qui liste les onglets présents", () => {
+    const sheets = [
+      { sheet: 'Contacts', data: [['Nom']] },
+      { sheet: 'Notes', data: [['Note']] },
+    ]
+    const det = analyserSheetsExcel(sheets, 't.xlsx', 100, MAPPINGS, [])
+    expect(det.warningsGlobaux.length).toBeGreaterThan(0)
+    expect(det.warningsGlobaux[0]).toContain('Contacts')
+    expect(det.warningsGlobaux[0]).toContain('Notes')
+    // Onglets présents mais tous en « ignore »
+    expect(det.onglets.every((o) => o.destination === null)).toBe(true)
   })
 })
 
