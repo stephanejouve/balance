@@ -1,7 +1,8 @@
 import type { Creneau } from '../domain/grille'
-import type { Groupe, Inscriptions, Personne, Pupitre } from '../domain/model'
+import type { Groupe, Inscriptions, Pupitre } from '../domain/model'
 import { libellePersonne } from '../domain/model'
 import { enrichirIndispos } from './imposes'
+import { indispoBloque } from './indispo'
 import type { Assignation } from './types'
 
 /**
@@ -24,18 +25,6 @@ export interface RenfortCandidat {
   creneaux_du_groupe: number
   /** Nombre de groupes où la personne est déjà engagée. 0 = stagiaire libre. */
   nb_engagements: number
-}
-
-function indispoBloque(p: Personne, c: Creneau, pupitres: Pupitre[]): boolean {
-  return p.indispos.some((ind) => {
-    if (ind.jours.length > 0 && !ind.jours.includes(c.date)) return false
-    if (ind.roles.length > 0 && !pupitres.some((r) => ind.roles.includes(r))) return false
-    if (!ind.debut && !ind.fin) return true
-    if (ind.debut && !ind.fin) return c.debut === ind.debut
-    if (ind.debut && c.debut < ind.debut) return false
-    if (ind.fin && c.debut >= ind.fin) return false
-    return true
-  })
 }
 
 export function suggererRenforts(

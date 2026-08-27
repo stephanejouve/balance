@@ -1,6 +1,7 @@
 import type { Creneau } from '../domain/grille'
-import type { Groupe, Inscriptions, Lieu, Personne, Pupitre } from '../domain/model'
+import type { Groupe, Inscriptions, Lieu, Pupitre } from '../domain/model'
 import { enrichirIndispos } from './imposes'
+import { indispoBloque } from './indispo'
 import type { Assignation } from './types'
 import { salleRestreinte } from './verify'
 
@@ -13,18 +14,6 @@ import { salleRestreinte } from './verify'
 
 function pupitresDe(g: Groupe, pid: string): Pupitre[] {
   return g.membres.filter((m) => m.personne_id === pid).map((m) => m.pupitre)
-}
-
-function indispoBloque(p: Personne, c: Creneau, pupitres: Pupitre[]): boolean {
-  return p.indispos.some((ind) => {
-    if (ind.jours.length > 0 && !ind.jours.includes(c.date)) return false
-    if (ind.roles.length > 0 && !pupitres.some((r) => ind.roles.includes(r))) return false
-    if (!ind.debut && !ind.fin) return true
-    if (ind.debut && !ind.fin) return c.debut === ind.debut
-    if (ind.debut && c.debut < ind.debut) return false
-    if (ind.fin && c.debut >= ind.fin) return false
-    return true
-  })
 }
 
 export type RaisonRefus =
