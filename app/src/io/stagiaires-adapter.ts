@@ -115,9 +115,20 @@ export interface ExtractionStagiaires {
   warnings: string[]
 }
 
+/**
+ * Ensemble des pupitres reconnus pour la validation. Par défaut = pupitres
+ * standards. L'appelant peut passer un sur-ensemble via `pupitresValides`
+ * (utile quand un lieu ajoute un pupitre custom).
+ */
+function ensemblePupitres(pupitresValides?: readonly Pupitre[]): Set<Pupitre> {
+  if (pupitresValides && pupitresValides.length > 0) return new Set(pupitresValides)
+  return new Set(PUPITRES_DEFAULTS)
+}
+
 export function extraireStagiaires(
   rows: Cellule[][],
   mapping: MappingStagiaires,
+  pupitresValides?: readonly Pupitre[],
 ): ExtractionStagiaires {
   const warnings: string[] = []
   const ligneEnTete = mapping.ligneEnTete ?? 0
@@ -129,13 +140,21 @@ export function extraireStagiaires(
   if (iNom === undefined) {
     return { personnes: [], warnings: [`colonne « ${mapping.colonneNom} » introuvable`] }
   }
-  const idx = (name: string | undefined): number | undefined =>
-    name ? cols.get(name) : undefined
-  const iPupitre = idx(mapping.colonnePupitrePrincipal)
-  const iAdditionnels = idx(mapping.colonnePupitresAdditionnels)
-  const iInstrument = idx(mapping.colonneInstrument)
-  const iLateralite = idx(mapping.colonneLateralite)
-  const iIndispos = idx(mapping.colonneIndispos)
+  const pupitresOk = ensemblePupitres(pupitresValides)
+  // Warn quand une colonne optionnelle est configurée mais absente de l'en-tête.
+  // Auparavant swallow silencieusement (audit Leader) → un utilisateur qui
+  // renommait `Pupitre` en `Pupitre principal` perdait le mapping sans avertissement.
+  const idx = (name: string | undefined, labelPourWarn: string): number | undefined => {
+    if (!name) return undefined
+    const i = cols.get(name)
+    if (i === undefined) warnings.push(`colonne « ${name} » (${labelPourWarn}) introuvable — ignorée`)
+    return i
+  }
+  const iPupitre = idx(mapping.colonnePupitrePrincipal, 'pupitre principal')
+  const iAdditionnels = idx(mapping.colonnePupitresAdditionnels, 'pupitres additionnels')
+  const iInstrument = idx(mapping.colonneInstrument, 'instrument')
+  const iLateralite = idx(mapping.colonneLateralite, 'latéralité')
+  const iIndispos = idx(mapping.colonneIndispos, 'indispos')
 
   const personnes: Personne[] = []
   const seen = new Set<string>()
@@ -165,14 +184,27 @@ export function extraireStagiaires(
         .filter(Boolean)
       for (const a of add) if (!pupitres.includes(a)) pupitres.push(a)
     }
+    // Validation des pupitres contre l'ensemble reconnu (par défaut PUPITRES_DEFAULTS).
+    // Auparavant tout string était accepté silencieusement → une typo `guitar` au
+    // lieu de `guitare` créait un pupitre fantôme jamais utilisé par le solveur.
+    for (const pup of pupitres) {
+      if (!pupitresOk.has(pup)) {
+        warnings.push(
+          `ligne ${r + 1} (${brut}) : pupitre « ${pup} » non reconnu — attendu parmi ${[...pupitresOk].join(', ')}`,
+        )
+      }
+    }
+    if (pupitres.length === 0) {
+      warnings.push(`ligne ${r + 1} (${brut}) : aucun pupitre déclaré — personne créée sans instrument`)
+    }
     const precisionCommune = iInstrument !== undefined ? texte(row[iInstrument]) : ''
     for (const pup of pupitres) {
-      const { pupitre, precision } = precisionCommune
+      const { precision } = precisionCommune
         ? pupitreDe(precisionCommune)
-        : { pupitre: pup, precision: undefined }
-      // Si pupitreDe renvoie un pupitre différent, on préfère le pupitre déclaré
-      // par la colonne (autorité) et on conserve la precision.
-      instruments.push({ pupitre: pup, precision: precision ?? undefined })
+        : { precision: undefined }
+      // Le pupitre déclaré par la colonne fait autorité — la precision issue
+      // de la colonne Instrument vient l'étoffer, pas le remplacer.
+      instruments.push({ pupitre: pup, precision: precision ?? undefined, lourd: false })
     }
 
     const rawLat = iLateralite !== undefined ? texte(row[iLateralite]).toLowerCase() : ''
