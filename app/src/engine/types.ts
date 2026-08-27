@@ -35,8 +35,22 @@ export interface CouvertureGroupe {
   min: number
 }
 
+/**
+ * Groupe placé horairement par le solveur mais que l'attribution des
+ * salles n'a pas pu loger. Auparavant swallowed silencieusement dans
+ * `allocate-rooms.ts` (audit Leader). Optionnel dans `Solution` pour
+ * rétro-compat des sérialisations JSON existantes.
+ */
+export interface GroupeSansSalle {
+  groupe_id: string
+  creneau_id: string
+  effectif: number
+  raison: string
+}
+
 export interface Solution {
   assignations: Assignation[]
   problemes: Probleme[]
   couverture: CouvertureGroupe[]
+  groupesPerdus?: GroupeSansSalle[]
 }

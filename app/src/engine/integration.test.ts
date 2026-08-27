@@ -86,7 +86,8 @@ describe('pipeline complet apero_mercredi.json', () => {
       seed: 42,
       maxEssais: 500,
     })
-    const assignations = attribuerSalles(placement, lieu, inscriptions, creneaux)
+    const { assignations, groupesPerdus } = attribuerSalles(placement, lieu, inscriptions, creneaux)
+    expect(groupesPerdus).toEqual([])
     const problemes = verifier(session, lieu, inscriptions, creneaux, assignations)
     expect(problemes).toEqual([])
   })
