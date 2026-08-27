@@ -10,6 +10,7 @@
     onImporterProposes: (e: Event) => void
     onImporterJson: (e: Event) => void
     onExporterJson: () => void
+    onTelechargerTemplate: () => void
   }
   let {
     sourceLabel,
@@ -22,6 +23,7 @@
     onImporterProposes,
     onImporterJson,
     onExporterJson,
+    onTelechargerTemplate,
   }: Props = $props()
 </script>
 
@@ -52,6 +54,13 @@
       <input type="file" accept=".json" hidden onchange={onImporterJson} />
     </label>
     <button class="ghost" onclick={onExporterJson}>Sauvegarder l'état .json</button>
+    <button
+      class="ghost"
+      onclick={onTelechargerTemplate}
+      title="Génère un classeur .xlsx avec les 3 onglets (Liste, Stagiaires, Proposés), leurs en-têtes et des lignes d'exemple — à remplir puis réimporter."
+    >
+      Télécharger le template .xlsx
+    </button>
     <span class="grow"></span>
     <span class="ink-soft mono">Chargé : {sourceLabel}</span>
   </div>

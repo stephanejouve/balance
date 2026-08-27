@@ -33,6 +33,7 @@
   import { couverture, verifier } from './engine/verify'
   import { csvParGroupe, csvParMusicien, csvParSalle, telechargerCsv } from './io/csv'
   import { exporterClasseurExcel } from './io/excel-export'
+  import { genererTemplateXlsx } from './io/excel-template'
   import { importerListeExcel, importerProposesExcel, importerStagiairesExcel } from './io/excel-io'
   import { MAPPING_LISTE_DEFAUT } from './io/liste-adapter'
   import { MAPPING_PROPOSES_DEFAUT } from './io/proposes-adapter'
@@ -297,6 +298,19 @@
       erreurImport = err instanceof Error ? err.message : String(err)
     } finally {
       cible.value = ''
+    }
+  }
+
+  async function telechargerTemplate() {
+    erreurImport = ''
+    try {
+      await genererTemplateXlsx({
+        liste: MAPPING_LISTE_DEFAUT,
+        stagiaires: MAPPING_STAGIAIRES_DEFAUT,
+        proposes: MAPPING_PROPOSES_DEFAUT,
+      })
+    } catch (err) {
+      erreurImport = err instanceof Error ? err.message : String(err)
     }
   }
 
@@ -820,6 +834,7 @@
     onImporterProposes={importerProposes}
     onImporterJson={importerEtat}
     onExporterJson={exporterEtat}
+    onTelechargerTemplate={telechargerTemplate}
   />
 
   <PersonnesEdit
