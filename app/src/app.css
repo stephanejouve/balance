@@ -610,3 +610,20 @@ code {
     }
     .chip em { color: #444; }
   }
+
+/* Bannière permanente affichée quand le jeu d'essai est chargé (via
+   ?demo=apero ou bouton « Recharger la démo »). Évite qu'un visiteur
+   confonde ces prénoms fictifs avec de vraies inscriptions. */
+.banniere-demo {
+  background: linear-gradient(180deg, #fff8dc, #fce9a8);
+  border: 1px solid #d4a017;
+  color: #5a4200;
+  padding: 10px 16px;
+  margin: 0 0 16px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.banniere-demo strong {
+  color: #3d2c00;
+}
