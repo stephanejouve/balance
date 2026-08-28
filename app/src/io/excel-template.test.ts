@@ -1,135 +1,144 @@
 import { describe, expect, it } from 'vitest'
-import type { MappingListe } from './liste-adapter'
-import type { MappingProposes } from './proposes-adapter'
-import type { MappingStagiaires } from './stagiaires-adapter'
 import { construireTemplate } from './excel-template'
+import { MAPPING_LISTE_DEFAUT, extraireListe } from './liste-adapter'
+import type { MappingListe } from './liste-adapter'
+import { MAPPING_PROPOSES_DEFAUT } from './proposes-adapter'
+import { MAPPING_STAGIAIRES_DEFAUT, extraireStagiaires } from './stagiaires-adapter'
 
-const mappingListe: MappingListe = {
-  colonneMorceau: 'Morceau',
-  colonneAuteur: 'Auteur',
-  colonneStyle: 'Style',
-  colonneTona: 'Tona',
-  colonneResp: 'Resp',
-  colonneCherche: 'Cherche',
-  colonnesPupitres: {
-    chant: 'Chant',
-    piano: 'Piano',
-    basse: 'Basse',
-    batterie: 'Batterie',
-    guitare: 'Guitare',
-    vents: 'Vents',
-  },
+const MAPPINGS = {
+  liste: MAPPING_LISTE_DEFAUT,
+  stagiaires: MAPPING_STAGIAIRES_DEFAUT,
+  proposes: MAPPING_PROPOSES_DEFAUT,
 }
 
-const mappingStagiaires: MappingStagiaires = {
-  colonneNom: 'Nom',
-  colonnePupitrePrincipal: 'Pupitre',
-  colonnePupitresAdditionnels: 'Pupitres additionnels',
-  colonneInstrument: 'Instrument',
-  colonneLateralite: 'Latéralité',
-  colonneIndispos: 'Indispos',
+/** Extrait `[value, value…]` d'une ligne de cellules pour se rapprocher du
+ *  format Row `unknown[]` que consomment les adaptateurs à l'import. */
+function ligneValeurs(cells: Array<{ value: string | number | null }>): unknown[] {
+  return cells.map((c) => c.value)
 }
 
-const mappingProposes: MappingProposes = {
-  colonneMorceau: 'Morceau',
-  colonneMembres: 'Membres',
-  colonneDate: 'Date',
-  colonneDebut: 'Début',
-  colonneFin: 'Fin',
-  colonneSalle: 'Salle',
-}
-
-describe('construireTemplate', () => {
-  it('produit 3 onglets Liste / Stagiaires / Proposés', () => {
-    const sheets = construireTemplate({
-      liste: mappingListe,
-      stagiaires: mappingStagiaires,
-      proposes: mappingProposes,
-    })
-    expect(sheets.map((s) => s.sheet)).toEqual(['Liste', 'Stagiaires', 'Proposés'])
+describe('construireTemplate — 4 onglets, en-têtes seuls sur les onglets de données', () => {
+  it('produit 4 onglets dans l\'ordre : Liste / Stagiaires / Proposés / Mode d\'emploi', () => {
+    const sheets = construireTemplate(MAPPINGS)
+    expect(sheets.map((s) => s.sheet)).toEqual([
+      'Liste',
+      'Stagiaires',
+      'Proposés',
+      "Mode d'emploi",
+    ])
   })
 
-  it('onglet Liste : en-tête en gras + 12 colonnes ordinaires + 6 pupitres', () => {
-    const sheets = construireTemplate({
-      liste: mappingListe,
-      stagiaires: mappingStagiaires,
-      proposes: mappingProposes,
-    })
+  it("onglet Liste : uniquement l'en-tête en gras — pas de lignes d'exemple", () => {
+    const sheets = construireTemplate(MAPPINGS)
     const liste = sheets[0]!
-    const header = liste.data[0]!
-    // 6 colonnes ordinaires + 6 pupitres = 12 colonnes attendues
-    expect(header).toHaveLength(12)
-    expect(header[0]).toEqual({ value: 'Morceau', fontWeight: 'bold' })
-    expect(header[6]).toEqual({ value: 'Chant', fontWeight: 'bold' })
-    expect(header[11]).toEqual({ value: 'Vents', fontWeight: 'bold' })
+    expect(liste.data).toHaveLength(1)
+    expect(liste.data[0].every((c) => c.fontWeight === 'bold')).toBe(true)
   })
 
-  it('onglet Liste : au moins une ligne d\'exemple concret (Love)', () => {
-    const sheets = construireTemplate({
-      liste: mappingListe,
-      stagiaires: mappingStagiaires,
-      proposes: mappingProposes,
-    })
-    const liste = sheets[0]!
-    expect(liste.data.length).toBeGreaterThanOrEqual(3) // header + 2 exemples
-    const ligne1 = liste.data[1]!
-    // 1re cellule = Morceau (Love)
-    expect(ligne1[0]?.value).toBe('Love')
-    // En-tête n'est pas en gras sur les données
-    expect(ligne1[0]?.fontWeight).toBeUndefined()
-  })
-
-  it("onglet Stagiaires : en-tête + 6 colonnes + exemples avec discriminant", () => {
-    const sheets = construireTemplate({
-      liste: mappingListe,
-      stagiaires: mappingStagiaires,
-      proposes: mappingProposes,
-    })
+  it("onglet Stagiaires : uniquement l'en-tête — pas de lignes d'exemple", () => {
+    const sheets = construireTemplate(MAPPINGS)
     const stag = sheets[1]!
-    const header = stag.data[0]!
-    expect(header).toHaveLength(6)
-    expect(header[0]?.value).toBe('Nom')
-    // Vérifie qu'un exemple montre le discriminant `(B)` (cas nominal du README)
-    const noms = stag.data.slice(1).map((r) => r[0]?.value)
-    expect(noms.some((n) => typeof n === 'string' && n.includes('(B)'))).toBe(true)
+    expect(stag.data).toHaveLength(1)
   })
 
-  it("onglet Proposés : en-tête 6 col + Blowin sur 2 séances (fusion morceau)", () => {
-    const sheets = construireTemplate({
-      liste: mappingListe,
-      stagiaires: mappingStagiaires,
-      proposes: mappingProposes,
-    })
+  it("onglet Proposés : uniquement l'en-tête — pas de lignes d'exemple", () => {
+    const sheets = construireTemplate(MAPPINGS)
     const prop = sheets[2]!
-    const header = prop.data[0]!
-    expect(header).toHaveLength(6)
-    // Deux lignes avec le même titre montrent la sémantique de fusion à l'import
-    const morceaux = prop.data.slice(1).map((r) => r[0]?.value)
-    const blowin = morceaux.filter((m) => m === 'Blowin in the wind').length
-    expect(blowin).toBe(2)
+    expect(prop.data).toHaveLength(1)
   })
 
-  it('respecte un mapping partiel (sans colonneAuteur, sans colonneSalle)', () => {
+  it("onglet Mode d'emploi : conventions présentes (NON, CHERCHE, discriminant, indispos)", () => {
+    const sheets = construireTemplate(MAPPINGS)
+    const mode = sheets[3]!
+    const texte = mode.data.map((r) => r.map((c) => c.value).join(' | ')).join('\n')
+    expect(texte).toContain('NON')
+    expect(texte).toContain('CHERCHE')
+    expect(texte).toContain('Colette (contrebasse)')
+    expect(texte).toContain('Pierre (SIG)')
+    expect(texte).toContain('mercredi 09h-10h chant')
+    expect(texte).toContain('convalescence')
+  })
+})
+
+describe('construireTemplate — pupitres itérés depuis le mapping (pas figés)', () => {
+  it('respecte l\'ordre canonique du mapping par défaut', () => {
+    const sheets = construireTemplate(MAPPINGS)
+    const header = sheets[0]!.data[0]!
+    const pupitres = header.slice(6).map((c) => c.value)
+    expect(pupitres).toEqual(['Chant', 'Piano', 'Basse', 'Batterie', 'Guitare', 'Vents'])
+  })
+
+  it('supporte un pupitre custom d\'un lieu qui ajoute « accordéon »', () => {
+    const listeAvecAccordeon: MappingListe = {
+      ...MAPPING_LISTE_DEFAUT,
+      colonnesPupitres: {
+        ...MAPPING_LISTE_DEFAUT.colonnesPupitres,
+        accordeon: 'Accordéon',
+      } as MappingListe['colonnesPupitres'],
+    }
+    const sheets = construireTemplate({ ...MAPPINGS, liste: listeAvecAccordeon })
+    const header = sheets[0]!.data[0]!.map((c) => c.value)
+    expect(header).toContain('Accordéon')
+  })
+
+  it("ne sort que les pupitres présents dans le mapping (2 seulement)", () => {
     const listePartiel: MappingListe = {
       colonneMorceau: 'Morceau',
-      colonnesPupitres: { chant: 'Chant', piano: 'Piano' },
+      colonnesPupitres: { piano: 'Piano', vents: 'Vents' },
     }
-    const proposesPartiel: MappingProposes = {
-      colonneMorceau: 'Morceau',
-      colonneMembres: 'Membres',
-      colonneDate: 'Date',
-      colonneDebut: 'Début',
-      colonneFin: 'Fin',
-      // pas de colonneSalle
-    }
-    const sheets = construireTemplate({
-      liste: listePartiel,
-      stagiaires: mappingStagiaires,
-      proposes: proposesPartiel,
-    })
-    // Liste : 1 morceau + 2 pupitres = 3 colonnes
-    expect(sheets[0]!.data[0]).toHaveLength(3)
-    // Proposés : 5 colonnes obligatoires seulement
-    expect(sheets[2]!.data[0]).toHaveLength(5)
+    const sheets = construireTemplate({ ...MAPPINGS, liste: listePartiel })
+    const header = sheets[0]!.data[0]!.map((c) => c.value)
+    expect(header).toEqual(['Morceau', 'Piano', 'Vents'])
+  })
+})
+
+describe('construireTemplate — aller-retour (générer → remplir → importer → 0 warning)', () => {
+  it('Liste : template rempli programmatiquement se réimporte sans warning', () => {
+    // Le vrai test qui verrouille la promesse du modèle. Si demain
+    // quelqu'un renomme une colonne dans MAPPING_LISTE_DEFAUT sans
+    // toucher au générateur, ce test tombe rouge — plutôt que la
+    // surprise devant l'organisateur au premier import.
+    const sheets = construireTemplate(MAPPINGS)
+    const header = ligneValeurs(sheets[0]!.data[0]!) as string[]
+    const col = (nom: string): number => header.indexOf(nom)
+    const ligne1: unknown[] = header.map(() => null)
+    ligne1[col('Morceau')] = 'Blue Bossa'
+    ligne1[col('Style')] = 'Latin'
+    ligne1[col('Resp')] = 'Alice'
+    ligne1[col('Chant')] = 'Alice'
+    ligne1[col('Piano')] = 'Bob'
+    ligne1[col('Basse')] = 'Carol'
+    ligne1[col('Batterie')] = 'Dan'
+    const ligne2: unknown[] = header.map(() => null)
+    ligne2[col('Morceau')] = 'So What'
+    ligne2[col('Piano')] = 'Bob'
+    ligne2[col('Basse')] = 'Carol'
+
+    const rows: unknown[][] = [header, ligne1, ligne2]
+    const { groupes, warnings } = extraireListe(rows, MAPPING_LISTE_DEFAUT)
+    expect(warnings).toEqual([])
+    expect(groupes).toHaveLength(2)
+    expect(groupes[0].nom).toBe('Blue Bossa')
+    expect(groupes[1].nom).toBe('So What')
+  })
+
+  it('Stagiaires : template rempli programmatiquement se réimporte sans warning', () => {
+    const sheets = construireTemplate(MAPPINGS)
+    const header = ligneValeurs(sheets[1]!.data[0]!) as string[]
+    const col = (nom: string): number => header.indexOf(nom)
+    const ligne1: unknown[] = header.map(() => null)
+    ligne1[col('Nom')] = 'Alice'
+    ligne1[col('Pupitre')] = 'chant'
+    const ligne2: unknown[] = header.map(() => null)
+    ligne2[col('Nom')] = 'Bob'
+    ligne2[col('Pupitre')] = 'piano'
+    ligne2[col('Pupitres additionnels')] = 'basse'
+
+    const rows: unknown[][] = [header, ligne1, ligne2]
+    const { personnes, warnings } = extraireStagiaires(rows, MAPPING_STAGIAIRES_DEFAUT)
+    expect(warnings).toEqual([])
+    expect(personnes).toHaveLength(2)
+    expect(personnes[0].nom).toBe('Alice')
+    expect(personnes[1].instruments.map((i) => i.pupitre)).toEqual(['piano', 'basse'])
   })
 })
