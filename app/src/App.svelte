@@ -167,6 +167,13 @@
   const creneauxParId = $derived(new Map(creneaux.map((c) => [c.id, c])))
   const sallesParId = $derived(new Map(lieu.salles.map((s) => [s.id, s])))
 
+  // Repli auto quand la vue courante devient indisponible (fonction du lieu
+  // désactivée). Sinon on afficherait un bouton disparu sur une vue vide.
+  $effect(() => {
+    if (vue === 'concert' && !lieu.fonctionsActivees.conducteur) vue = 'groupes'
+    if (vue === 'quotas' && !lieu.fonctionsActivees.charge) vue = 'groupes'
+  })
+
   /* --- Actions ---------------------------------------------------------- */
 
   function utiliserDemo() {
@@ -289,6 +296,12 @@
       const nouveaux = imposes.filter((imp) => !existants.has(imp.id))
       const doublons = imposes.length - nouveaux.length
       inscriptions.imposes.push(...nouveaux)
+      // Auto-activation : si l'utilisateur importe des proposés, la fonction
+      // du lieu doit être activée pour qu'ils entrent dans le calcul (brief
+      // 4b — sinon les données arrivent mais restent invisibles côté solveur).
+      if (nouveaux.length > 0 && !lieu.fonctionsActivees.proposes) {
+        lieu.fonctionsActivees.proposes = true
+      }
       const nSeances = nouveaux.reduce((s, imp) => s + imp.seances.length, 0)
       sourceLabel = `Proposés · ${file.name} (+${nouveaux.length} morceaux, ${nSeances} séances)`
       warningsImport = [
@@ -898,6 +911,8 @@
 
   <LieuEdit
     {lieu}
+    nbProposesEnMemoire={inscriptions.imposes.length}
+    nbPersonnesDeclarees={inscriptions.personnes.length}
     onAjouterSalle={ajouterSalle}
     onSupprimerSalle={supprimerSalle}
     onAjouterRestriction={ajouterRestriction}
@@ -1051,8 +1066,12 @@
         <button class:actif={vue === 'salles'} onclick={() => (vue = 'salles')}>Par salle</button>
         <button class:actif={vue === 'musiciens'} onclick={() => (vue = 'musiciens')}>Par musicien</button>
         <button class:actif={vue === 'carte'} onclick={() => (vue = 'carte')}>Carte</button>
-        <button class:actif={vue === 'concert'} onclick={() => (vue = 'concert')}>Concert</button>
-        <button class:actif={vue === 'quotas'} onclick={() => (vue = 'quotas')}>Quotas</button>
+        {#if lieu.fonctionsActivees.conducteur}
+          <button class:actif={vue === 'concert'} onclick={() => (vue = 'concert')}>Concert</button>
+        {/if}
+        {#if lieu.fonctionsActivees.charge}
+          <button class:actif={vue === 'quotas'} onclick={() => (vue = 'quotas')}>Quotas</button>
+        {/if}
         <span class="grow"></span>
         {#if figeesKeys.size > 0}
           <span class="mono ink-soft">{figeesKeys.size} figée{figeesKeys.size > 1 ? 's' : ''}</span>
