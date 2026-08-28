@@ -13,7 +13,7 @@
   import LieuEdit from './edition/Lieu.svelte'
   import PersonnesEdit from './edition/Personnes.svelte'
   import SessionEdit from './edition/Session.svelte'
-  import Source from './edition/Source.svelte'
+  import ImportUnique from './edition/ImportUnique.svelte'
   import Carte from './vues/Carte.svelte'
   import Concert from './vues/Concert.svelte'
   import ParGroupe from './vues/ParGroupe.svelte'
@@ -35,7 +35,14 @@
   import { csvParGroupe, csvParMusicien, csvParSalle, telechargerCsv } from './io/csv'
   import { exporterClasseurExcel } from './io/excel-export'
   import { genererTemplateXlsx } from './io/excel-template'
-  import { importerListeExcel, importerProposesExcel, importerStagiairesExcel } from './io/excel-io'
+  import {
+    bilanExcel,
+    construireCandidatExcel,
+    construireCandidatJson,
+    preparerImportExcel,
+    preparerImportJson,
+  } from './io/import-detection'
+  import type { BilanImport, Detection, SelectionExcel } from './io/import-detection'
   import { MAPPING_LISTE_DEFAUT } from './io/liste-adapter'
   import { MAPPING_PROPOSES_DEFAUT } from './io/proposes-adapter'
   import { MAPPING_STAGIAIRES_DEFAUT } from './io/stagiaires-adapter'
@@ -114,6 +121,12 @@
   )
   let warningsImport = $state<string[]>([])
   let erreurImport = $state<string>('')
+  // Import unique (brief « import unique pour l'étape 1 ») — état des
+  // écrans du composant ImportUnique. `detection` bascule vers l'écran 2
+  // dès qu'un fichier est lu ; `bilan` vers l'écran 4 après application.
+  let detection = $state<Detection | null>(null)
+  let bilan = $state<BilanImport | null>(null)
+  let chargementImport = $state<boolean>(false)
 
   type Solution = {
     assignations: Assignation[]
@@ -228,92 +241,102 @@
     modeDemo = false
   }
 
-  async function importerFichier(e: Event) {
-    const cible = e.target as HTMLInputElement
-    const file = cible.files?.[0]
-    if (!file) return
+  /**
+   * Import unique — brief « import unique pour l'étape 1 ».
+   *
+   * Un seul handler `traiterFichier(file)` accepte `.xlsx` et `.json`,
+   * détecte le contenu et pose une `Detection` dans le state. Le composant
+   * ImportUnique affiche l'écran 2 (« Ce que contient ce fichier »)
+   * automatiquement. `appliquerImportExcel/Json` fait l'application
+   * effective en **une seule affectation** (défaut latent n°1 verrouillé).
+   */
+  async function traiterFichier(file: File) {
     warningsImport = []
     erreurImport = ''
+    bilan = null
+    chargementImport = true
     try {
-      const { groupes, warnings } = await importerListeExcel(file, 'Liste', MAPPING_LISTE_DEFAUT)
-      inscriptions = migrerInscriptions(
-        { groupes, membresImposes: {}, indispos: [], identitesConnues: [] },
-        session.id,
-      )
-      sourceLabel = `Excel · ${file.name}`
-      warningsImport = warnings
-      solution = null
-      modeDemo = false
-    } catch (err) {
-      erreurImport = err instanceof Error ? err.message : String(err)
-    } finally {
-      cible.value = ''
-    }
-  }
-
-  async function importerStagiaires(e: Event) {
-    const cible = e.target as HTMLInputElement
-    const file = cible.files?.[0]
-    if (!file) return
-    warningsImport = []
-    erreurImport = ''
-    try {
-      const { personnes, warnings } = await importerStagiairesExcel(file, 'Stagiaires', MAPPING_STAGIAIRES_DEFAUT)
-      // Fusion : ajoute les nouveaux stagiaires sans écraser les existants
-      // (même id = doublon signalé).
-      const existants = new Set(inscriptions.personnes.map((p) => p.id))
-      const nouveaux = personnes.filter((p) => !existants.has(p.id))
-      const doublons = personnes.length - nouveaux.length
-      inscriptions.personnes.push(...nouveaux)
-      sourceLabel = `Stagiaires · ${file.name} (+${nouveaux.length})`
-      warningsImport = [
-        ...warnings,
-        ...(doublons > 0 ? [`${doublons} personne(s) déjà présente(s), ignorée(s)`] : []),
-      ]
-      solution = null
-    } catch (err) {
-      erreurImport = err instanceof Error ? err.message : String(err)
-    } finally {
-      cible.value = ''
-    }
-  }
-
-  async function importerProposes(e: Event) {
-    const cible = e.target as HTMLInputElement
-    const file = cible.files?.[0]
-    if (!file) return
-    warningsImport = []
-    erreurImport = ''
-    try {
-      const { imposes, warnings } = await importerProposesExcel(
-        file,
-        'Proposés',
-        MAPPING_PROPOSES_DEFAUT,
-        inscriptions.personnes,
-      )
-      // Fusion : ajoute les morceaux proposés sans écraser (même id = ignoré).
-      const existants = new Set(inscriptions.imposes.map((imp) => imp.id))
-      const nouveaux = imposes.filter((imp) => !existants.has(imp.id))
-      const doublons = imposes.length - nouveaux.length
-      inscriptions.imposes.push(...nouveaux)
-      // Auto-activation : si l'utilisateur importe des proposés, la fonction
-      // du lieu doit être activée pour qu'ils entrent dans le calcul (brief
-      // 4b — sinon les données arrivent mais restent invisibles côté solveur).
-      if (nouveaux.length > 0 && !lieu.fonctionsActivees.proposes) {
-        lieu.fonctionsActivees.proposes = true
+      const nomLower = file.name.toLowerCase()
+      if (nomLower.endsWith('.json')) {
+        detection = await preparerImportJson(file)
+      } else {
+        detection = await preparerImportExcel(
+          file,
+          {
+            liste: MAPPING_LISTE_DEFAUT,
+            stagiaires: MAPPING_STAGIAIRES_DEFAUT,
+            proposes: MAPPING_PROPOSES_DEFAUT,
+          },
+          inscriptions.personnes,
+        )
       }
-      const nSeances = nouveaux.reduce((s, imp) => s + imp.seances.length, 0)
-      sourceLabel = `Proposés · ${file.name} (+${nouveaux.length} morceaux, ${nSeances} séances)`
-      warningsImport = [
-        ...warnings,
-        ...(doublons > 0 ? [`${doublons} morceau(x) déjà présent(s), ignoré(s)`] : []),
-      ]
-      solution = null
     } catch (err) {
       erreurImport = err instanceof Error ? err.message : String(err)
     } finally {
-      cible.value = ''
+      chargementImport = false
     }
+  }
+
+  function appliquerImportExcel(sel: SelectionExcel) {
+    if (detection?.type !== 'xlsx') return
+    const candidat = construireCandidatExcel(detection, sel, inscriptions, session.id)
+    // Auto-activation : si un onglet Proposés a été appliqué (candidat.imposes
+    // non vide alors qu'ils venaient de l'import), on active la fonction du
+    // lieu (brief 4b — décoché signifie « n'entre pas dans le calcul »).
+    const aAppliqueProposes = [...sel.ongletsCoches].some((nom) => {
+      const o = detection?.type === 'xlsx' ? detection.onglets.find((x) => x.nom === nom) : null
+      return o?.destination === 'proposes' && o.statut === 'ok'
+    })
+    if (aAppliqueProposes && !lieu.fonctionsActivees.proposes) {
+      lieu.fonctionsActivees.proposes = true
+    }
+    inscriptions = candidat
+    bilan = bilanExcel(detection, sel)
+    warningsImport = bilan.warnings
+    sourceLabel = `${detection.nomFichier} — ${bilan.onglets_appliques.length} onglet(s) appliqué(s)`
+    solution = null
+    modeDemo = false
+    detection = null
+  }
+
+  function appliquerImportJson() {
+    if (detection?.type !== 'json') return
+    const patch = construireCandidatJson(detection, session.id)
+    if (patch.lieu) {
+      const parsed = Lieu.parse(patch.lieu)
+      Object.assign(lieu, parsed)
+      lieu.salles.splice(0, lieu.salles.length, ...parsed.salles)
+    }
+    if (patch.session) {
+      const parsed = Session.parse(patch.session)
+      Object.assign(session, parsed)
+      session.grille.splice(0, session.grille.length, ...parsed.grille)
+    }
+    if (patch.inscriptions) inscriptions = patch.inscriptions
+    if (patch.contraintesActives) {
+      contraintesActives = {
+        ...contraintesActives,
+        ...(patch.contraintesActives as Record<IdContrainte, boolean>),
+      }
+    }
+    sourceLabel = `JSON · ${detection.nomFichier}`
+    warningsImport = detection.warningsGlobaux
+    // Bilan simplifié pour JSON — pas de sélection, tout ou rien
+    bilan = {
+      onglets_appliques: [],
+      onglets_ignores: [],
+      warnings: detection.warningsGlobaux,
+    }
+    solution = null
+    modeDemo = false
+    detection = null
+  }
+
+  function annulerImport() {
+    detection = null
+    bilan = null
+    erreurImport = ''
+    warningsImport = []
   }
 
   async function telechargerTemplate() {
@@ -454,63 +477,6 @@
     URL.revokeObjectURL(url)
   }
 
-  async function importerEtat(e: Event) {
-    const cible = e.target as HTMLInputElement
-    const file = cible.files?.[0]
-    if (!file) return
-    erreurImport = ''
-    warningsImport = []
-    try {
-      const texte = await file.text()
-      const brut = JSON.parse(texte) as Record<string, unknown>
-      let quelqueChoseLu = false
-
-      // Format canonique : { lieu, session, inscriptions, contraintesActives }
-      if (brut.lieu) {
-        const parsed = Lieu.parse(brut.lieu)
-        Object.assign(lieu, parsed)
-        lieu.salles.splice(0, lieu.salles.length, ...parsed.salles)
-        quelqueChoseLu = true
-      }
-      if (brut.session) {
-        const parsed = Session.parse(brut.session)
-        Object.assign(session, parsed)
-        session.grille.splice(0, session.grille.length, ...parsed.grille)
-        quelqueChoseLu = true
-      }
-      if (brut.inscriptions) {
-        inscriptions = brut.inscriptions as Inscriptions
-        quelqueChoseLu = true
-      }
-      if (brut.contraintesActives) {
-        contraintesActives = { ...contraintesActives, ...(brut.contraintesActives as Record<IdContrainte, boolean>) }
-        quelqueChoseLu = true
-      }
-
-      // Fallback : format legacy prototype à la racine (groupes / membresImposes / indispos / identitesConnues)
-      // — comme `apero_mercredi.json`.
-      if (!quelqueChoseLu && Array.isArray(brut.groupes)) {
-        const legacy = parseLegacyInscriptions(brut)
-        inscriptions = migrerInscriptions(legacy, session.id)
-        warningsImport.push(
-          `Format legacy détecté (${legacy.groupes.length} groupes) — migré vers le modèle canonique.`,
-        )
-        quelqueChoseLu = true
-      }
-
-      if (!quelqueChoseLu) {
-        erreurImport = 'Fichier JSON non reconnu : aucun bloc `lieu` / `session` / `inscriptions` ni `groupes` à la racine.'
-      } else {
-        sourceLabel = `JSON · ${file.name}`
-        solution = null
-        modeDemo = false
-      }
-    } catch (err) {
-      erreurImport = err instanceof Error ? err.message : String(err)
-    } finally {
-      cible.value = ''
-    }
-  }
 
   /* --- Édition Lieu ------------------------------------------------------ */
 
@@ -855,17 +821,19 @@
     </p>
   </header>
 
-  <Source
+  <ImportUnique
     {sourceLabel}
+    {detection}
+    {bilan}
     {erreurImport}
     {warningsImport}
-    onNouvelleSession={nouvelleSessionVide}
+    chargementEnCours={chargementImport}
+    onFichier={traiterFichier}
+    onImporterExcel={appliquerImportExcel}
+    onImporterJson={appliquerImportJson}
+    onAnnuler={annulerImport}
     onUtiliserDemo={utiliserDemo}
-    onImporterXlsx={importerFichier}
-    onImporterStagiaires={importerStagiaires}
-    onImporterProposes={importerProposes}
-    onImporterJson={importerEtat}
-    onExporterJson={exporterEtat}
+    onNouvelleSession={nouvelleSessionVide}
     onTelechargerTemplate={telechargerTemplate}
   />
 
@@ -1081,6 +1049,7 @@
         <button class="ghost" onclick={exporterSalles}>CSV salles</button>
         <button class="ghost" onclick={exporterMusiciens}>CSV musiciens</button>
         <button class="ghost" onclick={exporterXlsx}>Classeur .xlsx</button>
+        <button class="ghost" onclick={exporterEtat}>Sauvegarder l'état .json</button>
         <button class="ghost" onclick={() => window.print()}>Imprimer</button>
       </div>
       {#if figeesKeys.size > 0}
