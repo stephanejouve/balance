@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Balance — répartition automatique des répétitions musicales</title>
+<meta name="description" content="Balance équilibre musiciens, groupes et salles pour un stage de musique. Démonstration interactive.">
+<style>
+/* Polices offline-first : @fontsource copié par le workflow Pages dans
+   ./fonts/ (voir .github/workflows/pages.yml). Pas de Google Fonts — la
+   vitrine hérite de la promesse offline du projet.
+   Familles : Instrument Serif (titres), IBM Plex Sans (courant), IBM Plex Mono (mono). */
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: normal;
+  font-weight: 400;
+  src: url('./fonts/instrument-serif-latin-400-normal.woff2') format('woff2');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: italic;
+  font-weight: 400;
+  src: url('./fonts/instrument-serif-latin-400-italic.woff2') format('woff2');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  src: url('./fonts/ibm-plex-sans-latin-400-normal.woff2') format('woff2');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  src: url('./fonts/ibm-plex-sans-latin-500-normal.woff2') format('woff2');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  src: url('./fonts/ibm-plex-sans-latin-600-normal.woff2') format('woff2');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  src: url('./fonts/ibm-plex-mono-latin-400-normal.woff2') format('woff2');
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 600;
+  src: url('./fonts/ibm-plex-mono-latin-600-normal.woff2') format('woff2');
+  font-display: swap;
+}
+/* ---------------------------------------------------------------
+   Palette et typographie reprises du prototype (repartiteur_repetitions.html)
+   pour que la page et l'outil embarqué appartiennent au même monde visuel :
+   tableau noir de salle de répétition, feuilles de papier scotchées dessus.
+   Parti pris mono-thème assumé — l'outil n'a pas de mode clair.
+   --------------------------------------------------------------- */
+:root{
+  --board:#26332C;
+  --board-deep:#1B2520;
+  --board-line:rgba(255,255,255,.16);
+  --paper:#FAF9F4;
+  --paper-edge:#E8E5DA;
+  --ink:#1A211D;
+  --ink-soft:#5B6660;
+  --ochre:#C8871F;
+  --craie:#9FC6D8;
+  --rouge:#A83B2E;
+  --vert:#4A7C59;
+  --tape:rgba(255,255,255,.34);
+
+  --serif:'Instrument Serif',Georgia,'Times New Roman',serif;
+  --sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+
+  --step-0:15px;
+  --step-1:17px;
+  --step-2:21px;
+  --step-3:27px;
+  --gap:34px;
+}
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:var(--board);
+  background-image:radial-gradient(ellipse at 28% -6%,rgba(255,255,255,.055),transparent 62%);
+  color:var(--paper);
+  font-family:var(--sans);
+  font-size:var(--step-0);
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+
+.wrap{
+  max-width:1180px;
+  margin:0 auto;
+  padding:40px 20px 90px;
+  display:flex;
+  flex-direction:column;
+  gap:var(--gap);
+}
+
+/* ---------- en-tête ---------- */
+
+.top{
+  border-bottom:1px solid var(--board-line);
+  padding-bottom:24px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.eyebrow{
+  font-family:var(--mono);
+  font-size:11px;
+  letter-spacing:.15em;
+  text-transform:uppercase;
+  color:var(--ochre);
+  font-weight:600;
+  margin:0;
+}
+h1{
+  font-family:var(--serif);
+  font-weight:400;
+  font-size:clamp(34px,5.4vw,56px);
+  line-height:1.02;
+  letter-spacing:-.012em;
+  margin:0;
+  text-wrap:balance;
+}
+h1 em{font-style:italic;color:var(--ochre)}
+.lede{
+  margin:0;
+  max-width:64ch;
+  color:rgba(250,249,244,.74);
+  font-size:var(--step-1);
+}
+.stats{
+  display:flex;
+  flex-wrap:wrap;
+  gap:14px 30px;
+  margin-top:8px;
+  font-family:var(--mono);
+  font-size:11px;
+  text-transform:uppercase;
+  letter-spacing:.09em;
+  color:var(--craie);
+}
+.stats div{display:flex;flex-direction:column}
+.stats b{
+  font-family:var(--serif);
+  font-size:28px;
+  font-weight:400;
+  letter-spacing:0;
+  text-transform:none;
+  color:var(--paper);
+  font-variant-numeric:tabular-nums;
+}
+
+/* ---------- feuilles de papier ---------- */
+
+.sheet{
+  position:relative;
+  background:var(--paper);
+  color:var(--ink);
+  border-radius:2px;
+  padding:28px 30px 32px;
+  box-shadow:0 14px 34px rgba(0,0,0,.34);
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+}
+.sheet::before,
+.sheet::after{
+  content:"";
+  position:absolute;
+  top:-11px;
+  width:86px;
+  height:23px;
+  background:var(--tape);
+  border-left:1px solid rgba(255,255,255,.2);
+  border-right:1px solid rgba(255,255,255,.2);
+  transform:rotate(-1.4deg);
+}
+.sheet::before{left:28px}
+.sheet::after{right:28px;transform:rotate(1.6deg)}
+
+.sheet h2{
+  font-family:var(--serif);
+  font-weight:400;
+  font-size:var(--step-3);
+  letter-spacing:-.01em;
+  margin:0;
+  text-wrap:balance;
+}
+.sheet h3{
+  font-family:var(--sans);
+  font-weight:600;
+  font-size:13px;
+  letter-spacing:.02em;
+  margin:6px 0 0;
+}
+.sheet p{margin:0;max-width:70ch}
+.sheet .eyebrow{color:#9A6A14}
+.soft{color:var(--ink-soft)}
+strong{font-weight:600}
+
+.cols{display:grid;gap:22px 34px;grid-template-columns:repeat(auto-fit,minmax(258px,1fr))}
+.cols p{max-width:none}
+
+ul.plain{margin:0;padding-left:19px;display:flex;flex-direction:column;gap:7px}
+ul.plain li{max-width:70ch}
+ul.plain li::marker{color:var(--ochre)}
+ul.plain.deux{display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:12px 40px}
+ul.plain.deux li{max-width:none}
+
+.rule{height:1px;background:var(--paper-edge);border:0;margin:4px 0}
+
+/* ---------- tableaux ---------- */
+
+.tablebox{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px;min-width:440px}
+th{
+  text-align:left;
+  font-family:var(--mono);
+  font-size:10.5px;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+  color:var(--ink-soft);
+  font-weight:600;
+  padding:8px 10px 8px 0;
+  border-bottom:1.5px solid var(--ink);
+  vertical-align:bottom;
+}
+td{
+  padding:9px 10px 9px 0;
+  border-bottom:1px solid var(--paper-edge);
+  vertical-align:top;
+}
+td.mono,.mono{font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+
+.tag{
+  display:inline-block;
+  font-family:var(--mono);
+  font-size:10.5px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  font-weight:600;
+  padding:2px 7px;
+  border-radius:2px;
+  white-space:nowrap;
+}
+.tag.dure{background:#F6E3E0;color:var(--rouge);border:1px solid #E3BDB7}
+.tag.pref{background:#F8EEDA;color:#8A5C11;border:1px solid #E6D2A6}
+.tag.ok{background:#E3EEE6;color:var(--vert);border:1px solid #BBD5C3}
+
+.note{
+  padding:13px 16px;
+  border-left:3px solid var(--ochre);
+  background:#FBF2DF;
+  border-radius:0 2px 2px 0;
+  font-size:14px;
+}
+.note.calme{border-color:var(--craie);background:#EDF3F6}
+.note p{max-width:74ch}
+
+/* ---------- le bloc de démonstration ---------- */
+
+.demo{gap:0;padding:0;overflow:hidden}
+.demo .demohead{
+  padding:26px 30px 20px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  border-bottom:1px solid var(--paper-edge);
+}
+.demobar{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:10px;
+  padding:12px 30px;
+  background:#F1EFE6;
+  border-bottom:1px solid var(--paper-edge);
+}
+.demobar .hintmini{
+  font-family:var(--mono);
+  font-size:10.5px;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+  color:var(--ink-soft);
+  font-weight:600;
+  margin-right:auto;
+}
+button{
+  font-family:var(--sans);
+  font-weight:600;
+  font-size:13px;
+  padding:8px 15px;
+  border-radius:2px;
+  border:1px solid var(--ink);
+  background:transparent;
+  color:var(--ink);
+  cursor:pointer;
+  transition:background .15s,transform .08s;
+}
+button:hover{background:#E4E1D6}
+button:active{transform:translateY(1px)}
+button:focus-visible{outline:3px solid var(--ochre);outline-offset:2px}
+
+.frame{
+  position:relative;
+  background:var(--board-deep);
+  height:760px;
+  transition:height .25s ease;
+}
+.frame.grand{height:calc(100vh - 96px)}
+.frame iframe{
+  display:block;
+  width:100%;
+  height:100%;
+  border:0;
+  background:var(--board);
+}
+
+/* ---------- pied ---------- */
+
+.foot{
+  border-top:1px solid var(--board-line);
+  padding-top:22px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  font-size:13.5px;
+  color:rgba(250,249,244,.62);
+}
+.foot p{margin:0;max-width:74ch}
+.foot .mono{color:var(--craie)}
+
+@media (max-width:700px){
+  :root{--gap:26px}
+  .sheet{padding:24px 20px 26px}
+  .demo .demohead{padding:22px 20px 18px}
+  .demobar{padding:12px 20px}
+  .frame{height:620px}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none !important}
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="top">
+    <p class="eyebrow">Prototype hérité · jeu d'essai anonymisé · session d'août</p>
+    <h1>Qui répète <em>où</em>, et <em>quand</em></h1>
+    <p class="lede">Balance place les répétitions d'un stage de musique : chaque groupe en veut trois,
+    les salles sont comptées, les créneaux aussi, et la moitié des musiciens jouent dans plusieurs
+    groupes. Le mot vient du métier — le réglage sonore qui précède un concert.</p>
+    <div class="stats">
+      <div><b>13</b>groupes volontaires</div>
+      <div><b>39</b>musiciens</div>
+      <div><b>30</b>créneaux</div>
+      <div><b>5</b>salles</div>
+      <div><b>120</b>places-salles</div>
+    </div>
+  </header>
+
+  <section class="sheet">
+    <p class="eyebrow">Le problème</p>
+    <h2>Pourquoi ça ne se fait pas à la main</h2>
+    <p>Trente-neuf réservations à poser — 13 groupes × 3 répétitions — dans 120 places-salles.
+    Écrit comme ça, il y a de la marge. Ce qui la mange :</p>
+    <div>
+      <div>
+        <ul class="plain deux">
+          <li><strong>22 des 39 musiciens</strong> jouent dans plus d'un groupe. L'un d'eux
+          est dans cinq groupes à lui seul — ces cinq groupes ne pourront jamais répéter en même temps.</li>
+          <li><strong>Douze morceaux imposés</strong> occupent déjà quatre vagues d'horaires. Un musicien
+          inscrit sur un imposé est indisponible pour tous les créneaux de cette vague.</li>
+          <li><strong>Les salles n'ouvrent pas toutes à toute heure</strong> : Le Garage est fermé en fin
+          d'après-midi, après 23 h il n'en reste que trois, et le vendredi matin deux.</li>
+          <li><strong>Les indisponibilités sont ciblées par pupitre</strong> : les chanteurs ne sont pas
+          libres pour le chant de 9 h à 10 h, mais restent disponibles pour leur instrument.</li>
+        </ul>
+      </div>
+    </div>
+    <hr class="rule">
+    <p class="soft">Retirer un seul nom d'un seul groupe peut débloquer six réservations ailleurs. C'est
+    précisément ce qu'un tableur ne dit pas.</p>
+  </section>
+
+  <section class="sheet">
+    <p class="eyebrow">Le moteur</p>
+    <h2>Ce qui ne se négocie pas, et ce qui se pondère</h2>
+    <p>Deux familles de règles, traitées différemment. Les contraintes dures ne sont jamais violées :
+    une solution qui en casse une est rejetée, pas notée. Les préférences se contentent d'orienter le
+    choix entre deux placements légaux.</p>
+    <div class="tablebox">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:104px">Nature</th>
+            <th>Règle</th>
+            <th style="width:34%">Pourquoi</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="tag dure">Dure</span></td>
+            <td>Personne n'est convoqué à deux endroits au même créneau</td>
+            <td class="soft">Le musicien ne peut pas se couper en deux</td>
+          </tr>
+          <tr>
+            <td><span class="tag dure">Dure</span></td>
+            <td>Jamais plus de groupes que de salles ouvertes sur un créneau</td>
+            <td class="soft">Une salle ne se dédouble pas</td>
+          </tr>
+          <tr>
+            <td><span class="tag dure">Dure</span></td>
+            <td>Aucun groupe pendant un morceau imposé de l'un de ses membres</td>
+            <td class="soft">Le planning officiel prime</td>
+          </tr>
+          <tr>
+            <td><span class="tag dure">Dure</span></td>
+            <td>Les indisponibilités déclarées, y compris ciblées par pupitre</td>
+            <td class="soft">« Indispo en chant à 9 h » n'interdit pas le piano</td>
+          </tr>
+          <tr>
+            <td><span class="tag dure">Dure</span></td>
+            <td>Jamais deux heures d'affilée pour le même groupe</td>
+            <td class="soft">Deux heures de rang, personne ne les fait</td>
+          </tr>
+          <tr>
+            <td><span class="tag pref">Préf.</span></td>
+            <td>Étaler les trois répétitions sur trois jours différents</td>
+            <td class="soft">Le travail se sédimente entre deux séances</td>
+          </tr>
+          <tr>
+            <td><span class="tag pref">Préf.</span></td>
+            <td>Les groupes de six et plus dans les grandes salles</td>
+            <td class="soft">Une rythmique complète ne tient pas partout</td>
+          </tr>
+          <tr>
+            <td><span class="tag pref">Préf.</span></td>
+            <td>Varier les salles d'un groupe — sauf s'il enchaîne, alors il reste installé</td>
+            <td class="soft">Déménager un kit de batterie coûte dix minutes</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note calme">
+      <p><strong>La vérification est refaite après coup, indépendamment du placement.</strong> Une fois
+      la répartition trouvée, un second calcul relit la solution et cherche les conflits sans rien savoir
+      de la façon dont elle a été construite. Un solveur qui se contrôle avec ses propres hypothèses ne
+      contrôle rien.</p>
+    </div>
+  </section>
+
+  <section class="sheet demo">
+    <div class="demohead">
+      <p class="eyebrow">À l'essai</p>
+      <h2>L'outil, en état de marche</h2>
+      <p>Le jeu d'essai est déjà chargé : 13 groupes, prénoms fictifs, structure réelle conservée
+      (polyvalents, homonymes distingués par une initiale, indisponibilités par pupitre). Clique
+      <strong>« Répartir les répétitions »</strong> — le moteur essaie quelques milliers de combinaisons
+      et garde la meilleure. Relance : il repart de zéro et propose autre chose.</p>
+    </div>
+    <div class="demobar">
+      <span class="hintmini">Démonstration interactive — l'application réelle, jeu d'essai chargé</span>
+      <button type="button" id="btnGrand">Agrandir</button>
+      <button type="button" id="btnReset">Recharger le jeu d'essai</button>
+    </div>
+    <div class="frame" id="frame">
+      <iframe
+        id="app"
+        src="../?demo=apero"
+        title="Balance — l'application, jeu d'essai chargé"
+        loading="lazy"
+      ></iframe>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <p class="eyebrow">À essayer</p>
+    <h2>Trois manipulations qui montrent l'intérêt</h2>
+    <div class="cols">
+      <div>
+        <h3>Casser la répartition exprès</h3>
+        <p class="soft">Dans le tableau, ajoute le même prénom au chant de cinq groupes différents.
+        Relance. L'outil ne se contente pas d'échouer : il nomme la personne qui bloque et chiffre
+        combien de créneaux restent ouverts au groupe coincé.</p>
+      </div>
+      <div>
+        <h3>Changer l'échéance</h3>
+        <p class="soft">Passe de l'apéro-concert du mercredi au grand concert du vendredi. Le nombre de
+        créneaux utilisables saute de 16 à 30 — et des groupes qui n'avaient que deux répétitions en
+        obtiennent trois.</p>
+      </div>
+      <div>
+        <h3>Lire le planning par salle</h3>
+        <p class="soft">Plus bas dans le résultat, une feuille par salle, à afficher sur la porte. C'est
+        la sortie qui sert vraiment sur place : le reste se consulte, celle-là se punaise.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sheet">
+    <p class="eyebrow">Historique</p>
+    <h2>Le prototype et l'application qui l'a remplacé</h2>
+    <p>Balance a commencé comme un fichier HTML de 1 128 lignes, tout en dur, avec les données
+    d'une session écrites dans le code. Ce prototype a servi à trouver les bonnes questions.
+    L'application actuelle — celle que tu manipules ci-dessus — les traite proprement.</p>
+    <div class="tablebox">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:30%">&nbsp;</th>
+            <th>Prototype <span class="soft">(2024, archivé)</span></th>
+            <th>Application <span class="soft">(actuelle)</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Technique</td>
+            <td>Un fichier, JavaScript nu</td>
+            <td>Svelte 5 + TypeScript + Vite, build en fichier unique</td>
+          </tr>
+          <tr>
+            <td>Données du lieu</td>
+            <td class="soft">Salles, créneaux et imposés codés en dur</td>
+            <td>Profil de lieu réutilisable, grille de créneaux décrite par règles</td>
+          </tr>
+          <tr>
+            <td>Entrée</td>
+            <td class="soft">Saisie au clavier, ou JSON collé à la main</td>
+            <td>Import du classeur Excel d'inscription, onglets <span class="mono">Liste</span> et <span class="mono">Stagiaires</span></td>
+          </tr>
+          <tr>
+            <td>Sorties</td>
+            <td>Feuilles de route, occupation par salle, impression ciblée</td>
+            <td>Idem, plus vue par musicien, conducteur du spectacle minuté, exports CSV et XLSX</td>
+          </tr>
+          <tr>
+            <td>Modèle</td>
+            <td class="soft">Conventions implicites dans les chaînes de caractères</td>
+            <td>Modèle validé, pupitre distinct de l'instrument précis, migration des anciens fichiers</td>
+          </tr>
+          <tr>
+            <td>Filet</td>
+            <td class="soft">Relecture humaine</td>
+            <td><span class="tag ok">216 tests</span> et vérification indépendante de chaque solution</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">
+      <p><strong>Ce qui est embarqué ici.</strong> Le cadre ci-dessus charge l'application depuis la
+      racine du site (<span class="mono">../?demo=apero</span>). Chaque déploiement met la présentation
+      et l'outil à jour d'un coup — la vitrine ne peut plus se désynchroniser de ce qu'elle montre.</p>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p class="mono">Balance · MIT · prototype de référence historique</p>
+    <p>Les prénoms du jeu d'essai sont fictifs. La structure des cas — polyvalence, homonymes,
+    indisponibilités ciblées — est celle des sessions réelles, conservée pour que les tests restent
+    représentatifs.</p>
+  </footer>
+
+</div>
+
+<script>
+// L'iframe pointe directement vers `../?demo=apero` (l'application réelle,
+// même origine). Pas de mécanisme <template> à remonter — le simple `src`
+// suffit et l'application se recharge en changeant son `src`.
+(function(){
+  var frame = document.getElementById('app');
+  var box = document.getElementById('frame');
+  var btnGrand = document.getElementById('btnGrand');
+  var btnReset = document.getElementById('btnReset');
+
+  btnReset.addEventListener('click', function(){
+    // Force un rechargement de l'iframe pour repartir sur un jeu d'essai neuf.
+    frame.src = frame.src;
+  });
+
+  btnGrand.addEventListener('click', function(){
+    var grand = box.classList.toggle('grand');
+    btnGrand.textContent = grand ? 'Réduire' : 'Agrandir';
+    if (grand) box.scrollIntoView({behavior:'smooth', block:'start'});
+  });
+})();
+</script>
+</body>
+</html>
