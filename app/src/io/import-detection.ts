@@ -326,24 +326,25 @@ export function construireCandidatExcel(
   }
   const personnesParId = new Map(candidat.personnes.map((p) => [p.id, p]))
 
-  const ordreDestinations: DestinationOnglet[] = ['liste', 'stagiaires', 'proposes']
-  for (const dest of ordreDestinations) {
-    for (const [nom] of actives) {
-      const p = detection._payloads.get(nom)
-      if (!p || p.destination !== dest) continue
-      if (dest === 'liste') {
-        candidat.groupes = p.groupes
-      } else if (dest === 'stagiaires') {
-        for (const pers of p.personnes) {
-          if (!personnesParId.has(pers.id)) {
-            personnesParId.set(pers.id, pers)
-            candidat.personnes.push(pers)
-          }
+  // Discrimination sur `p.destination` directement (TS narrow correctement
+  // la Map union — le pattern « for(dest) then narrow p.destination !== dest »
+  // ne propage pas le narrow). L'ordre entre destinations n'importe pas :
+  // chacune s'applique à un tableau distinct de `candidat`.
+  for (const [nom] of actives) {
+    const p = detection._payloads.get(nom)
+    if (!p) continue
+    if (p.destination === 'liste') {
+      candidat.groupes = p.groupes
+    } else if (p.destination === 'stagiaires') {
+      for (const pers of p.personnes) {
+        if (!personnesParId.has(pers.id)) {
+          personnesParId.set(pers.id, pers)
+          candidat.personnes.push(pers)
         }
-      } else {
-        // proposes
-        candidat.imposes = p.imposes
       }
+    } else {
+      // proposes
+      candidat.imposes = p.imposes
     }
   }
 

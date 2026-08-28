@@ -1,4 +1,4 @@
-import readXlsxFile from 'read-excel-file/browser'
+import { readSheet } from 'read-excel-file/browser'
 import type { Personne } from '../domain/model'
 import type { ExtractionListe, MappingListe } from './liste-adapter'
 import { extraireListe } from './liste-adapter'
@@ -21,7 +21,7 @@ export async function importerListeExcel(
   onglet: string,
   mapping: MappingListe,
 ): Promise<ExtractionListe> {
-  const rows = (await readXlsxFile(file, { sheet: onglet })) as unknown[][]
+  const rows = (await readSheet(file, onglet)) as unknown[][]
   return extraireListe(rows, mapping)
 }
 
@@ -35,7 +35,7 @@ export async function importerStagiairesExcel(
   onglet: string,
   mapping: MappingStagiaires,
 ): Promise<ExtractionStagiaires> {
-  const rows = (await readXlsxFile(file, { sheet: onglet })) as unknown[][]
+  const rows = (await readSheet(file, onglet)) as unknown[][]
   return extraireStagiaires(rows, mapping)
 }
 
@@ -52,6 +52,6 @@ export async function importerProposesExcel(
   mapping: MappingProposes,
   personnesConnues: readonly Personne[],
 ): Promise<ExtractionProposes> {
-  const rows = (await readXlsxFile(file, { sheet: onglet })) as unknown[][]
+  const rows = (await readSheet(file, onglet)) as unknown[][]
   return extraireProposes(rows, mapping, personnesConnues)
 }

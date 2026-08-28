@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Creneau } from '../domain/grille'
+import { FONCTIONS_ACTIVEES_TOUT_ACTIF } from '../domain/model'
 import type { Groupe, Inscriptions, Lieu } from '../domain/model'
 import { ciblesValides, testerDeplacement } from './manuel'
 import type { Assignation } from './types'
@@ -17,6 +18,7 @@ function lieu(salles: Array<{ id: string; jauge: number; actif?: boolean }>): Li
       actif: s.actif ?? true,
     })),
     pupitres: ['piano', 'basse', 'chant', 'guitare', 'batterie', 'vents'],
+    fonctionsActivees: FONCTIONS_ACTIVEES_TOUT_ACTIF,
   }
 }
 

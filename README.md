@@ -187,13 +187,33 @@ Le projet vit dans [`app/`](app/) — Svelte 5 + TypeScript + Vite. Le build
 produit un fichier unique `dist/balance.html` avec tout inliné (JS, CSS,
 polices `@fontsource`).
 
+**Prérequis** : Node ≥ 20.19 (exigé par vitest 4).
+
 ```bash
 cd app
 npm install
-npm run dev       # dev server → http://localhost:5173/balance.html
-npm run build     # → ../dist/balance.html (~1.4 Mo)
-npm test          # vitest — 94 tests
+npm run dev              # dev server → http://localhost:5173/balance.html
+npm run build            # → ../dist/balance.html (~1.4 Mo)
+npm test                 # vitest — 115 tests
+npm run test:coverage    # vitest + rapport HTML dans app/coverage/
+npm run check            # svelte-check + tsc strict — 0 erreurs, 0 warnings
 ```
+
+### Qualité
+
+- **CI GitHub Actions** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml))
+  sur chaque PR : test (Node 20.19 + 22), lint (`npm run check`), build
+  (vérif taille `dist/balance.html`).
+- **Pre-commit hooks** ([`.pre-commit-config.yaml`](.pre-commit-config.yaml)) —
+  hooks génériques cross-langage (trailing whitespace, EOL, YAML/JSON valide,
+  détection de clé privée, taille des fichiers). Installation :
+  ```bash
+  pip install pre-commit
+  pre-commit install
+  ```
+- **TypeScript strict** (`tsconfig.json`) aligné sur le standard Magma.
+- **Couverture** générée par `@vitest/coverage-v8` (provider V8, reporter HTML
+  + LCOV).
 
 ## Structure
 

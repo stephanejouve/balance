@@ -111,6 +111,7 @@ export function migrerInscriptions(legacy: LegacyInscriptions, session_id: strin
     instruments: [...a.instruments.entries()].map(([pupitre, precision]) => ({
       pupitre,
       precision,
+      lourd: false,
     })),
     role: 'musicien',
     indispos: [],

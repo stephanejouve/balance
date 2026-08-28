@@ -30,7 +30,7 @@
   import { ciblesValides } from './engine/manuel'
   import { suggererRenforts } from './engine/renforts'
   import { repartir } from './engine/solver'
-  import type { Assignation, Probleme } from './engine/types'
+  import type { Assignation, GroupeSansSalle, Probleme } from './engine/types'
   import { couverture, verifier } from './engine/verify'
   import { csvParGroupe, csvParMusicien, csvParSalle, telechargerCsv } from './io/csv'
   import { exporterClasseurExcel } from './io/excel-export'
@@ -120,6 +120,7 @@
     problemes: Probleme[]
     couverture: Array<{ groupe_id: string; obtenu: number; cible: number; min: number }>
     diagnostics: ReturnType<typeof diagnostiquer>
+    groupesPerdus: GroupeSansSalle[]
     duree_ms: number
   }
   let solution = $state<Solution | null>(null)
@@ -560,6 +561,7 @@
       responsable_id: '',
       membres: [],
       postes_cherches: [],
+      repetitions_deja_faites: 0,
     })
     solution = null
   }
@@ -629,7 +631,7 @@
   function ajouterInstrument(pid: string) {
     const p = inscriptions.personnes.find((x) => x.id === pid)
     if (!p) return
-    p.instruments.push({ pupitre: 'chant' })
+    p.instruments.push({ pupitre: 'chant', lourd: false })
     solution = null
   }
   function supprimerInstrument(pid: string, i: number) {

@@ -1,0 +1,123 @@
+# CI Balance — aligné sur le standard Magma (magma-cycling / outillages).
+#
+# 3 jobs indépendants (fail-fast désactivé pour voir toutes les erreurs) :
+#   - test    : vitest sur matrice Node 20.19 / 22, upload coverage
+#   - lint    : svelte-check + tsc (types stricts)
+#   - build   : vite build single-file (vérifie que dist/balance.html se
+#              génère bien, taille attendue ~1.4 Mo)
+#
+# Déclenché :
+#   - push sur main
+#   - pull_request vers main
+#
+# Paths-ignore : .md, docs/*, dist/* — évite un run inutile sur des
+# changements pure doc / livrables régénérables.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'dist/**'
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  test:
+    name: Test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20.19', '22']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage artifact
+        if: matrix.node == '20.19'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: app/coverage/
+          retention-days: 14
+
+  lint:
+    name: Type check + svelte-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20.19
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check + svelte-check
+        run: npm run check
+
+  build:
+    name: Build single-file
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20.19
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Check output size (must exist, < 2 Mo)
+        run: |
+          if [ ! -f ../dist/balance.html ]; then
+            echo "::error::dist/balance.html not generated"
+            exit 1
+          fi
+          SIZE=$(stat -c%s ../dist/balance.html)
+          echo "dist/balance.html: $SIZE bytes"
+          if [ $SIZE -gt 2000000 ]; then
+            echo "::error::dist/balance.html exceeds 2 MB — investigate"
+            exit 1
+          fi
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: balance-html
+          path: dist/balance.html
+          retention-days: 14
