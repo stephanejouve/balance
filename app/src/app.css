@@ -100,6 +100,14 @@ code {
     transition: background 0.15s;
     display: inline-block;
     line-height: 1.2;
+    /* Neutralise la règle générique `label { text-transform: uppercase;
+       letter-spacing: .1em; display: block }` (ligne ~457, pour les
+       étiquettes de champs) — sinon les `.fake-btn` (qui sont des
+       <label> masquant des <input type="file">) apparaissent en
+       capitales espacées et bloc, différemment des boutons ordinaires.
+       Bug remonté à la revue Leader du brief import unique. */
+    text-transform: none;
+    letter-spacing: normal;
   }
   button:hover:not(:disabled), .fake-btn:hover { background: #000; }
   button:disabled { opacity: 0.5; cursor: wait; }
