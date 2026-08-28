@@ -35,6 +35,9 @@ const etape = (groupe_id: string, style = ''): EtapeConcert => ({
   groupe_id,
   titre: groupe_id,
   style,
+  musiciens_partages_avec_precedent: 0,
+  musiciens_qui_montent: [],
+  musiciens_qui_descendent: [],
 })
 
 describe('lateraliteBatteur', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Creneau } from '../domain/grille'
+import { FONCTIONS_ACTIVEES_TOUT_ACTIF } from '../domain/model'
 import type { Inscriptions, Lieu } from '../domain/model'
 import { attribuerSalles } from './allocate-rooms'
 import type { PlacementItem } from './solver'
@@ -17,6 +18,7 @@ function lieuAvecSalles(salles: Array<{ id: string; jauge: number; actif?: boole
       actif: s.actif ?? true,
     })),
     pupitres: ['piano', 'basse', 'chant', 'guitare', 'batterie', 'vents'],
+    fonctionsActivees: FONCTIONS_ACTIVEES_TOUT_ACTIF,
   }
 }
 

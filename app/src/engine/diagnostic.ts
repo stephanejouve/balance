@@ -1,5 +1,5 @@
 import type { Creneau } from '../domain/grille'
-import type { Groupe, Inscriptions, Pupitre, Session } from '../domain/model'
+import type { Groupe, Inscriptions, Personne, Pupitre, Session } from '../domain/model'
 import { libellePersonne } from '../domain/model'
 import { enrichirIndispos } from './imposes'
 import { indispoBloque } from './indispo'

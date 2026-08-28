@@ -1,0 +1,53 @@
+# Pre-commit hooks pour Balance — aligné sur le standard Magma
+# (magma-cycling / outillages), adapté à un projet TS/Svelte (pas de
+# black/ruff/isort, ces hooks-là sont Python-only).
+#
+# Installation locale (1 fois après clone) :
+#   pip install pre-commit
+#   pre-commit install
+#
+# Run manuel :
+#   pre-commit run --all-files
+#
+# Skip (urgence) :
+#   git commit --no-verify
+#
+# Le lint TS/Svelte (svelte-check, tsc) est côté CI GitHub Actions plutôt
+# qu'en pre-commit local — trop lent pour bloquer le commit (7-10 s
+# minimum). Le hook Node ci-dessous appelle uniquement `npm test` sur
+# les fichiers TS modifiés, léger.
+
+repos:
+  # Hooks cross-langage utiles peu importe le projet
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^app/node_modules/
+      - id: end-of-file-fixer
+        exclude: ^app/node_modules/
+      - id: check-yaml
+      - id: check-json
+        exclude: |
+          (?x)^(
+              app/node_modules/|
+              app/src/fixtures/.*\.json$
+          )
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+        # Exclut le prototype legacy 68 Ko à la racine (référence
+        # historique, cf. brief §11). À archiver hors repo à terme.
+        exclude: ^(repartiteur_repetitions\.html|app/package-lock\.json)$
+      - id: detect-private-key
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+# Fichiers exclus des hooks
+exclude: |
+  (?x)^(
+      \.git/|
+      app/node_modules/|
+      app/coverage/|
+      dist/
+  )$

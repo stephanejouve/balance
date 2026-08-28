@@ -57,8 +57,11 @@ export function ordonnerConcert(groupes: readonly Groupe[]): OrdreConcert {
   const idDepart = [...restants].sort((a, b) => (scorePivot.get(b) ?? 0) - (scorePivot.get(a) ?? 0))[0]
 
   const etapes: EtapeConcert[] = []
-  let precedent: Groupe | null = null
   let precedentMembres = new Set<string>()
+  // Style du groupe précédent — chaîne vide tant qu'aucune étape posée.
+  // Évite un `Groupe | null` mutable dont TS ne narrow pas à travers la
+  // closure `ajouter()`.
+  let precedentStyle = ''
 
   const ajouter = (id: string) => {
     const g = parId.get(id)!
@@ -74,8 +77,8 @@ export function ordonnerConcert(groupes: readonly Groupe[]): OrdreConcert {
       musiciens_qui_descendent: descendent,
       style: g.style,
     })
-    precedent = g
     precedentMembres = m
+    precedentStyle = g.style
     restants.delete(id)
   }
 
@@ -88,7 +91,9 @@ export function ordonnerConcert(groupes: readonly Groupe[]): OrdreConcert {
     for (const id of restants) {
       const m = membresPar.get(id)!
       const partages = [...m].filter((p) => precedentMembres.has(p)).length
-      const styleDiff = precedent && parId.get(id)!.style && precedent.style !== parId.get(id)!.style ? 1 : 0
+      const candidatStyle = parId.get(id)!.style
+      const styleDiff =
+        precedentStyle && candidatStyle && precedentStyle !== candidatStyle ? 1 : 0
       const s = partages * 10 + styleDiff
       if (s > meilleurScore) {
         meilleurScore = s
