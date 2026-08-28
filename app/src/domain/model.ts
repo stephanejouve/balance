@@ -43,6 +43,12 @@ export const Instrument = z.object({
    * atypique…). Le solveur préfère alors regrouper les répétitions de cette
    * personne (pour cet instrument-là) dans une même salle — évite de trimballer
    * l'instrument à travers le lieu à chaque changement de créneau.
+   *
+   * Défaut : `false`. Prudent parce que la préférence « salle stable pour
+   * lourd » a un coût (elle réduit la latitude du solveur, peut forcer une
+   * salle non idéale). L'activer par défaut pénaliserait la majorité des
+   * instruments non-encombrants pour rien. C'est à la personne qui saisit
+   * son instrument de cocher — un guitariste standard n'a pas à y penser.
    */
   lourd: z.boolean().default(false),
 })
