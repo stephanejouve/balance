@@ -1,6 +1,6 @@
 [project]
 name = "balance-pdf-import"
-version = "0.1.0"
+version = "0.2.0"
 description = "Convertit les planning PDF de l'organisateur Musiques Festives en xlsx d'import Balance."
 requires-python = ">=3.10"
 license = {text = "MIT"}
