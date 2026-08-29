@@ -94,6 +94,41 @@ describe('analyserSheetsExcel — verrouille les défauts latents du brief', () 
     // Onglets présents mais tous en « ignore »
     expect(det.onglets.every((o) => o.destination === null)).toBe(true)
   })
+
+  it("robuste : un onglet reconnu dont data n'est pas un Array ne cratère pas la détection", () => {
+    // Cas observé sur classeur réel — la lib peut retourner `undefined` ou
+    // une structure non-tableau pour certaines feuilles (bug crash historique
+    // « e.forEach is not a function »). L'onglet malformé doit passer en
+    // `echec` et les autres onglets doivent continuer à être analysés.
+    const sheets = [
+      { sheet: 'Liste', data: undefined as unknown as unknown[][] },
+      { sheet: 'Stagiaires', data: [['Nom', 'Pupitre'], ['Alice', 'chant']] },
+    ]
+    const det = analyserSheetsExcel(sheets, 't.xlsx', 100, MAPPINGS, [])
+    const listeOnglet = det.onglets.find((o) => o.nom === 'Liste')!
+    const stagOnglet = det.onglets.find((o) => o.nom === 'Stagiaires')!
+    expect(listeOnglet.statut).toBe('echec')
+    expect(listeOnglet.actifParDefaut).toBe(false)
+    expect(stagOnglet.statut).toBe('ok') // autre onglet préservé
+  })
+
+  it("robuste : un onglet dont les rows contiennent des éléments non-array est nettoyé", () => {
+    // Cas Excel : feuille avec en-tête + lignes vides pouvant tomber en null.
+    // Le filtre défensif `filter(Array.isArray)` doit lisser ça.
+    const sheets = [
+      {
+        sheet: 'Stagiaires',
+        data: [
+          ['Nom', 'Pupitre'],
+          null as unknown as unknown[],
+          ['Alice', 'chant'],
+        ],
+      },
+    ]
+    const det = analyserSheetsExcel(sheets, 't.xlsx', 100, MAPPINGS, [])
+    const stagOnglet = det.onglets.find((o) => o.nom === 'Stagiaires')!
+    expect(stagOnglet.statut).toBe('ok')
+  })
 })
 
 describe('construireCandidatExcel — candidat complet, une seule affectation', () => {
