@@ -1,0 +1,134 @@
+# Release binaires standalone `balance-pdf-import` — macOS + Windows + Linux.
+#
+# Déclenché sur tag `pdf-import-v*` ou manuellement via workflow_dispatch.
+# Build via PyInstaller sur chaque OS, package en zip, upload sur GitHub Releases.
+#
+# Comportement `workflow_dispatch` : le job `build` tourne toujours, le job
+# `release` est skippé (condition `startsWith(refs/tags/pdf-import-v)`).
+# Résultat : les binaires sont uploadés en artifacts consultables 14 jours,
+# aucune GitHub Release n'est créée. Pratique pour tester un build sans
+# engager de tag public.
+#
+# La signature/notarization macOS n'est PAS gérée en V0 — le user devra
+# accepter le warning Gatekeeper une fois (System Preferences → Security).
+
+name: Release balance-pdf-import binaries
+
+on:
+  push:
+    tags:
+      - 'pdf-import-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Tag de version (ex: pdf-import-v0.2.0) — utilisé uniquement pour tracer, le release n'est pas publié en workflow_dispatch"
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset_suffix: linux-x64
+            archive: tar.gz
+          - os: macos-latest
+            asset_suffix: macos-arm64
+            archive: zip
+          - os: windows-latest
+            asset_suffix: windows-x64
+            archive: zip
+    defaults:
+      run:
+        working-directory: tools/pdf-to-xlsx
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install package + build deps
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate || source .venv/Scripts/activate
+          pip install --upgrade pip
+          pip install -e '.[dev,build]'
+
+      - name: Build GUI standalone
+        shell: bash
+        env:
+          # PyInstaller utilise `:` sur Unix et `;` sur Windows pour
+          # --add-data SRC(sep)DEST. PyInstaller 6+ tolère `:` cross-OS
+          # mais on reste explicite pour éviter les surprises sur
+          # d'anciens hooks ou variations d'OS.
+          ADDDATA_SEP: ${{ runner.os == 'Windows' && ';' || ':' }}
+        run: |
+          source .venv/bin/activate || source .venv/Scripts/activate
+          pyinstaller --noconfirm --clean --onedir --windowed \
+            --name balance-pdf-import-gui \
+            --add-data "config/fake-fixtures.yml${ADDDATA_SEP}config" \
+            src/balance_pdf_import/gui.py
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        shell: bash
+        run: |
+          cd dist
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            zip -r ../balance-pdf-import-gui-${{ matrix.asset_suffix }}.zip balance-pdf-import-gui.app
+          else
+            zip -r ../balance-pdf-import-gui-${{ matrix.asset_suffix }}.zip balance-pdf-import-gui
+          fi
+
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          cd dist
+          tar czf ../balance-pdf-import-gui-${{ matrix.asset_suffix }}.tar.gz balance-pdf-import-gui
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: balance-pdf-import-gui-${{ matrix.asset_suffix }}
+          path: tools/pdf-to-xlsx/balance-pdf-import-gui-${{ matrix.asset_suffix }}.*
+          retention-days: 14
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/pdf-import-v')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
+          body: |
+            ## balance-pdf-import — binaires GUI standalone
+
+            Télécharge l'archive qui correspond à ton OS, extrais-la, double-clique
+            sur `balance-pdf-import-gui` (ou `.app` sur macOS).
+
+            **macOS première utilisation** : le binaire n'est pas signé Apple,
+            System Preferences → Security & Privacy → « Ouvrir quand même ».
+
+            Contenu : app tkinter qui convertit un ou plusieurs PDF planning en
+            xlsx d'import Balance. Aucune installation Python requise.

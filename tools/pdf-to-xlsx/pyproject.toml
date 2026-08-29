@@ -1,6 +1,6 @@
 [project]
 name = "balance-pdf-import"
-version = "0.1.0"
+version = "0.2.0"
 description = "Convertit les planning PDF de l'organisateur Musiques Festives en xlsx d'import Balance."
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -16,9 +16,15 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.5",
 ]
+build = [
+    "pyinstaller>=6.0",
+]
 
 [project.scripts]
 balance-pdf-import = "balance_pdf_import.cli:main"
+
+[project.gui-scripts]
+balance-pdf-import-gui = "balance_pdf_import.gui:main"
 
 [build-system]
 requires = ["setuptools>=68"]
