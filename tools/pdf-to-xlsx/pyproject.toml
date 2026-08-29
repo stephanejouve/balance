@@ -16,9 +16,15 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.5",
 ]
+build = [
+    "pyinstaller>=6.0",
+]
 
 [project.scripts]
 balance-pdf-import = "balance_pdf_import.cli:main"
+
+[project.gui-scripts]
+balance-pdf-import-gui = "balance_pdf_import.gui:main"
 
 [build-system]
 requires = ["setuptools>=68"]
