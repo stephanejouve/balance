@@ -53,6 +53,34 @@ jobs:
       - name: Duplicate balance.html → index.html
         run: cp dist/balance.html dist/index.html
 
+      - name: Injecter APP_VERSION dans sw.js
+        # public/sw.js contient la constante littérale `__APP_VERSION__` —
+        # vite ne process pas les assets static via `define`. On sed après
+        # le build pour la remplacer par la vraie version extraite du bundle.
+        run: |
+          APP_VERSION=$(grep -oE "['\"]([0-9]{8}\.[0-9]{4})['\"]" dist/balance.html | head -1 | tr -d "'\"")
+          sed -i "s/__APP_VERSION__/$APP_VERSION/g" dist/sw.js
+          grep SW_VERSION dist/sw.js
+
+      - name: Générer version.json (manifest de mise à jour)
+        # La version bundlée est injectée dans balance.html au build vite
+        # via __APP_VERSION__. On l'extrait pour publier un manifest lisible
+        # par le composant MiseAJourBandeau (fetch + comparaison).
+        run: |
+          APP_VERSION=$(grep -oE "['\"]([0-9]{8}\.[0-9]{4})['\"]" dist/balance.html | head -1 | tr -d "'\"")
+          if [ -z "$APP_VERSION" ]; then
+            echo "::error::Impossible d'extraire APP_VERSION de balance.html"
+            exit 1
+          fi
+          cat > dist/version.json <<EOF
+          {
+            "version": "$APP_VERSION",
+            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "download_url": "https://stephanejouve.github.io/balance/balance.html"
+          }
+          EOF
+          echo "version.json publié : $(cat dist/version.json)"
+
       - name: Copy vitrine → dist/presentation/index.html
         run: |
           mkdir -p dist/presentation/fonts

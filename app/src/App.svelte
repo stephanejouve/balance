@@ -14,6 +14,7 @@
   import PersonnesEdit from './edition/Personnes.svelte'
   import SessionEdit from './edition/Session.svelte'
   import ImportUnique from './edition/ImportUnique.svelte'
+  import MiseAJourBandeau from './edition/MiseAJourBandeau.svelte'
   import Carte from './vues/Carte.svelte'
   import Concert from './vues/Concert.svelte'
   import ParGroupe from './vues/ParGroupe.svelte'
@@ -1154,6 +1155,8 @@
     </section>
   {/if}
 </main>
+
+<MiseAJourBandeau />
 
 <style>
   /* Styles UI globaux extraits dans src/app.css (importé par main.ts).

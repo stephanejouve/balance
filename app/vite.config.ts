@@ -4,7 +4,22 @@ import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 
+// Version = timestamp `YYYYMMDD.HHMM` UTC — monotone, string-comparable,
+// aucun bump manuel à oublier. Chaque build produit une version unique.
+// Injectée dans le bundle via `define` + accessible côté client comme
+// `__APP_VERSION__`. Un fichier `dist/version.json` est aussi émis par
+// pages.yml au deploy pour le check-update online (voir composant
+// `MiseAJourBandeau.svelte`).
+const APP_VERSION = (() => {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}.${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}`
+})()
+
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+  },
   plugins: [svelte(), viteSingleFile()],
   build: {
     target: 'es2020',
