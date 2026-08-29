@@ -61,9 +61,18 @@ jobs:
         shell: bash
         run: |
           python -m venv .venv
-          source .venv/bin/activate || source .venv/Scripts/activate
-          pip install --upgrade pip
-          pip install -e '.[dev,build]'
+          # Ne pas utiliser `source activate` : le fallback bash sur Windows
+          # (Git Bash + .venv/Scripts/activate) réussit, mais `pip install
+          # --upgrade pip` bute sur pip.exe verrouillé (Windows refuse d'écrire
+          # son propre exécutable en cours d'exécution). Appeler python -m pip
+          # directement via le chemin du venv contourne les deux problèmes.
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            PY=.venv/Scripts/python.exe
+          else
+            PY=.venv/bin/python
+          fi
+          "$PY" -m pip install --upgrade pip
+          "$PY" -m pip install -e '.[dev,build]'
 
       - name: Build GUI standalone
         shell: bash
@@ -74,8 +83,12 @@ jobs:
           # d'anciens hooks ou variations d'OS.
           ADDDATA_SEP: ${{ runner.os == 'Windows' && ';' || ':' }}
         run: |
-          source .venv/bin/activate || source .venv/Scripts/activate
-          pyinstaller --noconfirm --clean --onedir --windowed \
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            PYI=.venv/Scripts/pyinstaller.exe
+          else
+            PYI=.venv/bin/pyinstaller
+          fi
+          "$PYI" --noconfirm --clean --onedir --windowed \
             --name balance-pdf-import-gui \
             --add-data "config/fake-fixtures.yml${ADDDATA_SEP}config" \
             src/balance_pdf_import/gui.py
