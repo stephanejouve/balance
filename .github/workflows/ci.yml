@@ -1,10 +1,11 @@
 # CI Balance — aligné sur le standard Magma (magma-cycling / outillages).
 #
-# 3 jobs indépendants (fail-fast désactivé pour voir toutes les erreurs) :
-#   - test    : vitest sur matrice Node 20.19 / 22, upload coverage
-#   - lint    : svelte-check + tsc (types stricts)
-#   - build   : vite build single-file (vérifie que dist/balance.html se
-#              génère bien, taille attendue ~1.4 Mo)
+# 4 jobs indépendants (fail-fast désactivé pour voir toutes les erreurs) :
+#   - test           : vitest sur matrice Node 20.19 / 22, upload coverage
+#   - lint           : svelte-check + tsc (types stricts)
+#   - build          : vite build single-file (vérifie que dist/balance.html se
+#                     génère bien, taille attendue ~1.4 Mo)
+#   - test-pdf-import : pytest sur tools/pdf-to-xlsx/ (parseur PDF Python)
 #
 # Déclenché :
 #   - push sur main
@@ -121,3 +122,29 @@ jobs:
           name: balance-html
           path: dist/balance.html
           retention-days: 14
+
+  test-pdf-import:
+    name: Test tools/pdf-to-xlsx (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/pdf-to-xlsx
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tools/pdf-to-xlsx/pyproject.toml
+
+      - name: Install package + dev deps
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -e '.[dev]'
+
+      - name: Run pytest
+        run: .venv/bin/pytest -v --basetemp=/tmp/pytest-ci
