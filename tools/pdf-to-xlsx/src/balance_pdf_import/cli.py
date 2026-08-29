@@ -15,22 +15,32 @@ from .writer_xlsx import ecrire_xlsx
 @click.command()
 @click.option("--config", "config_path", required=True, type=click.Path(exists=True, path_type=Path),
               help="Fichier YAML de config (mots-clés, ignorer, salles attendues).")
-@click.option("--pdf", "pdfs", required=True, multiple=True, type=click.Path(exists=True, path_type=Path),
-              help="PDF(s) planning à importer. Passer plusieurs fois pour importer plusieurs jours.")
+@click.option("--pdf", "pdfs", multiple=True, type=click.Path(exists=True, path_type=Path),
+              help="PDF(s) planning à importer. Passer plusieurs fois pour importer "
+                   "plusieurs jours. Alternative : --pdf-dir pour un dossier complet.")
+@click.option("--pdf-dir", "pdf_dir", type=click.Path(exists=True, file_okay=False, path_type=Path),
+              help="Dossier contenant les PDFs à importer — tous les *.pdf sont pris "
+                   "récursivement, triés par nom. Combinable avec --pdf.")
 @click.option("--out", "out_xlsx", required=True, type=click.Path(path_type=Path),
               help="Fichier xlsx de sortie (format import Balance).")
 @click.option("--audit", "out_audit", type=click.Path(path_type=Path),
               help="Fichier texte du rapport d'audit. Par défaut : <out>.audit.txt")
 @click.option("--verbose", "-v", is_flag=True, help="Affiche le résumé par PDF sur stderr.")
-def main(config_path: Path, pdfs: tuple[Path, ...], out_xlsx: Path,
-         out_audit: Path | None, verbose: bool) -> None:
+def main(config_path: Path, pdfs: tuple[Path, ...], pdf_dir: Path | None,
+         out_xlsx: Path, out_audit: Path | None, verbose: bool) -> None:
     """Convertit les planning PDF de l'organisateur Musiques Festives en xlsx
     d'import Balance."""
     with open(config_path) as f:
         config = yaml.safe_load(f)
 
+    tous_pdfs = list(pdfs)
+    if pdf_dir:
+        tous_pdfs.extend(sorted(pdf_dir.rglob("*.pdf")))
+    if not tous_pdfs:
+        raise click.UsageError("Aucun PDF fourni — utiliser --pdf ou --pdf-dir.")
+
     resultat_global = ResultatParsing()
-    for pdf in pdfs:
+    for pdf in tous_pdfs:
         r = parser_pdf(pdf, config)
         if verbose:
             print(f"  {pdf.name:35s} → {len(r.seances):3d} séances, "

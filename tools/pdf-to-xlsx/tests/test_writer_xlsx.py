@@ -1,4 +1,5 @@
-"""Tests writer xlsx — structure du classeur produit."""
+"""Tests writer xlsx — structure du classeur produit à partir des fake
+fixtures (3 jours anonymisés)."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,7 +18,7 @@ from balance_pdf_import.writer_xlsx import (
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
-CONFIG_PATH = Path(__file__).parent.parent / "config" / "s5-2026.yml"
+CONFIG_PATH = Path(__file__).parent.parent / "config" / "fake-fixtures.yml"
 
 
 @pytest.fixture
@@ -25,7 +26,7 @@ def xlsx_genere(tmp_path):
     with open(CONFIG_PATH) as f:
         config = yaml.safe_load(f)
     seances = []
-    for pdf in sorted(FIXTURES.glob("balance-pdf-*.pdf")):
+    for pdf in sorted(FIXTURES.glob("*.pdf")):
         r = parser_pdf(pdf, config)
         seances.extend(r.seances)
     out = tmp_path / "balance.xlsx"
@@ -44,10 +45,10 @@ def test_onglet_liste_entete(xlsx_genere):
     assert [c.value for c in ws[1]] == COLONNES_LISTE
 
 
-def test_onglet_liste_douze_morceaux(xlsx_genere):
+def test_onglet_liste_huit_morceaux(xlsx_genere):
     wb = load_workbook(xlsx_genere)
     ws = wb["Liste"]
-    assert ws.max_row == 13  # header + 12 morceaux
+    assert ws.max_row == 9  # header + 8 morceaux
 
 
 def test_onglet_liste_resp_renseigne(xlsx_genere):
@@ -67,11 +68,11 @@ def test_onglet_stagiaires_header_seul(xlsx_genere):
     assert ws.max_row == 1
 
 
-def test_onglet_proposes_36_seances(xlsx_genere):
+def test_onglet_proposes_24_seances(xlsx_genere):
     wb = load_workbook(xlsx_genere)
     ws = wb["Proposés"]
     assert [c.value for c in ws[1]] == COLONNES_PROPOSES
-    assert ws.max_row == 37  # header + 36 séances
+    assert ws.max_row == 25  # header + 24 séances
 
 
 def test_onglet_proposes_dates_iso(xlsx_genere):
@@ -85,8 +86,8 @@ def test_onglet_proposes_dates_iso(xlsx_genere):
 
 
 def test_onglet_proposes_salle_renseignee(xlsx_genere):
-    """Contrairement à l'oracle Stéphane (salle vide), le writer remplit la
-    salle depuis le PDF — info supplémentaire pour le solveur."""
+    """Le writer remplit la salle depuis le PDF — info précieuse pour le
+    solveur, non-inventée."""
     wb = load_workbook(xlsx_genere)
     ws = wb["Proposés"]
     salles_uniques = set()
@@ -94,4 +95,4 @@ def test_onglet_proposes_salle_renseignee(xlsx_genere):
         salle = ws.cell(row=r, column=6).value
         if salle:
             salles_uniques.add(salle)
-    assert len(salles_uniques) >= 4  # au moins Le Garage, XVème, Les Clapiers, L'Étang
+    assert len(salles_uniques) >= 3  # au moins Le Pressoir, La Grange, Salle Nord

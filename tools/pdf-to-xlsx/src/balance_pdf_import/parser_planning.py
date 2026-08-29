@@ -104,8 +104,10 @@ def _detecter_salles(mots: list[dict], colonnes_x: list[float],
                      salles_attendues: list[str]) -> dict[int, str]:
     """Associe chaque colonne (index dans `colonnes_x`) à un nom de salle.
 
-    Utilise le mot le plus proche du centre de la colonne, dans la 1ʳᵉ ligne
-    du tableau (en-tête).
+    Pour chaque colonne, concatène les mots à la ligne d'en-tête et cherche
+    la salle attendue qui matche exactement. Comparer sur la séquence
+    complète évite l'ambiguïté quand plusieurs salles commencent par le
+    même mot (`Le Pressoir` vs `Le Kiosque`, `La Grange` vs `La Véranda`).
     """
     if len(colonnes_x) < 2:
         return {}
@@ -119,11 +121,9 @@ def _detecter_salles(mots: list[dict], colonnes_x: list[float],
                     if x0 <= (m["x0"] + m["x1"]) / 2 < x1
                     and abs(m["top"] - ligne_entete_y) < 3]
         mots_col.sort(key=lambda m: m["x0"])
+        texte_col = " ".join(_norm(m["text"]) for m in mots_col)
         for salle in salles_attendues:
-            morceaux = salle.split()
-            if not mots_col:
-                continue
-            if _norm(mots_col[0]["text"]) == morceaux[0]:
+            if texte_col == salle:
                 par_colonne[i] = salle
                 break
     return par_colonne

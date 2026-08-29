@@ -23,12 +23,26 @@ python3 -m venv .venv
 ## Usage
 
 ```bash
+# Un ou plusieurs PDFs par flag répété
 balance-pdf-import \
-  --config config/s5-2026.yml \
-  --pdf ~/pdfs/*.pdf \
-  --out balance-S5-2026.xlsx \
-  --audit audit-S5-2026.txt
+  --config config/fake-fixtures.yml \
+  --pdf ~/pdfs/1_dimanche.pdf --pdf ~/pdfs/2_lundi.pdf \
+  --out balance.xlsx \
+  --audit balance.audit.txt
+
+# Ou : shell glob
+balance-pdf-import --config config/fake-fixtures.yml \
+  --pdf ~/pdfs/*.pdf --out balance.xlsx
+
+# Ou : dossier complet (récursif, trié par nom)
+balance-pdf-import --config config/fake-fixtures.yml \
+  --pdf-dir ~/pdfs/ --out balance.xlsx
 ```
+
+Pour une vraie session, dupliquer `config/fake-fixtures.yml` et adapter
+`session`, `dates`, `salles` (les 6 noms qui apparaissent en en-tête de
+colonnes dans les PDFs), et éventuellement `ignorer` (mots-clés locaux
+comme « Échauffement », « Promenade », etc.).
 
 ## Contrat de sortie
 

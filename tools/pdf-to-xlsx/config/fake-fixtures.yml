@@ -1,0 +1,44 @@
+# Config des fixtures de test — plannings inventés (aucune PII).
+#
+# Session fictive : 12-14 avril 2026, 6 salles imaginaires. Sert de
+# jeu d'essai pour le parser et les tests d'intégration ; ne correspond
+# à aucune vraie session Musiques Festives.
+#
+# Pour une vraie session, dupliquer ce fichier, adapter `session`,
+# `dates`, `salles`, et `ignorer` selon les particularités locales.
+
+session: "Fixtures fake — session de test avril 2026"
+
+dates:
+  dimanche: 2026-04-12
+  lundi: 2026-04-13
+  mardi: 2026-04-14
+
+salles:
+  - "Le Pressoir"
+  - "La Grange"
+  - "Salle Nord"
+  - "L'Atelier"
+  - "Le Kiosque"
+  - "La Véranda"
+
+mots_cles_seance:
+  - "Répétition"
+  - "Pré-Production"
+  - "Post-Production"
+  - "Enregistrement"
+
+ignorer:
+  - "Préparations"
+  - "Échauffement"
+  - "Combo"
+  - "Jams"
+  - "En acoustique"
+  - "Salle Disponible"
+  - "Salle non-disponible"
+  - "Promenade"
+  # "Répétition Intervenants" = répétition privée des encadrants,
+  # pas un morceau du répertoire.
+  - "Intervenants"
+
+motif_responsable: 'avec (?P<nom>.+?)(?:\s|$)'
