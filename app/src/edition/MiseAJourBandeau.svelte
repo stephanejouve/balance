@@ -12,6 +12,11 @@
   let masque = $state(false)
 
   function afficher(e: EtatMiseAJour) {
+    // Premier qui trigger l'emporte : SW updatefound et fetch fallback
+    // peuvent tous les 2 aboutir dans la même session — sans early-return,
+    // l'user verrait un flash « installée en tâche de fond » puis
+    // « v20260830.0800 » (ou l'inverse). On garde le 1er, ça suffit.
+    if (etat?.statut === 'nouvelle-version') return
     etat = e
   }
 
