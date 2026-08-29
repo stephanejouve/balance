@@ -200,69 +200,95 @@ export function analyserSheetsExcel(
     }
 
     const effet = EFFET_PAR_DESTINATION[destination]
-    if (destination === 'liste') {
-      const { groupes, warnings } = extraireListe(s.data, mappings.liste)
-      // Migration immédiate en Inscriptions.groupes (LegacyGroupe[] → Groupe[]).
-      // On construit une Inscriptions intermédiaire vide autour des groupes.
-      const inscMigre = migrerInscriptions(
-        { groupes, membresImposes: {}, indispos: [], identitesConnues: [] },
-        '_detection_',
-      )
-      const nGroupes = inscMigre.groupes.length
-      const statut: StatutOnglet = nGroupes === 0 ? 'echec' : 'ok'
+
+    // Coerce s.data en Array<Array<unknown>> défensivement. `readXlsxFile`
+    // devrait toujours rendre un `Row[]`, mais certains classeurs (feuilles
+    // vides, formats atypiques, versions différentes de la lib) peuvent
+    // produire un `undefined` ou un objet arrayLike. Sans ce guard,
+    // `indexerColonnes(rows[0])` plantait avec `e.forEach is not a function`
+    // et l'import complet cratérait sans onglet importé.
+    const data: unknown[][] = Array.isArray(s.data)
+      ? (s.data as unknown[][]).filter((r) => Array.isArray(r))
+      : []
+
+    try {
+      if (destination === 'liste') {
+        const { groupes, warnings } = extraireListe(data, mappings.liste)
+        // Migration immédiate en Inscriptions.groupes (LegacyGroupe[] → Groupe[]).
+        // On construit une Inscriptions intermédiaire vide autour des groupes.
+        const inscMigre = migrerInscriptions(
+          { groupes, membresImposes: {}, indispos: [], identitesConnues: [] },
+          '_detection_',
+        )
+        const nGroupes = inscMigre.groupes.length
+        const statut: StatutOnglet = nGroupes === 0 ? 'echec' : 'ok'
+        onglets.push({
+          nom: s.sheet,
+          destination,
+          effet,
+          statut,
+          resume:
+            statut === 'ok'
+              ? `${nGroupes} morceau${nGroupes > 1 ? 'x' : ''}`
+              : "échec — aucun morceau extrait (colonnes attendues manquantes ?)",
+          warnings,
+          actifParDefaut: statut === 'ok',
+        })
+        if (statut === 'ok') {
+          payloads.set(s.sheet, { destination: 'liste', groupes: inscMigre.groupes })
+        }
+      } else if (destination === 'stagiaires') {
+        const { personnes, warnings } = extraireStagiaires(data, mappings.stagiaires)
+        const statut: StatutOnglet = personnes.length === 0 ? 'echec' : 'ok'
+        onglets.push({
+          nom: s.sheet,
+          destination,
+          effet,
+          statut,
+          resume:
+            statut === 'ok'
+              ? `${personnes.length} personne${personnes.length > 1 ? 's' : ''}`
+              : 'échec — aucune personne extraite',
+          warnings,
+          actifParDefaut: statut === 'ok',
+        })
+        if (statut === 'ok') {
+          payloads.set(s.sheet, { destination: 'stagiaires', personnes })
+        }
+      } else {
+        // proposes
+        const { imposes, warnings } = extraireProposes(data, mappings.proposes, personnesConnues)
+        const nSeances = imposes.reduce((n, i) => n + i.seances.length, 0)
+        const statut: StatutOnglet = imposes.length === 0 ? 'echec' : 'ok'
+        onglets.push({
+          nom: s.sheet,
+          destination,
+          effet,
+          statut,
+          resume:
+            statut === 'ok'
+              ? `${imposes.length} morceau${imposes.length > 1 ? 'x' : ''} · ${nSeances} séance${nSeances > 1 ? 's' : ''}`
+              : "échec — aucun morceau proposé extrait",
+          warnings,
+          actifParDefaut: statut === 'ok',
+        })
+        if (statut === 'ok') {
+          payloads.set(s.sheet, { destination: 'proposes', imposes })
+        }
+      }
+    } catch (err) {
+      // Bouclier de dernier recours : un adapter qui lève inattendument
+      // ne doit pas cratérer toute la détection — l'onglet passe en échec
+      // et l'utilisateur voit ce qui a marché sur les autres onglets.
       onglets.push({
         nom: s.sheet,
         destination,
         effet,
-        statut,
-        resume:
-          statut === 'ok'
-            ? `${nGroupes} morceau${nGroupes > 1 ? 'x' : ''}`
-            : "échec — aucun morceau extrait (colonnes attendues manquantes ?)",
-        warnings,
-        actifParDefaut: statut === 'ok',
+        statut: 'echec',
+        resume: `échec — ${err instanceof Error ? err.message : String(err)}`,
+        warnings: [],
+        actifParDefaut: false,
       })
-      if (statut === 'ok') {
-        payloads.set(s.sheet, { destination: 'liste', groupes: inscMigre.groupes })
-      }
-    } else if (destination === 'stagiaires') {
-      const { personnes, warnings } = extraireStagiaires(s.data, mappings.stagiaires)
-      const statut: StatutOnglet = personnes.length === 0 ? 'echec' : 'ok'
-      onglets.push({
-        nom: s.sheet,
-        destination,
-        effet,
-        statut,
-        resume:
-          statut === 'ok'
-            ? `${personnes.length} personne${personnes.length > 1 ? 's' : ''}`
-            : 'échec — aucune personne extraite',
-        warnings,
-        actifParDefaut: statut === 'ok',
-      })
-      if (statut === 'ok') {
-        payloads.set(s.sheet, { destination: 'stagiaires', personnes })
-      }
-    } else {
-      // proposes
-      const { imposes, warnings } = extraireProposes(s.data, mappings.proposes, personnesConnues)
-      const nSeances = imposes.reduce((n, i) => n + i.seances.length, 0)
-      const statut: StatutOnglet = imposes.length === 0 ? 'echec' : 'ok'
-      onglets.push({
-        nom: s.sheet,
-        destination,
-        effet,
-        statut,
-        resume:
-          statut === 'ok'
-            ? `${imposes.length} morceau${imposes.length > 1 ? 'x' : ''} · ${nSeances} séance${nSeances > 1 ? 's' : ''}`
-            : "échec — aucun morceau proposé extrait",
-        warnings,
-        actifParDefaut: statut === 'ok',
-      })
-      if (statut === 'ok') {
-        payloads.set(s.sheet, { destination: 'proposes', imposes })
-      }
     }
   }
 
