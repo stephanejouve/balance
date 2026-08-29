@@ -248,12 +248,20 @@ def _detecter_bandeaux(mots: list[dict]) -> tuple[list[dict], set[int]]:
     return bandeaux, ids
 
 
+SEUIL_BANDEAU_PLEINE_LARGEUR_PX = 300
+"""Un bandeau plus large que cette valeur occupe le créneau entier
+(PETIT-DÉJEUNER, DÎNER, GRAND CONCERT). En-deçà, il coexiste avec des
+séances régulières dans les autres colonnes (APÉRO CONCERT DES INTERVENANTS
+mardi ~200-300px). Calibré sur les PDF de la session S5 2026 — à revoir
+si un futur PDF utilise une mise en page plus étroite."""
+
+
 def _creneaux_masques_par_bandeau(creneaux, bandeaux) -> set[str]:
     """Retourne les labels de créneaux qui sont ENTIÈREMENT bandeaux (ex :
     PETIT-DÉJEUNER pleine largeur sans autre contenu).
 
-    On considère un créneau entièrement masqué quand un bandeau y couvre au
-    moins 60% de la largeur utile. Les bandeaux plus étroits (ex :
+    Un créneau est entièrement masqué quand un bandeau y couvre plus de
+    `SEUIL_BANDEAU_PLEINE_LARGEUR_PX`. Les bandeaux plus étroits (ex :
     'APÉRO CONCERT DES INTERVENANTS' qui coexiste avec des séances dans
     d'autres colonnes le mardi/lundi) sont simplement filtrés au niveau mot
     via `ids_bandeau` mais laissent le reste du créneau exploitable.
@@ -263,7 +271,7 @@ def _creneaux_masques_par_bandeau(creneaux, bandeaux) -> set[str]:
         for b in bandeaux:
             if not (c["y_haut"] - 3 <= b["top"] < c["y_bas"]):
                 continue
-            if (b["x1"] - b["x0"]) > 300:
+            if (b["x1"] - b["x0"]) > SEUIL_BANDEAU_PLEINE_LARGEUR_PX:
                 masques.add(c["label"])
                 break
     return masques
@@ -394,7 +402,14 @@ def parser_page(page, config: dict, numero_page: int = 1) -> ResultatParsing:
 
 
 def parser_pdf(chemin: Path, config: dict) -> ResultatParsing:
-    """Parse tous les PDF de planning et agrège les résultats."""
+    """Parse un PDF de planning journalier (1 page = 1 journée).
+
+    Le contrat "1 PDF = 1 journée" est structurel (chaque PDF S5 est un
+    fichier par jour). Si un PDF multi-pages est fourni, chaque page est
+    parsée mais seules les métadonnées de la dernière page (`date_page`,
+    `salles_detectees`, `creneaux_detectes`) sont conservées — les séances
+    sont bien toutes agrégées.
+    """
     resultat_total = ResultatParsing()
     with pdfplumber.open(chemin) as pdf:
         for i, page in enumerate(pdf.pages, start=1):

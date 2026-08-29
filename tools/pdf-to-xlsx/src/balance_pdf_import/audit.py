@@ -25,21 +25,6 @@ def _collisions_salle_creneau(seances: list[Seance]) -> list[tuple[str, str, str
     return [(d, s, c, m) for (d, s, c), m in par_slot.items() if len(m) > 1]
 
 
-def _titres_orphelins(seances: list[Seance]) -> dict[str, set[str]]:
-    """Séparé des titres :
-    - `dans_proposes_pas_liste` : normalement vide (on construit Liste à
-      partir des séances)
-    - `dans_liste_pas_proposes` : peut arriver si un morceau ancien est
-      hérité mais n'a plus de séance planifiée (pas notre cas ici, on
-      construit Liste from Proposés).
-    """
-    titres = {s.morceau for s in seances}
-    return {
-        "dans_proposes_pas_liste": set(),
-        "dans_liste_pas_proposes": set(),
-    }
-
-
 def ecrire_audit(resultat: ResultatParsing, chemin_sortie: Path) -> None:
     lignes: list[str] = []
     lignes.append("═" * 70)
