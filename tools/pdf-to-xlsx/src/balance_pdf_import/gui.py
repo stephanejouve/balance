@@ -127,7 +127,7 @@ class App:
     def _choisir_config(self):
         f = filedialog.askopenfilename(
             title="Configuration YAML",
-            filetypes=[("YAML", "*.yml *.yaml"), ("Tous", "*.*")],
+            filetypes=[("YAML (*.yml)", "*.yml"), ("YAML (*.yaml)", "*.yaml"), ("Tous", "*.*")],
         )
         if f:
             self.config_path.set(f)
