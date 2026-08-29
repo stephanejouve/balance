@@ -93,19 +93,26 @@ jobs:
             --add-data "config/fake-fixtures.yml${ADDDATA_SEP}config" \
             src/balance_pdf_import/gui.py
 
-      - name: Package (zip)
-        if: matrix.archive == 'zip'
+      - name: Package (macOS .app zip)
+        if: runner.os == 'macOS'
         shell: bash
         run: |
           cd dist
-          if [ "${{ matrix.os }}" = "macos-latest" ]; then
-            zip -r ../balance-pdf-import-gui-${{ matrix.asset_suffix }}.zip balance-pdf-import-gui.app
-          else
-            zip -r ../balance-pdf-import-gui-${{ matrix.asset_suffix }}.zip balance-pdf-import-gui
-          fi
+          zip -r ../balance-pdf-import-gui-${{ matrix.asset_suffix }}.zip balance-pdf-import-gui.app
 
-      - name: Package (tar.gz)
-        if: matrix.archive == 'tar.gz'
+      - name: Package (Windows zip via PowerShell)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        # `zip` n'est pas fourni sur windows-latest ; on utilise le natif
+        # PowerShell Compress-Archive. bash Compress-Archive existe aussi
+        # via git-bash mais moins stable — pwsh est officiel côté runner.
+        run: |
+          Set-Location dist
+          Compress-Archive -Path balance-pdf-import-gui `
+            -DestinationPath ../balance-pdf-import-gui-${{ matrix.asset_suffix }}.zip
+
+      - name: Package (Linux tar.gz)
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           cd dist
