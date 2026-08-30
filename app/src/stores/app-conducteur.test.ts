@@ -21,14 +21,15 @@ const groupe = (id: string, membres: Groupe['membres'], style = ''): Groupe => (
   repetitions_deja_faites: 0,
 })
 
-const personne = (id: string, lateralite?: Personne['lateralite']): Personne => ({
+const personne = (id: string, lateralite?: 'droitier' | 'gaucher'): Personne => ({
   id,
   nom: id,
   discriminant: '',
-  instruments: [],
+  instruments: lateralite
+    ? [{ pupitre: 'batterie', lourd: false, lateralite }]
+    : [],
   role: 'musicien',
   indispos: [],
-  lateralite,
 })
 
 const etape = (groupe_id: string, style = ''): EtapeConcert => ({

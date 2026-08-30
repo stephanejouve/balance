@@ -43,14 +43,35 @@
     return sections
   })
 
-  function precisionsAffichees(p: Personne): string {
+  /**
+   * Nb personnes distinctes vs nb apparences dans les sections. Une
+   * personne multi-pupitres apparaît dans chaque section correspondante
+   * — utile côté intervenant, potentiellement confusant côté scan
+   * global (nit P3 #2 review Leader PR #20). On affiche les 2 compteurs.
+   */
+  const compteursClasses = $derived.by(() => {
+    const distinct = new Set<string>()
+    let apparences = 0
+    for (const s of classesParPupitre) {
+      apparences += s.personnes.length
+      for (const c of s.personnes) distinct.add(c.personne.id)
+    }
+    return { distinct: distinct.size, apparences }
+  })
+
+  /**
+   * Détails à afficher pour une personne dans une section pupitre donnée.
+   * Scope par pupitre : on ne montre que la precision + latéralité de
+   * **l'instrument correspondant au pupitre de la section**. Sinon une
+   * personne chant + batterie afficherait « droitier » même dans la
+   * section chant, ce qui n'a pas de sens (fix nit P3 #1 review Leader).
+   */
+  function precisionsAffichees(p: Personne, pupitre: string): string {
     const parts: string[] = []
-    for (const ins of p.instruments) {
-      if (ins.precision) parts.push(ins.precision)
-    }
-    if (p.instruments.some((i) => i.pupitre === 'batterie') && p.lateralite) {
-      parts.push(p.lateralite)
-    }
+    const ins = p.instruments.find((i) => i.pupitre === pupitre)
+    if (!ins) return ''
+    if (ins.precision) parts.push(ins.precision)
+    if (ins.lateralite) parts.push(ins.lateralite)
     return parts.join(', ')
   }
 </script>
@@ -95,6 +116,22 @@
                     <input type="checkbox" bind:checked={ins.lourd} onchange={onInvalider} />
                     lourd
                   </label>
+                  {#if ins.pupitre === 'batterie'}
+                    <select
+                      value={ins.lateralite ?? ''}
+                      onchange={(e) => {
+                        const v = (e.currentTarget as HTMLSelectElement).value
+                        ins.lateralite = v === '' ? undefined : (v as 'droitier' | 'gaucher')
+                        onInvalider()
+                      }}
+                      style="border:none;background:transparent;font-size:11px"
+                      title="Latéralité — inversion de kit au concert"
+                    >
+                      <option value="">latéralité ?</option>
+                      <option value="droitier">droitier</option>
+                      <option value="gaucher">gaucher</option>
+                    </select>
+                  {/if}
                   <button class="mini" onclick={() => onSupprimerInstrument(p.id, ii)}>×</button>
                 </span>
               {/each}
@@ -106,22 +143,6 @@
                 <option value="chanteur">chanteur</option>
                 <option value="intervenant">intervenant</option>
               </select>
-              {#if p.instruments.some((i) => i.pupitre === 'batterie')}
-                <select
-                  value={p.lateralite ?? ''}
-                  onchange={(e) => {
-                    const v = (e.currentTarget as HTMLSelectElement).value
-                    p.lateralite = v === '' ? undefined : (v as 'droitier' | 'gaucher')
-                    onInvalider()
-                  }}
-                  style="margin-top:4px;font-size:11px"
-                  title="Latéralité (batteurs) — détermine les inversions de kit au concert"
-                >
-                  <option value="">latéralité ?</option>
-                  <option value="droitier">droitier</option>
-                  <option value="gaucher">gaucher</option>
-                </select>
-              {/if}
             </td>
             <td class="center mono">
               {nGroupes}
@@ -142,6 +163,12 @@
           engagement croissant. Les <span class="badge-libre">libres</span>
           sont en tête, à proposer en priorité pour combler les morceaux
           qui cherchent le pupitre.
+          {#if compteursClasses.distinct !== compteursClasses.apparences}
+            <span class="ink-soft">
+              — {compteursClasses.distinct} stagiaires distincts,
+              {compteursClasses.apparences} apparences (multi-pupitres).
+            </span>
+          {/if}
         </p>
         <div class="colonnes">
           {#each classesParPupitre as section (section.pupitre)}
@@ -158,7 +185,7 @@
               </h4>
               <ul>
                 {#each section.personnes as c (c.personne.id)}
-                  {@const details = precisionsAffichees(c.personne)}
+                  {@const details = precisionsAffichees(c.personne, section.pupitre)}
                   <li class:est-libre={c.nb_groupes === 0}>
                     <span class="nom">{libellePersonne(c.personne)}</span>
                     {#if details}
@@ -280,12 +307,12 @@
     color: var(--ink-soft, #666);
   }
   .libres-par-pupitre .tag-mini-libre {
-    background: #dcfce7;
-    color: #166534;
+    background: var(--vert-libre-bg, #dcfce7);
+    color: var(--vert-libre, #166534);
     font-weight: 600;
   }
   .libres-par-pupitre .badge-libre {
-    color: #166534;
+    color: var(--vert-libre, #166534);
     font-weight: 600;
   }
 </style>

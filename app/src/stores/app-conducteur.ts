@@ -39,6 +39,10 @@ export interface ParamsMinutage {
 
 /**
  * Identifie le batteur d'un groupe et retourne sa latéralité (si connue).
+ * La latéralité est portée par l'instrument batterie de la personne
+ * (pas par la personne elle-même) — sémantique batterie-spécifique
+ * pour l'inversion de kit entre morceaux.
+ *
  * Renvoie `null` si pas de batteur ou latéralité inconnue.
  */
 export function lateraliteBatteur(
@@ -51,7 +55,8 @@ export function lateraliteBatteur(
   const batteur = g.membres.find((m) => m.pupitre === 'batterie')
   if (!batteur) return null
   const p = personnesParId.get(batteur.personne_id)
-  return p?.lateralite ?? null
+  const insBatterie = p?.instruments.find((i) => i.pupitre === 'batterie')
+  return insBatterie?.lateralite ?? null
 }
 
 /**
