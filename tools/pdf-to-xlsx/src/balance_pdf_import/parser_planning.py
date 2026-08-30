@@ -54,6 +54,7 @@ class ResultatParsing:
     date_page: str | None = None
     salles_detectees: list[str] = field(default_factory=list)
     creneaux_detectes: list[str] = field(default_factory=list)
+    nb_pages: int = 0
 
 
 def _norm(txt: str) -> str:
@@ -412,6 +413,7 @@ def parser_pdf(chemin: Path, config: dict) -> ResultatParsing:
     """
     resultat_total = ResultatParsing()
     with pdfplumber.open(chemin) as pdf:
+        resultat_total.nb_pages = len(pdf.pages)
         for i, page in enumerate(pdf.pages, start=1):
             partiel = parser_page(page, config, numero_page=i)
             resultat_total.seances.extend(partiel.seances)

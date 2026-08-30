@@ -23,7 +23,8 @@ import yaml
 
 from .parser_planning import ResultatParsing, parser_pdf
 from .writer_xlsx import ecrire_xlsx
-from .audit import ecrire_audit
+from .audit import TraceFichier, ecrire_audit
+from .cli import est_config_demo
 
 
 CONFIG_INTEGRE = "fake-fixtures.yml"
@@ -65,6 +66,19 @@ class App:
     def _construire_ui(self):
         pad = {"padx": 12, "pady": 6}
 
+        # Bandeau démonstration : quand la config chargée est fake-fixtures,
+        # l'affiche visiblement rouge/orange pour que l'user ne prenne pas
+        # une exécution démo pour un traitement réel (fix A1 audit Stéphane).
+        self.bandeau_demo = tk.Label(
+            self.root,
+            text="",
+            bg="#dc2626",
+            fg="white",
+            font=("", 12, "bold"),
+            pady=6,
+        )
+        # `pack_forget` par défaut — affiché seulement si mode démo.
+
         cadre_pdf = tk.LabelFrame(self.root, text="1. PDFs planning à importer", padx=8, pady=8)
         cadre_pdf.pack(fill="both", expand=True, **pad)
 
@@ -100,6 +114,8 @@ class App:
         self.log = tk.Text(cadre_log, height=6, wrap="word", state="disabled")
         self.log.pack(fill="both", expand=True)
 
+        self._rafraichir_bandeau_demo()
+
     def _ajouter_pdfs(self):
         fichiers = filedialog.askopenfilenames(
             title="Choisir un ou plusieurs PDFs",
@@ -131,6 +147,26 @@ class App:
         )
         if f:
             self.config_path.set(f)
+            self._rafraichir_bandeau_demo()
+
+    def _rafraichir_bandeau_demo(self):
+        """Affiche/masque le bandeau MODE DÉMONSTRATION selon la config
+        actuellement sélectionnée. Ré-appelé quand l'user change de
+        config file via `_choisir_config` (fix A1)."""
+        cp = self.config_path.get()
+        if cp and est_config_demo(Path(cp)):
+            self.bandeau_demo.configure(
+                text=(
+                    "⚠  MODE DÉMONSTRATION — config fake-fixtures.yml "
+                    "(les vraies salles ne matcheront pas — charge ta config réelle)"
+                ),
+            )
+            # Pack en haut, sans dépendre du before= qui échoue au premier
+            # affichage : side="top" garantit la position au-dessus des
+            # cadres suivants tant que ceux-ci sont aussi packés top (défaut).
+            self.bandeau_demo.pack(fill="x", side="top")
+        else:
+            self.bandeau_demo.pack_forget()
 
     def _choisir_output(self):
         f = filedialog.asksaveasfilename(
@@ -174,15 +210,58 @@ class App:
         try:
             self._logger(f"Lecture de {len(self.pdfs)} PDF…")
             resultat = ResultatParsing()
+            fichiers_traites: list[TraceFichier] = []
             for pdf in self.pdfs:
                 r = parser_pdf(pdf, config)
-                self._logger(f"  {pdf.name} → {len(r.seances)} séances, {len(r.non_classees)} non-classées")
+                fichiers_traites.append(TraceFichier(
+                    nom=pdf.name,
+                    chemin=str(pdf),
+                    pages=r.nb_pages,
+                    seances=len(r.seances),
+                    date_detectee=r.date_page,
+                ))
+                self._logger(
+                    f"  {pdf.name} → {r.nb_pages} page(s), {len(r.seances)} séance(s), "
+                    f"{len(r.non_classees)} non-classée(s) — date détectée : {r.date_page or '?'}"
+                )
                 resultat.seances.extend(r.seances)
                 resultat.ignorees.extend(r.ignorees)
                 resultat.non_classees.extend(r.non_classees)
 
+            cfg_path = Path(self.config_path.get())
+            demo = est_config_demo(cfg_path)
+
+            # Fix A1 : refuse produire un xlsx vide si l'user a fourni des PDFs.
+            if len(resultat.seances) == 0:
+                # On écrit quand même l'audit (avec liste des fichiers) — l'user
+                # peut diagnostiquer sans avoir à relancer.
+                ecrire_audit(
+                    resultat, out_audit,
+                    fichiers_traites=fichiers_traites,
+                    config_est_demo=demo,
+                    config_chemin=str(cfg_path),
+                )
+                self._logger(
+                    f"❌ 0 séance extraite sur {len(self.pdfs)} PDF — xlsx non produit."
+                )
+                self._logger(f"📋 audit tout de même écrit → {out_audit}")
+                messagebox.showerror(
+                    "Aucune séance extraite",
+                    f"0 séance extraite sur {len(self.pdfs)} PDF.\n\n"
+                    f"Cause probable : la config chargée ({cfg_path.name}) ne "
+                    f"correspond pas aux PDFs fournis (salles attendues, mots-clés).\n\n"
+                    f"Le rapport d'audit a été écrit tout de même pour diagnostic :\n"
+                    f"{out_audit}",
+                )
+                return
+
             ecrire_xlsx(resultat.seances, out_xlsx)
-            ecrire_audit(resultat, out_audit)
+            ecrire_audit(
+                resultat, out_audit,
+                fichiers_traites=fichiers_traites,
+                config_est_demo=demo,
+                config_chemin=str(cfg_path),
+            )
 
             self._logger(f"✅ {len(resultat.seances)} séances → {out_xlsx}")
             self._logger(f"📋 rapport d'audit → {out_audit}")
