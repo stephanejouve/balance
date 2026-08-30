@@ -356,3 +356,43 @@ export function slug(s: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
 }
+
+/**
+ * Génère un identifiant opaque stable pour une nouvelle entité (Personne,
+ * Groupe, Salle, Impose). Format : préfixe humain + UUID court, ex.
+ * `personne-01H8Y9Z2K3F4M5N6P7Q8R9S0T1`.
+ *
+ * Motivation Sujet A (feedback Claude Desktop 2026-08-30) : l'id doit
+ * être **indépendant du nom** pour que le renommage ne casse pas les
+ * références dans `MembreGroupe.personne_id`, `Impose.membres`, etc.
+ *
+ * Le préfixe humain (« personne- », « groupe- », …) n'est pas requis
+ * pour l'unicité mais aide au debug côté logs et introspection JSON
+ * (on reconnaît le type d'entité).
+ *
+ * Utilise `crypto.randomUUID()` (dispo dans tous les navigateurs
+ * modernes + Node 20+). L'UUID v4 (128 bits, randomness suffisant) est
+ * sérialisé en hex pour compacité.
+ */
+function _nouvelIdSuffixe(): string {
+  // crypto.randomUUID est dispo côté browser (Balance offline-first) et
+  // côté Node (tests). Fallback timestamp+random si absent (envs très
+  // anciens — ne devrait pas arriver mais évite un throw).
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID().replace(/-/g, '')
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+export function nouvelIdPersonne(): string {
+  return `personne-${_nouvelIdSuffixe()}`
+}
+export function nouvelIdGroupe(): string {
+  return `groupe-${_nouvelIdSuffixe()}`
+}
+export function nouvelIdSalle(): string {
+  return `salle-${_nouvelIdSuffixe()}`
+}
+export function nouvelIdImpose(): string {
+  return `impose-${_nouvelIdSuffixe()}`
+}

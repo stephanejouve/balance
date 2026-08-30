@@ -180,6 +180,13 @@ export function extraireStagiaires(
     const brut = texte(row[iNom])
     if (!brut) continue
     const { nom, discriminant } = extraireDiscriminant(brut)
+    // Note Sujet A (2026-08-30) : l'id est dérivé du nom+discriminant
+    // pour dedup naturelle intra-import (2 lignes même personne = même
+    // id → ignoré). Le renommage post-import côté UI n'affecte pas cet
+    // id (bind:value sur `.nom` seul). Le vrai match cross-import et
+    // les fusions d'homonymes seront traités dans le Sujet C (écran de
+    // relecture des identités) — pas d'heuristique Levenshtein
+    // silencieuse (feedback Claude Desktop, coût asymétrique).
     const id = slug(discriminant ? `${nom} ${discriminant}` : nom)
     if (seen.has(id)) {
       warnings.push(`ligne ${r + 1} : ${brut} déjà présent — doublon ignoré`)
