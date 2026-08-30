@@ -34,6 +34,9 @@ export const PUPITRES_DEFAULTS = [
 export const Pupitre = z.string().min(1)
 export type Pupitre = z.infer<typeof Pupitre>
 
+export const Lateralite = z.enum(['droitier', 'gaucher'])
+export type Lateralite = z.infer<typeof Lateralite>
+
 export const Instrument = z.object({
   pupitre: Pupitre,
   /** Précision libre (ex. « clarinette basse », « contrebasse ») — facultative. */
@@ -51,11 +54,19 @@ export const Instrument = z.object({
    * son instrument de cocher — un guitariste standard n'a pas à y penser.
    */
   lourd: z.boolean().default(false),
+  /**
+   * Latéralité — droitier / gaucher. Attribut **par instrument** parce
+   * qu'il ne fait sens que pour la batterie (optimisation d'inversion de
+   * kit entre morceaux consécutifs au concert). Une personne qui joue
+   * chant + batterie n'a « une latéralité » que dans le contexte de la
+   * batterie ; la préciser sur le chant serait dénué de sens.
+   *
+   * Le solveur / calculateur conducteur ne consulte cette valeur que
+   * pour l'instrument batterie de la personne engagée dans un groupe.
+   */
+  lateralite: Lateralite.optional(),
 })
 export type Instrument = z.infer<typeof Instrument>
-
-export const Lateralite = z.enum(['droitier', 'gaucher'])
-export type Lateralite = z.infer<typeof Lateralite>
 
 export const RolePersonne = z.enum(['musicien', 'chanteur', 'intervenant'])
 export type RolePersonne = z.infer<typeof RolePersonne>
@@ -83,16 +94,32 @@ export const Indispo = z.object({
 })
 export type Indispo = z.infer<typeof Indispo>
 
-export const Personne = z.object({
+// preprocess : back-compat pour les états JSON antérieurs à 2026-08-30
+// qui avaient `Personne.lateralite`. On la déplace vers l'instrument
+// batterie de la personne (là où elle a du sens sémantiquement). Si la
+// personne n'a pas d'instrument batterie, la valeur est jetée
+// silencieusement — elle n'avait pas de sens de toute façon.
+const PersonneBrute = z.object({
   id: z.string().min(1),
   /** Prénom (ou nom d'usage principal). */
   nom: z.string().min(1),
   /** Discriminant d'unicité : initiale, nom, tag entre parenthèses. */
   discriminant: z.string().default(''),
   instruments: z.array(Instrument).default([]),
-  lateralite: Lateralite.optional(),
   role: RolePersonne.default('musicien'),
   indispos: z.array(Indispo).default([]),
+  /** @deprecated — voir migration ci-dessous. */
+  lateralite: Lateralite.optional(),
+})
+export const Personne = PersonneBrute.transform((p) => {
+  if (p.lateralite) {
+    const batterie = p.instruments.find((i) => i.pupitre === 'batterie')
+    if (batterie && !batterie.lateralite) {
+      batterie.lateralite = p.lateralite
+    }
+  }
+  const { lateralite: _drop, ...clean } = p
+  return clean
 })
 export type Personne = z.infer<typeof Personne>
 

@@ -89,4 +89,15 @@ describe('classePourPupitre', () => {
   it('pupitre sans stagiaires → liste vide', () => {
     expect(classePourPupitre('vents', inscriptions())).toEqual([])
   })
+
+  it("tie-break sur id garantit un ordre déterministe pour homonymes", () => {
+    const ins = inscriptions()
+    // 2 personnes même nom + même engagement → tie-break sur id
+    ins.personnes = [
+      personne('emma-2', 'Emma', ['chant']),
+      personne('emma-1', 'Emma', ['chant']),
+    ]
+    const c = classePourPupitre('chant', ins)
+    expect(c.map((c) => c.personne.id)).toEqual(['emma-1', 'emma-2'])
+  })
 })

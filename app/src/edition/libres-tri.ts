@@ -39,7 +39,12 @@ export function classePourPupitre(
       nb_groupes: nbGroupesParPid.get(p.id) ?? 0,
     }))
     .sort((a, b) => {
+      // (1) engagement croissant, (2) nom alpha français, (3) id (tie-break
+      // absolu — verrouille le déterminisme pour tests futurs, nit P3 #4
+      // review Leader PR #20).
       if (a.nb_groupes !== b.nb_groupes) return a.nb_groupes - b.nb_groupes
-      return a.personne.nom.localeCompare(b.personne.nom, 'fr')
+      const parNom = a.personne.nom.localeCompare(b.personne.nom, 'fr')
+      if (parNom !== 0) return parNom
+      return a.personne.id.localeCompare(b.personne.id)
     })
 }

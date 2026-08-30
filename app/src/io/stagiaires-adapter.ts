@@ -228,6 +228,20 @@ export function extraireStagiaires(
     else if (rawLat === 'gaucher' || rawLat === 'gauche' || rawLat === 'g') lateralite = 'gaucher'
     else if (rawLat) warnings.push(`ligne ${r + 1} : latéralité « ${rawLat} » non reconnue`)
 
+    // La latéralité vit sur l'instrument batterie (sémantique
+    // inversion de kit). Si la personne a une latéralité renseignée
+    // mais pas de batterie, on la warn — l'info n'a pas de porteuse.
+    if (lateralite) {
+      const insBatterie = instruments.find((i) => i.pupitre === 'batterie')
+      if (insBatterie) {
+        insBatterie.lateralite = lateralite
+      } else {
+        warnings.push(
+          `ligne ${r + 1} (${brut}) : latéralité « ${lateralite} » ignorée — pas d'instrument batterie déclaré`,
+        )
+      }
+    }
+
     const indispos: Indispo[] = []
     if (iIndispos !== undefined) {
       const brutInd = texte(row[iIndispos])
@@ -247,7 +261,6 @@ export function extraireStagiaires(
       instruments,
       role: 'musicien',
       indispos,
-      lateralite,
     })
   }
 

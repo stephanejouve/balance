@@ -69,10 +69,25 @@ describe('extraireStagiaires', () => {
       colonnePupitrePrincipal: 'Pupitre',
       colonneLateralite: 'Latéralité',
     })
-    expect(personnes[0].lateralite).toBeUndefined()
+    // La latéralité vit sur l'instrument batterie (pas sur la personne).
+    expect(personnes[0].instruments[0].lateralite).toBeUndefined()
     expect(warnings.some((w) => w.includes('gauchère'))).toBe(true)
-    expect(personnes[1].lateralite).toBe('gaucher')
-    expect(personnes[2].lateralite).toBe('droitier')
+    expect(personnes[1].instruments[0].lateralite).toBe('gaucher')
+    expect(personnes[2].instruments[0].lateralite).toBe('droitier')
+  })
+
+  it("warn si latéralité renseignée sans instrument batterie", () => {
+    const rows: unknown[][] = [
+      ['Nom', 'Pupitre', 'Latéralité'],
+      ['Emma', 'chant', 'droitier'],
+    ]
+    const { personnes, warnings } = extraireStagiaires(rows, {
+      colonneNom: 'Nom',
+      colonnePupitrePrincipal: 'Pupitre',
+      colonneLateralite: 'Latéralité',
+    })
+    expect(personnes[0].instruments[0].lateralite).toBeUndefined()
+    expect(warnings.some((w) => w.includes('pas d\'instrument batterie'))).toBe(true)
   })
 
   it('signale les doublons de nom (même id)', () => {
