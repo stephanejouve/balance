@@ -180,13 +180,21 @@ export function extraireStagiaires(
     const brut = texte(row[iNom])
     if (!brut) continue
     const { nom, discriminant } = extraireDiscriminant(brut)
-    // Note Sujet A (2026-08-30) : l'id est dérivé du nom+discriminant
-    // pour dedup naturelle intra-import (2 lignes même personne = même
-    // id → ignoré). Le renommage post-import côté UI n'affecte pas cet
-    // id (bind:value sur `.nom` seul). Le vrai match cross-import et
-    // les fusions d'homonymes seront traités dans le Sujet C (écran de
-    // relecture des identités) — pas d'heuristique Levenshtein
-    // silencieuse (feedback Claude Desktop, coût asymétrique).
+    // ⚠  N'IMPORTEZ PAS CE PATTERN DANS UN NOUVEL ADAPTATEUR.
+    //
+    // L'id est ici dérivé du nom+discriminant comme reliquat pré-Sujet A
+    // (dedup naturelle intra-import : 2 lignes = même personne = même id).
+    // Le renommage post-import côté UI n'affecte pas cet id (bind:value
+    // sur `.nom` seul), donc les références restent cohérentes en
+    // pratique.
+    //
+    // Pour tout NOUVEAU parseur / importeur, utiliser `nouvelIdPersonne()`
+    // de `domain/model.ts` (UUID opaque, doctrine Sujet A). L'harmonisation
+    // de ce fichier + la vraie dedup cross-import via `Map<slug, uuid>`
+    // portée par la session sera traitée dans le Sujet C (écran de
+    // relecture des identités). Pas d'heuristique Levenshtein silencieuse
+    // — feedback Claude Desktop 2026-08-30, coût asymétrique d'une
+    // fusion silencieuse vs un import refusé.
     const id = slug(discriminant ? `${nom} ${discriminant}` : nom)
     if (seen.has(id)) {
       warnings.push(`ligne ${r + 1} : ${brut} déjà présent — doublon ignoré`)

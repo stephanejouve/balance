@@ -213,6 +213,8 @@ class App:
             fichiers_traites: list[TraceFichier] = []
             for pdf in self.pdfs:
                 r = parser_pdf(pdf, config)
+                for err in r.erreurs_vraisemblance:
+                    err.setdefault("fichier", pdf.name)
                 fichiers_traites.append(TraceFichier(
                     nom=pdf.name,
                     chemin=str(pdf),
@@ -224,9 +226,15 @@ class App:
                     f"  {pdf.name} → {r.nb_pages} page(s), {len(r.seances)} séance(s), "
                     f"{len(r.non_classees)} non-classée(s) — date détectée : {r.date_page or '?'}"
                 )
+                for err in r.erreurs_vraisemblance:
+                    self._logger(
+                        f"    ⚠ {err['niveau'].upper()} : {err['raison']}"
+                        + (f" ({err['indice']})" if err.get('indice') else "")
+                    )
                 resultat.seances.extend(r.seances)
                 resultat.ignorees.extend(r.ignorees)
                 resultat.non_classees.extend(r.non_classees)
+                resultat.erreurs_vraisemblance.extend(r.erreurs_vraisemblance)
 
             cfg_path = Path(self.config_path.get())
             demo = est_config_demo(cfg_path)

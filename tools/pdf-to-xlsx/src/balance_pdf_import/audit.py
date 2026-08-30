@@ -99,6 +99,13 @@ def ecrire_audit(
     lignes.append(f"Séances extraites          : {len(resultat.seances)}")
     lignes.append(f"Cellules ignorées          : {len(resultat.ignorees)}")
     lignes.append(f"Cellules non classées      : {len(resultat.non_classees)}")
+    if resultat.erreurs_vraisemblance:
+        nb_err = sum(1 for e in resultat.erreurs_vraisemblance if e["niveau"] == "error")
+        nb_warn = sum(1 for e in resultat.erreurs_vraisemblance if e["niveau"] == "warning")
+        lignes.append(
+            f"Alertes vraisemblance      : {len(resultat.erreurs_vraisemblance)} "
+            f"({nb_err} erreur(s), {nb_warn} warning(s))"
+        )
 
     sans_fin = [s for s in resultat.seances if not s.fin]
     # Nb séances sans fin réelles (dans la sortie) + nb séances écartées
@@ -116,6 +123,26 @@ def ecrire_audit(
     collisions = _collisions_salle_creneau(resultat.seances)
     lignes.append(f"Collisions salle × créneau : {len(collisions)}")
     lignes.append("")
+
+    if resultat.erreurs_vraisemblance:
+        # Fix garde-fou vraisemblance (audit Stéphane + Claude Desktop 2026-08-30) :
+        # PDF non-vide mais l'extraction n'a rien produit d'attendu (0 salle,
+        # 0 créneau, pas de date). Le rapport doit rendre ça immédiatement
+        # visible — c'est ce qui aurait évité les 3 exécutions à l'aveugle.
+        lignes.append("─── ⚠  Alertes vraisemblance (PDF non-vide, extraction suspecte) ──")
+        for err in sorted(
+            resultat.erreurs_vraisemblance,
+            key=lambda e: (e.get("fichier") or "", e.get("page", 0), e.get("raison") or ""),
+        ):
+            fichier = err.get("fichier", "?")
+            page = err.get("page", "?")
+            niveau = err.get("niveau", "?").upper()
+            raison = err.get("raison", "?")
+            indice = err.get("indice", "")
+            lignes.append(f"  [{niveau}] {fichier} page {page} : {raison}")
+            if indice:
+                lignes.append(f"           indice : {indice}")
+        lignes.append("")
 
     if fichiers_traites:
         lignes.append("─── Fichiers PDF traités ────────────────────────────────────────────")
