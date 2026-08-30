@@ -802,6 +802,55 @@
     }
     return out
   })
+
+  /**
+   * Ajoute manuellement une séance depuis la vue Carte (msg Stéphane 5593).
+   * L'user clique sur une case libre → panneau candidats → clic sur un
+   * groupe = crée une nouvelle assignation figée sur cette case.
+   *
+   * La séance est figée automatiquement (`figeesKeys.add`) pour que le
+   * prochain `lancer()` du solveur ne la déplace pas — c'est un choix
+   * délibéré de l'user, pas une suggestion d'optimisation.
+   *
+   * Recalcule ensuite verifier + couverture pour rafraîchir l'affichage
+   * (nouvelle séance = potentiels nouveaux problèmes / couverture élargie).
+   */
+  function ajouterSeanceDepuisCarte(groupe_id: string, creneau_id: string, salle_id: string) {
+    if (!solution) return
+    // Idempotence : si l'assignation existe déjà (case déjà occupée par ce
+    // groupe), on ne l'ajoute pas 2 fois — la fige juste si pas déjà figée.
+    const cle = `${groupe_id}|${creneau_id}`
+    const existe = solution.assignations.some(
+      (a) => a.groupe_id === groupe_id && a.creneau_id === creneau_id && a.salle_id === salle_id,
+    )
+    if (!existe) {
+      solution.assignations = [
+        ...solution.assignations,
+        { groupe_id, creneau_id, salle_id },
+      ]
+    }
+    if (!figeesKeys.has(cle)) {
+      const next = new Set(figeesKeys)
+      next.add(cle)
+      figeesKeys = next
+    }
+    const problemes = verifier(
+      session,
+      lieu,
+      enrichirIndispos(preparerInscriptionsPourSolveur(inscriptions, lieu)),
+      creneaux,
+      solution.assignations,
+      registrePersonnalise(
+        (Object.entries(contraintesActives) as [IdContrainte, boolean][])
+          .filter(([, v]) => v)
+          .map(([k]) => k),
+      ),
+    )
+    const cov = couverture(session, inscriptions, solution.assignations)
+    solution.problemes = problemes
+    solution.couverture = cov
+    inspecteCase = null // ferme le panneau candidats après affectation
+  }
 </script>
 
 <main>
@@ -1139,6 +1188,7 @@
           {estFigee}
           {inspecteCase}
           onInspect={(v) => (inspecteCase = v)}
+          onAffecterSeance={ajouterSeanceDepuisCarte}
         />
       {:else}
         <ParMusicien

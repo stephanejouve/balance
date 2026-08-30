@@ -16,6 +16,13 @@
     estFigee: (a: Assignation) => boolean
     inspecteCase: { creneauId: string; salleId: string } | null
     onInspect: (v: { creneauId: string; salleId: string } | null) => void
+    /**
+     * Affecte manuellement une séance (groupe + créneau + salle) depuis
+     * la vue Carte. Appelé au clic sur un chip candidat. L'app ajoute
+     * l'assignation à la solution courante et la fige (le solveur ne
+     * doit pas la déplacer lors d'un prochain lancer).
+     */
+    onAffecterSeance: (groupe_id: string, creneau_id: string, salle_id: string) => void
   }
   let {
     session,
@@ -29,6 +36,7 @@
     estFigee,
     inspecteCase,
     onInspect,
+    onAffecterSeance,
   }: Props = $props()
 
   const sallesAffichees = $derived(lieu.salles.filter((s) => s.actif))
@@ -118,9 +126,21 @@
     <b>{s?.nom} · {c?.date.slice(5).replace('-', '/')} · {c?.debut}–{c?.fin}</b>
     <span class="ink-soft mono"> — {candidatsCase.length} groupe(s) compatible(s)</span>
     {#if candidatsCase.length > 0}
+      <p class="hint" style="margin-top:6px">
+        Clic sur un groupe = ajoute une séance à ce créneau/salle (elle sera
+        automatiquement figée — le solveur ne la déplacera pas).
+      </p>
       <div class="chips" style="margin-top:8px">
         {#each candidatsCase as gc}
-          <span class="chip">{gc.titre}</span>
+          <button
+            type="button"
+            class="chip chip-actionnable"
+            onclick={() => onAffecterSeance(gc.groupe_id, inspecteCase!.creneauId, inspecteCase!.salleId)}
+            title="Ajouter « {gc.titre} » à ce créneau/salle"
+          >
+            {gc.titre}
+            <span class="chip-plus">+</span>
+          </button>
         {/each}
       </div>
     {:else}
@@ -131,3 +151,27 @@
     {/if}
   </div>
 {/if}
+
+<style>
+  .chip-actionnable {
+    cursor: pointer;
+    border: 1px solid var(--rule, #ccc);
+    background: white;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12.5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font: inherit;
+  }
+  .chip-actionnable:hover {
+    background: rgba(59, 130, 246, 0.08);
+    border-color: rgba(59, 130, 246, 0.4);
+  }
+  .chip-plus {
+    color: #3b82f6;
+    font-weight: 700;
+    font-size: 13px;
+  }
+</style>
