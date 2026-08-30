@@ -3,7 +3,15 @@
   import { parseLegacyInscriptions } from './domain/legacy'
   import { migrerInscriptions } from './domain/migrate'
   import type { Inscriptions } from './domain/model'
-  import { Lieu, Session, libellePersonne } from './domain/model'
+  import {
+    Lieu,
+    Session,
+    libellePersonne,
+    nouvelIdGroupe,
+    nouvelIdImpose,
+    nouvelIdPersonne,
+    nouvelIdSalle,
+  } from './domain/model'
   import { attribuerSalles } from './engine/allocate-rooms'
   import { chargeParMusicien } from './engine/charge'
   import Contraintes from './edition/Contraintes.svelte'
@@ -483,7 +491,7 @@
 
   function ajouterSalle() {
     lieu.salles.push({
-      id: `salle-${Date.now().toString(36)}`,
+      id: nouvelIdSalle(),
       nom: 'Nouvelle salle',
       jauge: 8,
       equipement: [],
@@ -533,7 +541,7 @@
 
   function ajouterGroupe() {
     inscriptions.groupes.push({
-      id: `groupe-${Date.now().toString(36)}`,
+      id: nouvelIdGroupe(),
       titre: 'Nouveau morceau',
       auteur: '',
       style: '',
@@ -581,7 +589,7 @@
 
   function ajouterPersonne() {
     inscriptions.personnes.push({
-      id: `personne-${Date.now().toString(36)}`,
+      id: nouvelIdPersonne(),
       nom: 'Nouveau stagiaire',
       discriminant: '',
       instruments: [],
@@ -658,7 +666,7 @@
 
   function ajouterImpose() {
     inscriptions.imposes.push({
-      id: `impose-${Date.now().toString(36)}`,
+      id: nouvelIdImpose(),
       morceau: 'Nouveau morceau imposé',
       membres: [],
       seances: [],

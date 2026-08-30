@@ -6,6 +6,10 @@ import {
   Personne,
   Session,
   libellePersonne,
+  nouvelIdGroupe,
+  nouvelIdImpose,
+  nouvelIdPersonne,
+  nouvelIdSalle,
   slug,
 } from './model'
 
@@ -109,5 +113,35 @@ describe('slug', () => {
     expect(slug('Anaïs')).toBe('anais')
     expect(slug('02 · For Me Formidable')).toBe('02-for-me-formidable')
     expect(slug("L'Espérance")).toBe('l-esperance')
+  })
+})
+
+describe('nouvelIdPersonne / Groupe / Salle / Impose (Sujet A id stable)', () => {
+  it('génère des ids uniques à chaque appel', () => {
+    expect(nouvelIdPersonne()).not.toBe(nouvelIdPersonne())
+    expect(nouvelIdGroupe()).not.toBe(nouvelIdGroupe())
+  })
+
+  it('préfixe humain reconnaissable par type', () => {
+    expect(nouvelIdPersonne()).toMatch(/^personne-/)
+    expect(nouvelIdGroupe()).toMatch(/^groupe-/)
+    expect(nouvelIdSalle()).toMatch(/^salle-/)
+    expect(nouvelIdImpose()).toMatch(/^impose-/)
+  })
+
+  it('unicité garantie sur 1000 appels consécutifs (pas de collision)', () => {
+    const ids = new Set<string>()
+    for (let i = 0; i < 1000; i++) ids.add(nouvelIdPersonne())
+    expect(ids.size).toBe(1000)
+  })
+
+  it("id opaque non dérivé d'un nom — le renommage ne peut pas casser les références", () => {
+    // Le motif Sujet A : les fonctions ne prennent aucun paramètre nom,
+    // donc l'id ne peut pas être dérivé d'un nom qui pourrait changer.
+    const id1 = nouvelIdPersonne()
+    const id2 = nouvelIdPersonne()
+    // Suffix après le préfixe non-vide et distinct
+    expect(id1.split('-').slice(1).join('-')).not.toBe('')
+    expect(id2.split('-').slice(1).join('-')).not.toBe('')
   })
 })
