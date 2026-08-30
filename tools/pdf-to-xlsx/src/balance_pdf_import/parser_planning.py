@@ -12,6 +12,7 @@ sont retournées séparément pour alimenter le rapport d'audit.
 from __future__ import annotations
 
 import re
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -55,6 +56,13 @@ class ResultatParsing:
     salles_detectees: list[str] = field(default_factory=list)
     creneaux_detectes: list[str] = field(default_factory=list)
     nb_pages: int = 0
+    # Garde-fou vraisemblance : erreurs de niveau page — le PDF est non-vide
+    # (`nb_pages > 0`) mais l'extraction n'a pas produit ce qu'on en attend
+    # (aucune salle détectée, aucun créneau, aucune date). Ne bloque pas la
+    # sortie xlsx (au niveau CLI/GUI on décide selon `--autoriser-zero-seance`),
+    # mais visible dans l'audit — ce qui aurait évité les 3 exécutions à
+    # l'aveugle de Stéphane du 30/08 (audit A1 + Claude Desktop).
+    erreurs_vraisemblance: list[dict] = field(default_factory=list)
 
 
 def _norm(txt: str) -> str:
@@ -64,11 +72,30 @@ def _norm(txt: str) -> str:
 
 
 def _extraire_date_titre(mots: list[dict]) -> str | None:
-    """Le titre en haut de page est du type 'MERCREDI 26 AOUT 2026'."""
-    en_haut = [m for m in mots if m["top"] < 60]
-    en_haut.sort(key=lambda m: m["x0"])
-    texte = " ".join(m["text"] for m in en_haut)
-    m = TITRE_JOUR_RE.match(texte)
+    """Le titre en haut de page est du type 'MERCREDI 26 AOUT 2026'.
+
+    Fix C2 (audit Claude Desktop 2026-08-30) : on regroupe les mots par
+    ligne (bucket top / 4) avant de matcher la regex. En format paysage,
+    l'en-tête des salles se trouve dès 33 px du haut ; concaténer tout
+    ce qui est < 60 px produisait une chaîne polluée
+    ("MERCREDI 26 AOUT 2026 L'Étang Le Garage ...") que ni `match` ni
+    `search` ne pouvaient matcher (regex ancrée `^...$`). On teste
+    ligne par ligne, la première qui matche l'emporte.
+
+    Seuil élargi à 120 px pour couvrir les titres dans les paysages
+    denses ; le regroupement par ligne évite la pollution.
+    """
+    lignes: dict[int, list[dict]] = defaultdict(list)
+    for mot in mots:
+        if mot["top"] < 120:
+            lignes[round(mot["top"] / 4)].append(mot)
+    m = None
+    for _, mots_ligne in sorted(lignes.items()):
+        mots_ligne.sort(key=lambda x: x["x0"])
+        texte = " ".join(x["text"] for x in mots_ligne)
+        m = TITRE_JOUR_RE.match(texte)
+        if m:
+            break
     if not m:
         return None
     mois = MOIS_FR.get(m.group("mois").lower())
@@ -78,14 +105,48 @@ def _extraire_date_titre(mots: list[dict]) -> str | None:
 
 
 def _bordures_grille(page, marge_gauche_min=20, largeur_min_h=100, hauteur_min_v=30):
-    """Extrait les bordures du tableau à partir de `page.lines`.
+    """Extrait les bordures du tableau à partir de `page.edges` (fallback
+    `page.lines`).
 
     Retourne (xs_verticales, ys_horizontales) — deux listes triées de coordonnées
     uniques, dédupliquées à 1px près.
+
+    Fix C1 (audit Claude Desktop 2026-08-30) : `page.lines` est vide quand
+    le générateur dessine les bordures comme des **rectangles remplis**
+    plutôt que des traits (cas de wkhtmltopdf et de la plupart des moteurs
+    HTML→PDF). `page.edges` couvre les deux cas — traits ET côtés de
+    rectangles. Sans ce fallback, un PDF wkhtml produit 0 verticale/
+    horizontale → 0 cellule → 0 séance, en silence.
+
+    Fix C3 (même audit) : les bordures verticales sont souvent dessinées
+    **cellule par cellule** (leur hauteur suit la ligne du tableau) — le
+    seuil `hauteur_min_v` élimine alors les tableaux aux lignes courtes.
+    On retient les abscisses qui **se répètent** sur plusieurs lignes :
+    un vrai montant de grille traverse plusieurs cellules ; un trait
+    accidentel n'y figure qu'une fois.
+
+    Fallback dégradé C3 : on essaie ≥3 occurrences, puis ≥2, puis ≥1
+    avant de rendre une grille vide. Un PDF non-vide sans grille
+    détectable est signalé en amont (garde-fou vraisemblance) plutôt
+    que traité comme un résultat.
     """
-    v = sorted({round(l["x0"]) for l in page.lines
-                if l["bottom"] - l["top"] > hauteur_min_v and l["x0"] > marge_gauche_min - 1})
-    h = sorted({round(l["top"]) for l in page.lines
+    traits = page.edges or page.lines
+    occurrences = Counter(
+        round(l["x0"]) for l in traits
+        if l["bottom"] - l["top"] > 5 and l["x0"] > marge_gauche_min - 1
+    )
+    v: list[int] = []
+    for seuil_occ in (3, 2, 1):
+        v = sorted(
+            x for x, n in occurrences.items()
+            if n >= seuil_occ or any(
+                l["bottom"] - l["top"] > hauteur_min_v
+                for l in traits if round(l["x0"]) == x
+            )
+        )
+        if v:
+            break
+    h = sorted({round(l["top"]) for l in traits
                 if l["x1"] - l["x0"] > largeur_min_h})
     v = _dedup_proches(v)
     h = _dedup_proches(h)
@@ -318,7 +379,14 @@ def _nettoyer_titre(t: str) -> str:
 
 
 def parser_page(page, config: dict, numero_page: int = 1) -> ResultatParsing:
-    """Parse une page de PDF (= une journée)."""
+    """Parse une page de PDF (= une journée).
+
+    Alimente `resultat.erreurs_vraisemblance` quand la page est non-vide
+    mais que l'extraction n'a produit aucun élément attendu (0 salle,
+    0 créneau, ou pas de date). Ce garde-fou (audit Stéphane +
+    Claude Desktop du 30/08) évite que 0 séance soit silencieusement pris
+    pour un résultat.
+    """
     resultat = ResultatParsing()
     mots = page.extract_words()
     resultat.date_page = _extraire_date_titre(mots)
@@ -335,6 +403,36 @@ def parser_page(page, config: dict, numero_page: int = 1) -> ResultatParsing:
     labels_masques = _creneaux_masques_par_bandeau(creneaux, bandeaux)
 
     motif_resp = re.compile(config.get("motif_responsable", r"avec (?P<nom>.+?)(?:\s|$)"))
+
+    # Garde-fou vraisemblance — signalements avant même le parcours des
+    # cellules. On collecte tout, on ne raise pas : le CLI/GUI décide de
+    # la politique (échec bruyant vs xlsx vide autorisé).
+    if len(mots) > 0:
+        if resultat.date_page is None:
+            resultat.erreurs_vraisemblance.append({
+                "niveau": "warning",
+                "raison": "date non détectée dans le titre de page",
+                "page": numero_page,
+                "indice": "vérifier que le titre respecte le format "
+                          "'JOUR JJ MOIS AAAA' (ex. 'MERCREDI 26 AOUT 2026')",
+            })
+        if not salles_col:
+            resultat.erreurs_vraisemblance.append({
+                "niveau": "error",
+                "raison": "aucune salle détectée",
+                "page": numero_page,
+                "indice": f"les noms de salles configurés "
+                          f"({', '.join(config.get('salles', []))}) "
+                          f"ne matchent pas les en-têtes de colonnes du PDF",
+            })
+        if not creneaux:
+            resultat.erreurs_vraisemblance.append({
+                "niveau": "error",
+                "raison": "aucun créneau horaire détecté",
+                "page": numero_page,
+                "indice": "vérifier que la colonne de gauche contient bien "
+                          "des horaires au format HH:MM ou HH:MM-HH:MM",
+            })
 
     if resultat.date_page is None:
         return resultat
@@ -402,6 +500,26 @@ def parser_page(page, config: dict, numero_page: int = 1) -> ResultatParsing:
     return resultat
 
 
+# Regex robuste : on ne peut pas utiliser `\b` car en Python `_` est un
+# word-character donc `\b` ne matche pas dans `1_dimanche.pdf` (entre `_`
+# et `d` il n'y a pas de boundary). On borne explicitement avec
+# non-lettre ou début/fin de chaîne.
+_JOUR_DANS_NOM_RE = re.compile(
+    r"(?:^|[^a-zA-Zà-ÿ])(dimanche|lundi|mardi|mercredi|jeudi|vendredi|samedi)"
+    r"(?:$|[^a-zA-Zà-ÿ])",
+    re.IGNORECASE,
+)
+
+
+def _deduire_jour_depuis_nom(nom_fichier: str) -> str | None:
+    """Extrait le nom de jour depuis le nom du fichier (`3_mardi.pdf` → 'mardi').
+
+    Utilisé comme fallback pour lookup dans `config['dates']` quand
+    l'extraction titre échoue (voir `parser_pdf`)."""
+    m = _JOUR_DANS_NOM_RE.search(nom_fichier)
+    return m.group(1).lower() if m else None
+
+
 def parser_pdf(chemin: Path, config: dict) -> ResultatParsing:
     """Parse un PDF de planning journalier (1 page = 1 journée).
 
@@ -410,8 +528,27 @@ def parser_pdf(chemin: Path, config: dict) -> ResultatParsing:
     parsée mais seules les métadonnées de la dernière page (`date_page`,
     `salles_detectees`, `creneaux_detectes`) sont conservées — les séances
     sont bien toutes agrégées.
+
+    **Utilisation de `config['dates']`** (audit Claude Desktop 2026-08-30
+    §« Sur le schéma de configuration ») : la clé `dates: {mercredi:
+    2026-08-26, ...}` est aujourd'hui **filet de sécurité**, pas source
+    principale. Deux usages :
+    - **cross-check** : si l'extraction titre a réussi et que la date
+      diverge de `dates[jour]` déduit du nom de fichier, on émet un
+      warning vraisemblance (« divergence date PDF vs config »).
+    - **fallback** : si l'extraction titre échoue mais qu'on peut déduire
+      le jour du nom (`3_mardi.pdf` → 'mardi'), on utilise `dates['mardi']`
+      pour peupler `date_page` et permettre au parseur de continuer sans
+      perdre les séances.
+
+    Une redondance déclarée et jamais confrontée est une source d'erreur
+    silencieuse — ce garde-fou la transforme en signal actionnable.
     """
     resultat_total = ResultatParsing()
+    dates_config = config.get("dates") or {}
+    jour_deduit = _deduire_jour_depuis_nom(chemin.name)
+    date_config = dates_config.get(jour_deduit) if jour_deduit else None
+
     with pdfplumber.open(chemin) as pdf:
         resultat_total.nb_pages = len(pdf.pages)
         for i, page in enumerate(pdf.pages, start=1):
@@ -419,7 +556,32 @@ def parser_pdf(chemin: Path, config: dict) -> ResultatParsing:
             resultat_total.seances.extend(partiel.seances)
             resultat_total.ignorees.extend(partiel.ignorees)
             resultat_total.non_classees.extend(partiel.non_classees)
+            resultat_total.erreurs_vraisemblance.extend(partiel.erreurs_vraisemblance)
             resultat_total.date_page = partiel.date_page
             resultat_total.salles_detectees = partiel.salles_detectees
             resultat_total.creneaux_detectes = partiel.creneaux_detectes
+
+    # Confrontation date titre vs date config (une redondance qui ne se
+    # confronte à rien = source d'erreur silencieuse).
+    date_config_iso = str(date_config) if date_config else None
+    if resultat_total.date_page and date_config_iso and \
+            resultat_total.date_page != date_config_iso:
+        resultat_total.erreurs_vraisemblance.append({
+            "niveau": "warning",
+            "fichier": chemin.name,
+            "raison": f"divergence date — PDF titre dit '{resultat_total.date_page}' "
+                      f"mais config['dates']['{jour_deduit}'] dit '{date_config_iso}'",
+            "indice": "l'un des deux est faux — vérifier le PDF (titre) ou la config",
+        })
+    # Fallback : titre non extrait mais on peut déduire du nom + config.
+    if resultat_total.date_page is None and date_config_iso:
+        resultat_total.date_page = date_config_iso
+        resultat_total.erreurs_vraisemblance.append({
+            "niveau": "warning",
+            "fichier": chemin.name,
+            "raison": f"date extraite via config['dates']['{jour_deduit}'] = "
+                      f"'{date_config_iso}' (titre PDF non détecté)",
+            "indice": "fallback appliqué — vérifier que la date correspond au contenu",
+        })
+
     return resultat_total

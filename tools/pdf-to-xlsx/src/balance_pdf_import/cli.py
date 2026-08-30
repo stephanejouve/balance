@@ -67,6 +67,10 @@ def main(config_path: Path, pdfs: tuple[Path, ...], pdf_dir: Path | None,
     fichiers_traites: list[TraceFichier] = []
     for pdf in tous_pdfs:
         r = parser_pdf(pdf, config)
+        # Annote chaque erreur de vraisemblance avec le nom du fichier pour
+        # que le rapport d'audit puisse pointer précisément le PDF fautif.
+        for err in r.erreurs_vraisemblance:
+            err.setdefault("fichier", pdf.name)
         fichiers_traites.append(TraceFichier(
             nom=pdf.name,
             chemin=str(pdf),
@@ -75,11 +79,17 @@ def main(config_path: Path, pdfs: tuple[Path, ...], pdf_dir: Path | None,
             date_detectee=r.date_page,
         ))
         if verbose:
+            marqueur = ""
+            if r.erreurs_vraisemblance:
+                errs = sum(1 for e in r.erreurs_vraisemblance if e["niveau"] == "error")
+                warns = sum(1 for e in r.erreurs_vraisemblance if e["niveau"] == "warning")
+                marqueur = f" ⚠  {errs} erreur(s) + {warns} warning(s) vraisemblance"
             print(f"  {pdf.name:35s} pages={r.nb_pages} séances={len(r.seances):3d} "
-                  f"non-classées={len(r.non_classees)}", file=sys.stderr)
+                  f"non-classées={len(r.non_classees)}{marqueur}", file=sys.stderr)
         resultat_global.seances.extend(r.seances)
         resultat_global.ignorees.extend(r.ignorees)
         resultat_global.non_classees.extend(r.non_classees)
+        resultat_global.erreurs_vraisemblance.extend(r.erreurs_vraisemblance)
 
     # Fix A1 : refuse produire un xlsx vide si l'user a fourni des PDFs.
     # Un échec bruyant vaut mieux qu'un résultat plausible et faux.

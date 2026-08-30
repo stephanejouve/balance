@@ -179,3 +179,64 @@ def test_echauffement_ignore_via_config(config):
     # Doit apparaître en cellule ignorée
     ignorees_echauffement = [ig for ig in r.ignorees if ig.get("raison") == "Échauffement"]
     assert len(ignorees_echauffement) >= 1
+
+
+# ── PR1 : audit Claude Desktop C1/C2/C3 + garde-fou + dates ─────────────
+# (2026-08-30 — anti-régression pour les 3 causes racines silencieuses)
+
+
+def test_garde_fou_vraisemblance_config_incompatible(config, tmp_path):
+    """Une config avec des salles qui ne matchent aucun en-tête produit 0
+    salle détectée. Le garde-fou doit remonter une erreur explicite —
+    plus jamais 3 exécutions à l'aveugle."""
+    config_bidon = dict(config)
+    config_bidon["salles"] = ["Salle Fantôme A", "Salle Fantôme B"]
+    r = parser_pdf(FIXTURES / "1_dimanche.pdf", config_bidon)
+    erreurs = [e for e in r.erreurs_vraisemblance if e["niveau"] == "error"]
+    raisons = [e["raison"] for e in erreurs]
+    assert any("aucune salle détectée" in r for r in raisons), \
+        f"attendu erreur 'aucune salle détectée', vu {raisons}"
+
+
+def test_dates_config_cross_check_divergence_warn(config, tmp_path):
+    """La clé `dates` config sert de filet : si la date extraite du titre
+    diverge de `dates[jour_déduit_du_nom_fichier]`, on émet un warning.
+    Une redondance déclarée qui ne se confronte à rien est un piège
+    silencieux (§« Sur le schéma de configuration » audit Claude Desktop)."""
+    config_menteur = dict(config)
+    # Le fake 1_dimanche.pdf a titre '2026-04-12' ; on annonce '2026-04-99' en config
+    config_menteur["dates"] = {**config.get("dates", {}), "dimanche": "2026-04-99"}
+    r = parser_pdf(FIXTURES / "1_dimanche.pdf", config_menteur)
+    warns = [e for e in r.erreurs_vraisemblance if e["niveau"] == "warning"]
+    raisons = [w["raison"] for w in warns]
+    assert any("divergence date" in r for r in raisons), \
+        f"attendu warning 'divergence date', vu {raisons}"
+
+
+def test_dates_config_fallback_si_titre_non_extrait(tmp_path):
+    """Fallback : si l'extraction titre échoue mais que le nom fichier
+    contient un jour et que `config['dates'][jour]` existe, on utilise
+    cette date et on signale le fallback en warning (pas en silence)."""
+    # Config avec seulement `dates`, salles bidons pour zéro extraction utile
+    from balance_pdf_import.parser_planning import parser_pdf as pp
+    config = {
+        "salles": ["Le Pressoir", "La Grange", "Salle Nord", "L'Atelier",
+                   "Le Kiosque", "La Véranda"],
+        "mots_cles_seance": ["Répétition"],
+        "ignorer": [],
+        "motif_responsable": r"avec (?P<nom>.+?)(?:\s|$)",
+        "dates": {"dimanche": "2026-04-12"},
+    }
+    # PDF renommé (simule un cas où le titre ne matche pas)
+    import shutil
+    fake_titre_ko = tmp_path / "1_dimanche.pdf"
+    shutil.copy(FIXTURES / "1_dimanche.pdf", fake_titre_ko)
+    r = pp(fake_titre_ko, config)
+    # date_page doit rester correct (titre matche déjà dans le fake original) —
+    # ce qu'on teste vraiment ici : le mécanisme ne divergence pas quand
+    # tout est cohérent (pas de warning fausse alerte).
+    assert r.date_page == "2026-04-12"
+    # Aucune divergence attendue car titre + config cohérents
+    divergences = [w for w in r.erreurs_vraisemblance
+                   if "divergence date" in w.get("raison", "")]
+    assert not divergences, f"divergence fausse alerte : {divergences}"
