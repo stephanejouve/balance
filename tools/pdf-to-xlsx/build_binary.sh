@@ -37,7 +37,8 @@ echo "▶ Build CLI (balance-pdf-import) …"
   --noconfirm --clean --onedir \
   --name balance-pdf-import \
   --add-data "$CONFIG_INCLUDE" \
-  src/balance_pdf_import/cli.py
+  --paths src \
+  entry_cli.py
 
 echo ""
 echo "▶ Build GUI (balance-pdf-import-gui) …"
@@ -45,7 +46,8 @@ echo "▶ Build GUI (balance-pdf-import-gui) …"
   --noconfirm --clean --onedir --windowed \
   --name balance-pdf-import-gui \
   --add-data "$CONFIG_INCLUDE" \
-  src/balance_pdf_import/gui.py
+  --paths src \
+  entry_gui.py
 
 echo ""
 echo "✅ Build terminé — voir dist/"

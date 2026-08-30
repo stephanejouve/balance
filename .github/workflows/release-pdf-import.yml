@@ -91,7 +91,8 @@ jobs:
           "$PYI" --noconfirm --clean --onedir --windowed \
             --name balance-pdf-import-gui \
             --add-data "config/fake-fixtures.yml${ADDDATA_SEP}config" \
-            src/balance_pdf_import/gui.py
+            --paths src \
+            entry_gui.py
 
       - name: Package (macOS .app zip)
         if: runner.os == 'macOS'
