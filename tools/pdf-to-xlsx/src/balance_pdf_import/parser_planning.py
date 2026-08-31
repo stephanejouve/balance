@@ -215,7 +215,7 @@ def _detecter_creneaux(mots: list[dict], marge_gauche_x: float,
     délimitent la case, PAS le top du texte horaire (qui est aligné avec le
     milieu de la case).
 
-    Retourne liste de dicts {label, y_haut, y_bas, debut, fin}.
+    Retourne liste de dicts {label, y_haut, y_bas, debut, fin, top}.
     """
     from collections import defaultdict
     gauche = [m for m in mots if m["x0"] < marge_gauche_x]
@@ -242,7 +242,53 @@ def _detecter_creneaux(mots: list[dict], marge_gauche_x: float,
             "y_bas": y_bas,
             "debut": debut,
             "fin": fin,
+            # `top` conservé pour la subdivision anti-chevauchement : quand
+            # plusieurs créneaux partagent la même case (bordures internes
+            # manquantes dans le PDF), on synthétise des sous-cases à partir
+            # des tops des labels.
+            "top": top,
         })
+    creneaux = sorted(out, key=lambda c: c["top"])
+    return _subdiviser_creneaux_chevauchants(creneaux)
+
+
+def _subdiviser_creneaux_chevauchants(creneaux: list[dict]) -> list[dict]:
+    """Quand plusieurs créneaux partagent la même case (bordures horizontales
+    internes manquantes dans le PDF), subdivise en sous-cases à partir des
+    `top` des labels dans la marge gauche.
+
+    Cas de figure documenté (mardi S6, fixtures) : les créneaux 14:30-16:00,
+    15:30-17:30 et 16:30-18:00 se recouvrent temporellement (répétition
+    15:30-17:30 chevauchante). Le PDF les liste dans la marge à des `top`
+    distincts (108, 139, 170) mais ne dessine aucune bordure horizontale
+    entre eux — `_bracket_borne` retourne alors la même paire (y_case_haut,
+    y_case_bas) pour les 3, et les mots du contenu sont pris en compte
+    3 fois (une par créneau) → 12 séances au lieu de 6.
+
+    Fix : pour un groupe de N créneaux partageant la même case, chaque
+    créneau i reçoit y_haut = mi-hauteur (top_{i-1}, top_i) et y_bas =
+    mi-hauteur (top_i, top_{i+1}) — les extrêmes conservent y_case_haut
+    et y_case_bas. Le contenu à un top donné tombe alors dans la seule
+    sous-case correspondante, la duplication disparaît.
+    """
+    from collections import defaultdict
+    par_case: dict[tuple[float, float], list[dict]] = defaultdict(list)
+    for c in creneaux:
+        par_case[(c["y_haut"], c["y_bas"])].append(c)
+    out: list[dict] = []
+    for (y_case_h, y_case_b), groupe in par_case.items():
+        if len(groupe) <= 1:
+            out.extend(groupe)
+            continue
+        groupe.sort(key=lambda c: c["top"])
+        tops = [c["top"] for c in groupe]
+        for i, cre in enumerate(groupe):
+            y_haut_sub = y_case_h if i == 0 else (tops[i - 1] + tops[i]) / 2
+            y_bas_sub = y_case_b if i == len(groupe) - 1 else (tops[i] + tops[i + 1]) / 2
+            cre = dict(cre)
+            cre["y_haut"] = y_haut_sub
+            cre["y_bas"] = y_bas_sub
+            out.append(cre)
     return sorted(out, key=lambda c: c["y_haut"])
 
 
