@@ -69,6 +69,8 @@ class App:
         # Bandeau démonstration : quand la config chargée est fake-fixtures,
         # l'affiche visiblement rouge/orange pour que l'user ne prenne pas
         # une exécution démo pour un traitement réel (fix A1 audit Stéphane).
+        # `wraplength` évite la troncature horizontale sur la largeur 640
+        # de la fenêtre (constaté macOS 11 : « STRATION — config … »).
         self.bandeau_demo = tk.Label(
             self.root,
             text="",
@@ -76,24 +78,27 @@ class App:
             fg="white",
             font=("", 12, "bold"),
             pady=6,
+            wraplength=610,
+            justify="center",
         )
         # `pack_forget` par défaut — affiché seulement si mode démo.
 
-        cadre_pdf = tk.LabelFrame(self.root, text="1. PDFs planning à importer", padx=8, pady=8)
-        cadre_pdf.pack(fill="both", expand=True, **pad)
+        self.cadre_pdf = tk.LabelFrame(self.root, text="1. PDFs planning à importer", padx=8, pady=8)
+        self.cadre_pdf.pack(fill="both", expand=True, **pad)
 
-        boutons_pdf = tk.Frame(cadre_pdf)
+        boutons_pdf = tk.Frame(self.cadre_pdf)
         boutons_pdf.pack(fill="x")
         tk.Button(boutons_pdf, text="Ajouter des PDFs…", command=self._ajouter_pdfs).pack(side="left")
         tk.Button(boutons_pdf, text="Ajouter un dossier…", command=self._ajouter_dossier).pack(side="left", padx=6)
         tk.Button(boutons_pdf, text="Vider la liste", command=self._vider).pack(side="right")
 
-        self.liste_pdfs = tk.Listbox(cadre_pdf, height=6)
+        self.liste_pdfs = tk.Listbox(self.cadre_pdf, height=6)
         self.liste_pdfs.pack(fill="both", expand=True, pady=(6, 0))
 
         cadre_conf = tk.LabelFrame(self.root, text="2. Configuration YAML", padx=8, pady=8)
         cadre_conf.pack(fill="x", **pad)
-        tk.Entry(cadre_conf, textvariable=self.config_path).pack(side="left", fill="x", expand=True)
+        self.entry_config = tk.Entry(cadre_conf, textvariable=self.config_path)
+        self.entry_config.pack(side="left", fill="x", expand=True)
         tk.Button(cadre_conf, text="Choisir…", command=self._choisir_config).pack(side="right", padx=(6, 0))
 
         cadre_out = tk.LabelFrame(self.root, text="3. Fichier xlsx de sortie", padx=8, pady=8)
@@ -115,6 +120,9 @@ class App:
         self.log.pack(fill="both", expand=True)
 
         self._rafraichir_bandeau_demo()
+        # `after_idle` : l'Entry doit être realized pour que xview_moveto
+        # prenne effet — sinon le scroll est ignoré au premier affichage.
+        self.root.after_idle(lambda: self.entry_config.xview_moveto(1.0))
 
     def _ajouter_pdfs(self):
         fichiers = filedialog.askopenfilenames(
@@ -147,6 +155,9 @@ class App:
         )
         if f:
             self.config_path.set(f)
+            # Chemin dans .app bundle très long — scroller à la fin pour
+            # afficher le nom du fichier plutôt que le préfixe /Applications/…
+            self.entry_config.xview_moveto(1.0)
             self._rafraichir_bandeau_demo()
 
     def _rafraichir_bandeau_demo(self):
@@ -161,10 +172,11 @@ class App:
                     "(les vraies salles ne matcheront pas — charge ta config réelle)"
                 ),
             )
-            # Pack en haut, sans dépendre du before= qui échoue au premier
-            # affichage : side="top" garantit la position au-dessus des
-            # cadres suivants tant que ceux-ci sont aussi packés top (défaut).
-            self.bandeau_demo.pack(fill="x", side="top")
+            # `before=self.cadre_pdf` garantit la position en tête absolue.
+            # Le comment précédent (« side='top' suffit ») était faux : pack
+            # empile dans l'ordre d'insertion, pas selon la position visuelle.
+            # Constaté macOS 11 — bandeau finissait au ras du bas, hors fenêtre.
+            self.bandeau_demo.pack(fill="x", side="top", before=self.cadre_pdf)
         else:
             self.bandeau_demo.pack_forget()
 
