@@ -346,3 +346,98 @@ def test_subdiviser_preserve_labels_et_horaires():
     out = sorted(_subdiviser_creneaux_chevauchants(creneaux), key=lambda c: c["top"])
     assert out[0]["label"] == "10:00" and out[0]["debut"] == "10:00" and out[0]["top"] == 55.0
     assert out[1]["label"] == "10:15" and out[1]["debut"] == "10:15" and out[1]["top"] == 62.0
+
+
+# ── PR : recomposition annonces cross-colonnes A3.2 (2026-08-31) ────────
+# Fragments d'une même annonce (fermeture salles, montage, ...) éclatés
+# sur plusieurs colonnes → parenthèses non appariées comme signal.
+
+
+def _seed_resultat(non_classees):
+    from balance_pdf_import.parser_planning import ResultatParsing
+    r = ResultatParsing()
+    r.date_page = "2026-10-29"
+    r.non_classees = [
+        {"raison": "aucun mot-clé reconnu", "date": r.date_page, **nc}
+        for nc in non_classees
+    ]
+    return r
+
+
+def test_recomposer_annonces_cross_colonnes_paire_parentheses():
+    """Cas jeudi S6 (feedback Stéphane) : 2 fragments cross-colonnes sur
+    le même créneau, parenthèse ouvrante dans un et fermante dans l'autre.
+    Ils doivent être recomposés en une alerte, extraits de non_classees."""
+    from balance_pdf_import.parser_planning import _recomposer_annonces_cross_colonnes
+    r = _seed_resultat([
+        {"creneau": "18:00-20:50", "salle": "L'Atelier",
+         "texte": "(La Grange et Salle Nord"},
+        {"creneau": "18:00-20:50", "salle": "Le Kiosque",
+         "texte": "fermées dès 16:45 pour montage)"},
+    ])
+    _recomposer_annonces_cross_colonnes(r, {"salles": ["Le Pressoir", "La Grange",
+                                                        "Salle Nord", "L'Atelier",
+                                                        "Le Kiosque", "La Véranda"]})
+    assert r.non_classees == [], f"fragments doivent être consommés : {r.non_classees}"
+    assert len(r.erreurs_vraisemblance) == 1
+    alerte = r.erreurs_vraisemblance[0]
+    assert alerte["niveau"] == "warning"
+    assert "recomposée" in alerte["raison"]
+    assert "(La Grange et Salle Nord fermées dès 16:45 pour montage)" in alerte["raison"]
+    assert "16:45" in alerte["indice"]
+    assert "La Grange" in alerte["indice"]
+    assert "Salle Nord" in alerte["indice"]
+
+
+def test_recomposer_epargne_cellules_sans_parentheses():
+    """Une cellule non_classée sans parenthèses (ex. cellule légitime
+    voisine) ne doit PAS être fusionnée à l'annonce même si elle est sur
+    le même créneau. Cas typique : jeudi S6, la cellule La Grange
+    « 18:00 : Installation — 18:30 » sur le même créneau que l'annonce
+    fermeture — ne doit pas être avalée."""
+    from balance_pdf_import.parser_planning import _recomposer_annonces_cross_colonnes
+    r = _seed_resultat([
+        {"creneau": "18:00-20:50", "salle": "La Grange",
+         "texte": "18:00 : Installation — 18:30"},
+        {"creneau": "18:00-20:50", "salle": "L'Atelier",
+         "texte": "(La Grange et Salle Nord"},
+        {"creneau": "18:00-20:50", "salle": "Le Kiosque",
+         "texte": "fermées dès 16:45 pour montage)"},
+    ])
+    _recomposer_annonces_cross_colonnes(r, {"salles": ["La Grange", "Salle Nord",
+                                                        "L'Atelier", "Le Kiosque"]})
+    restants = [nc["texte"] for nc in r.non_classees]
+    assert restants == ["18:00 : Installation — 18:30"], (
+        f"cellule sans parenthèses ne doit pas être avalée, restants : {restants}"
+    )
+    assert len(r.erreurs_vraisemblance) == 1
+
+
+def test_recomposer_epargne_creneau_sans_paire_parentheses():
+    """Si aucune paire ouverture/fermeture n'est trouvée sur un créneau,
+    rien n'est modifié — les non_classees restent intactes."""
+    from balance_pdf_import.parser_planning import _recomposer_annonces_cross_colonnes
+    r = _seed_resultat([
+        {"creneau": "10:00-11:00", "salle": "La Grange", "texte": "G O"},
+        {"creneau": "10:00-11:00", "salle": "L'Atelier", "texte": "Û T E R"},
+    ])
+    _recomposer_annonces_cross_colonnes(r, {"salles": ["La Grange", "L'Atelier"]})
+    assert len(r.non_classees) == 2, "sans parenthèses, aucun regroupement attendu"
+    assert r.erreurs_vraisemblance == []
+
+
+def test_recomposer_extrait_heures_multiples():
+    """Le texte recomposé peut contenir plusieurs heures — toutes doivent
+    être listées dans l'indice pour permettre à l'humain d'identifier la
+    plus pertinente."""
+    from balance_pdf_import.parser_planning import _recomposer_annonces_cross_colonnes
+    r = _seed_resultat([
+        {"creneau": "18:00", "salle": "L'Atelier",
+         "texte": "(Salle A fermée de 16:45 à 18:30"},
+        {"creneau": "18:00", "salle": "Le Kiosque",
+         "texte": "puis de 19:00 à 20:00 pour montage)"},
+    ])
+    _recomposer_annonces_cross_colonnes(r, {"salles": ["Salle A"]})
+    indice = r.erreurs_vraisemblance[0]["indice"]
+    for h in ("16:45", "18:30", "19:00", "20:00"):
+        assert h in indice, f"heure {h} manquante dans indice : {indice}"

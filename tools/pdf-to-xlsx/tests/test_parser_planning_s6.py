@@ -151,6 +151,33 @@ def test_jeudi_29_cellule_fusionnee_fermeture_pas_de_parasite(resultats_par_jour
     )
 
 
+def test_jeudi_29_annonce_fermeture_recomposee_et_signalee(resultats_par_jour):
+    """Jeudi 29 : les 2 fragments cross-colonnes de l'annonce fermeture
+    doivent être recomposés en une alerte vraisemblance unique, avec
+    heure antidatée 16:45 et salles concernées La Grange + Salle Nord
+    (feedback Stéphane 2026-08-31, fix A3.2)."""
+    r = resultats_par_jour["s6_jeudi_29_octobre_2026.pdf"]
+    alertes_recompose = [
+        e for e in r.erreurs_vraisemblance
+        if "recomposée" in e.get("raison", "")
+    ]
+    assert len(alertes_recompose) == 1, (
+        f"attendu 1 alerte annonce recomposée jeudi, vu {alertes_recompose}"
+    )
+    alerte = alertes_recompose[0]
+    assert "(La Grange et Salle Nord fermées dès 16:45 pour montage)" in alerte["raison"]
+    assert "16:45" in alerte["indice"]
+    assert "La Grange" in alerte["indice"] and "Salle Nord" in alerte["indice"]
+    # Les fragments ne doivent plus être dans non_classees
+    fragments_fermeture = [
+        nc for nc in r.non_classees
+        if "(" in nc.get("texte", "") or "montage)" in nc.get("texte", "")
+    ]
+    assert fragments_fermeture == [], (
+        f"fragments annonce doivent être consommés, restants : {fragments_fermeture}"
+    )
+
+
 # ── Vue globale ─────────────────────────────────────────────────────────
 
 
