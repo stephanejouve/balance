@@ -21,7 +21,7 @@ from tkinter import filedialog, messagebox, ttk
 
 import yaml
 
-from .parser_planning import ResultatParsing, parser_pdf
+from .parser_planning import ResultatParsing, parser_pdf, verifier_morceaux_attendus
 from .writer_xlsx import ecrire_xlsx
 from .audit import TraceFichier, ecrire_audit
 from .cli import est_config_demo
@@ -247,6 +247,15 @@ class App:
                 resultat.ignorees.extend(r.ignorees)
                 resultat.non_classees.extend(r.non_classees)
                 resultat.erreurs_vraisemblance.extend(r.erreurs_vraisemblance)
+
+            # Vérification cross-PDF morceaux attendus vs vus (config facultative).
+            alertes_morceaux = verifier_morceaux_attendus(resultat.seances, config)
+            for a in alertes_morceaux:
+                self._logger(
+                    f"    ⚠ {a['niveau'].upper()} : {a['raison']}"
+                    + (f" ({a['indice']})" if a.get('indice') else "")
+                )
+            resultat.erreurs_vraisemblance.extend(alertes_morceaux)
 
             cfg_path = Path(self.config_path.get())
             demo = est_config_demo(cfg_path)

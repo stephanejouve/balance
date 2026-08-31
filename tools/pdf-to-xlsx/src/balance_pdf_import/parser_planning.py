@@ -800,3 +800,67 @@ def parser_pdf(chemin: Path, config: dict) -> ResultatParsing:
         })
 
     return resultat_total
+
+
+def verifier_morceaux_attendus(
+    seances: list[Seance], config: dict
+) -> list[dict]:
+    """Compare le nombre de séances extraites par morceau vs la config
+    `morceaux_attendus`. Retourne une liste d'alertes vraisemblance.
+
+    Idée fonctionnelle Stéphane 2026-08-31 : *« signaler un écart quand
+    un morceau n'a pas le nombre de séances attendu, plutôt que de laisser
+    lire le tableau »*. Le comptage par morceau est déjà dans l'audit
+    (« 4 morceaux à 8 séances, 2 à 5 ») mais nécessite une relecture
+    humaine — cette vérification le transforme en signal actionnable.
+
+    Doctrine **facultative-mais-exhaustive** (variante 3, cohérente avec
+    la clé `dates`) :
+
+    - **clé absente** : aucun contrôle. Mode « je ne contrôle rien et je
+      le sais ».
+    - **clé présente** : deux contrôles complémentaires :
+      1. **écart** : chaque morceau attendu doit avoir N séances extraites
+         (sinon warning « attendu N, vu M »).
+      2. **exhaustivité** : chaque morceau vu doit être déclaré dans la
+         config (sinon warning « vu M mais absent »). Empêche l'entre-
+         deux « j'ai déclaré 4 morceaux sur 6 et je crois être couvert »
+         — cohérent avec la variante 3 sur `dates`.
+
+    Ce niveau (agrégat multi-PDF) doit être appelé APRÈS aggregation des
+    séances de tous les PDFs — c'est le CLI/GUI qui l'invoque, pas
+    `parser_pdf` (qui n'a qu'un PDF à la fois).
+    """
+    attendus = config.get("morceaux_attendus") or {}
+    if not attendus:
+        return []
+    vus = Counter(s.morceau for s in seances)
+    alertes: list[dict] = []
+    # 1. Écarts sur les morceaux attendus (y compris ceux à 0 séance)
+    for titre in sorted(attendus):
+        n_attendu = attendus[titre]
+        n_vu = vus.get(titre, 0)
+        if n_vu != n_attendu:
+            alertes.append({
+                "niveau": "warning",
+                "raison": f"écart séances morceau « {titre} » : "
+                          f"attendu {n_attendu}, vu {n_vu}",
+                "indice": (
+                    f"différence de {abs(n_vu - n_attendu)} séance(s) — "
+                    f"vérifier planning source ou config morceaux_attendus"
+                ),
+            })
+    # 2. Exhaustivité : morceaux vus mais non déclarés
+    for titre in sorted(vus):
+        if titre not in attendus:
+            alertes.append({
+                "niveau": "warning",
+                "raison": f"morceau « {titre} » vu {vus[titre]} séance(s) "
+                          f"mais absent de config['morceaux_attendus']",
+                "indice": (
+                    "ajouter la valeur attendue pour bénéficier du "
+                    "cross-check, ou retirer complètement la clé "
+                    "'morceaux_attendus' pour désactiver le contrôle"
+                ),
+            })
+    return alertes
