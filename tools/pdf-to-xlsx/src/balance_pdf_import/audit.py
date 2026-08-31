@@ -135,11 +135,15 @@ def ecrire_audit(
             key=lambda e: (e.get("fichier") or "", e.get("page", 0), e.get("raison") or ""),
         ):
             fichier = err.get("fichier", "?")
-            page = err.get("page", "?")
+            page = err.get("page")
             niveau = err.get("niveau", "?").upper()
             raison = err.get("raison", "?")
             indice = err.get("indice", "")
-            lignes.append(f"  [{niveau}] {fichier} page {page} : {raison}")
+            # Alertes niveau fichier (divergence date, jour non déclaré,
+            # fallback…) n'ont pas de page — ne pas afficher « page ? »
+            # trompeur (feedback Stéphane 2026-08-31).
+            localisation = f"{fichier} page {page}" if page else fichier
+            lignes.append(f"  [{niveau}] {localisation} : {raison}")
             if indice:
                 lignes.append(f"           indice : {indice}")
         lignes.append("")

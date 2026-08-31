@@ -240,3 +240,49 @@ def test_dates_config_fallback_si_titre_non_extrait(tmp_path):
     divergences = [w for w in r.erreurs_vraisemblance
                    if "divergence date" in w.get("raison", "")]
     assert not divergences, f"divergence fausse alerte : {divergences}"
+
+
+# ── PR : variante 3 sur `dates` (2026-08-31, décision Stéphane) ─────────
+# `dates` facultative mais exhaustive si présente.
+
+
+def test_dates_absente_aucun_controle(config):
+    """Clé `dates` absente → aucun contrôle, aucune alerte de date
+    même si le titre PDF échoue. Le mode « je ne contrôle rien et
+    je le sais » de la variante 3."""
+    config_sans_dates = {k: v for k, v in config.items() if k != "dates"}
+    r = parser_pdf(FIXTURES / "1_dimanche.pdf", config_sans_dates)
+    alertes_dates = [
+        w for w in r.erreurs_vraisemblance
+        if any(k in w.get("raison", "") for k in ("divergence date", "jour", "fallback"))
+    ]
+    assert not alertes_dates, (
+        f"aucune alerte de date attendue quand dates absente, vu : {alertes_dates}"
+    )
+
+
+def test_dates_presente_exhaustivite_jour_manquant_warn(config):
+    """Clé `dates` présente mais un jour PDF n'y figure pas → warning
+    « jour non déclaré ». Garde-fou variante 3 contre l'entre-deux
+    « 3 jours sur 6 déclarés et je crois être couvert »."""
+    # `1_dimanche.pdf` — on retire 'dimanche' des clés dates
+    config_partiel = dict(config)
+    dates_originales = dict(config.get("dates") or {})
+    dates_originales.pop("dimanche", None)
+    # Assurer au moins une entrée pour que dates_active soit True
+    if not dates_originales:
+        dates_originales["lundi"] = "2026-04-13"
+    config_partiel["dates"] = dates_originales
+
+    r = parser_pdf(FIXTURES / "1_dimanche.pdf", config_partiel)
+    non_declares = [
+        w for w in r.erreurs_vraisemblance
+        if "non déclaré" in w.get("raison", "")
+    ]
+    assert len(non_declares) >= 1, (
+        f"warning 'jour non déclaré' attendu quand dimanche manque de dates, "
+        f"vu {[w.get('raison') for w in r.erreurs_vraisemblance]}"
+    )
+    assert any("dimanche" in w["raison"] for w in non_declares), (
+        f"le nom du jour manquant doit apparaître : {non_declares}"
+    )
