@@ -178,6 +178,25 @@ def test_jeudi_29_annonce_fermeture_recomposee_et_signalee(resultats_par_jour):
     )
 
 
+def test_jeudi_29_bandeaux_gouter_diner_courts_detectes(resultats_par_jour):
+    """Fix A3.1 (feedback Stéphane 2026-08-31) : `_detecter_bandeaux`
+    doit maintenant capturer GOÛTER (16:00-16:30) et DÎNER (21:00),
+    bandeaux courts ~35px de largeur. Ancien seuil largeur >= 60 les
+    laissait polluer non_classees en fragments « G O » / « Û T E R »
+    (GOÛTER cross-colonnes Salle Nord + L'Atelier) et « D Î » / « N E R »
+    (DÎNER même pattern à 21:00)."""
+    r = resultats_par_jour["s6_jeudi_29_octobre_2026.pdf"]
+    # Aucun fragment « G O » / « Û T E R » / « D Î » / « N E R » dans non_classees
+    fragments_bandeaux = [
+        nc for nc in r.non_classees
+        if nc.get("texte", "") in {"G O", "Û T E R", "D Î", "N E R"}
+    ]
+    assert fragments_bandeaux == [], (
+        f"fragments GOÛTER/DÎNER doivent être consommés comme bandeaux, "
+        f"restants : {fragments_bandeaux}"
+    )
+
+
 # ── Vue globale ─────────────────────────────────────────────────────────
 
 

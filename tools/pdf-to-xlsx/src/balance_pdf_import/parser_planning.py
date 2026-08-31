@@ -307,52 +307,86 @@ def _bracket_borne(y: float, ys: list[float]) -> tuple[float, float]:
     return (ys[-1], y + 30)
 
 
-def _detecter_bandeaux(mots: list[dict]) -> tuple[list[dict], set[int]]:
-    """Un bandeau = suite de mots courts (≤2 chars) au même top, espacés
-    régulièrement (gap < 8px). Les bandeaux réels sont écrits lettre-par-lettre
-    (`P E T I T - D É J E U N E R`) — le gap entre lettres consécutives est
-    petit. Les fragments de cellules réelles (`?`, `or`, `En`) sont éparpillés
-    et ont de gros gaps.
+_LIAISONS_BANDEAU = {"-", "'"}
+# Volontairement pas de tirets typo (– U+2013, — U+2014) : ces caractères
+# servent à la ponctuation dans les cellules normales (« 18:00 — 18:30 »),
+# les inclure ferait fusionner des mots hors bandeau.
+
+
+def _est_maj_pur(txt: str) -> bool:
+    """Le mot est-il une lettre (ou 2) majuscule pure — critère de bandeau ?
+
+    Signal fort pour distinguer un fragment de bandeau écrit lettre-par-lettre
+    (« P E T I T - D É J E U N E R » = 13 mots majuscules courts) d'un mot
+    normal court (« et », « or », « la »). Un chiffre isolé (`1`, `21`) est
+    exclu (pas d'alpha), un mot mixte (`Ab`) est exclu (upper != texte).
+    """
+    return any(c.isalpha() for c in txt) and txt == txt.upper()
+
+
+def _detecter_bandeaux(
+    mots: list[dict], marge_gauche_x: float = 0.0
+) -> tuple[list[dict], set[int]]:
+    """Un bandeau = suite de mots courts (≤2 chars) au même top, tous en
+    majuscules pures (ou liaisons `-` / `'` / tirets typo), potentiellement
+    fragmentés sur plusieurs colonnes du tableau.
+
+    Signal robuste (fix A3.1, feedback Stéphane 2026-08-31) :
+
+    Le bandeau réel est écrit lettre-par-lettre par le rédacteur PDF
+    (`P E T I T - D É J E U N E R` = 13 mots courts espacés). Ancien
+    critère `largeur >= 60px` + `un seul run contigu` échouait sur :
+    - **bandeaux courts** : `DÎNER` = 5 lettres × ~4px + gaps ~ 37px total,
+      sous le seuil largeur 60.
+    - **bandeaux fragmentés cross-colonnes** : `G O` (Salle Nord) + `Û T E R`
+      (L'Atelier) — 2 runs séparés par un grand gap car la mise en page les
+      pousse dans deux colonnes distinctes du tableau. Le meilleur run isolé
+      tombait à 4 mots, sous le seuil ≥5.
+
+    Nouveau critère : **majuscules pures**. Après filtrage des mots courts,
+    on ne garde que ceux qui sont maj-pur (`_est_maj_pur`) ou des liaisons
+    (`-`, `'`, tirets typo). Tous les mots restants sur la même ligne sont
+    fusionnés (peu importe l'écart entre eux) — un vrai contenu ne
+    produit pas 5+ lettres capitales isolées côte à côte, la coïncidence
+    est extrêmement improbable en pratique.
+
+    Le paramètre `marge_gauche_x` (première colonne du tableau) exclut les
+    tirets `-` des créneaux dans la marge de gauche (« 16:00-16:30 »), qui
+    autrement seraient fusionnés au bandeau de la même ligne (« -GOÛTER »
+    au lieu de « GOÛTER »).
 
     Retourne (liste bandeaux détectés, set des ids Python des mots consommés).
     """
     from collections import defaultdict
     lignes = defaultdict(list)
     for m in mots:
-        if len(m["text"]) <= 2:
+        if m["x0"] < marge_gauche_x:
+            continue
+        if len(m["text"]) <= 2 and (
+            _est_maj_pur(m["text"]) or m["text"] in _LIAISONS_BANDEAU
+        ):
             lignes[round(m["top"] / 2)].append(m)
     bandeaux, ids = [], set()
     for _, mots_l in lignes.items():
         if len(mots_l) < 5:
             continue
         mots_l.sort(key=lambda m: m["x0"])
-        # Segmenter en runs de mots contigus (gap < 8px). Un vrai bandeau a
-        # ses lettres à gap < 5-8px ; on prend le plus long run.
-        run_courant = [mots_l[0]]
-        meilleur_run = [mots_l[0]]
-        for m in mots_l[1:]:
-            gap = m["x0"] - run_courant[-1]["x1"]
-            if gap < 8:
-                run_courant.append(m)
-            else:
-                if len(run_courant) > len(meilleur_run):
-                    meilleur_run = run_courant
-                run_courant = [m]
-        if len(run_courant) > len(meilleur_run):
-            meilleur_run = run_courant
-        if len(meilleur_run) < 5:
+        # Fusionner TOUS les mots retenus de la ligne — le filtre en amont
+        # (majuscules pures + longueur ≤ 2, hors marge gauche) garantit la
+        # cohérence sans imposer un test de gap qui échoue sur la
+        # fragmentation cross-colonnes.
+        texte = "".join(m["text"] for m in mots_l)
+        # Filet : au moins 3 lettres alpha dans le texte fusionné (évite
+        # un bandeau de purs `-` ou de 2 lettres isolées improbable).
+        if sum(1 for c in texte if c.isalpha()) < 3:
             continue
-        largeur = meilleur_run[-1]["x1"] - meilleur_run[0]["x0"]
-        if largeur < 60:
-            continue
-        texte = "".join(m["text"] for m in meilleur_run)
         bandeaux.append({
             "texte": texte,
-            "top": meilleur_run[0]["top"],
-            "x0": meilleur_run[0]["x0"],
-            "x1": meilleur_run[-1]["x1"],
+            "top": mots_l[0]["top"],
+            "x0": mots_l[0]["x0"],
+            "x1": mots_l[-1]["x1"],
         })
-        ids.update(id(m) for m in meilleur_run)
+        ids.update(id(m) for m in mots_l)
     return bandeaux, ids
 
 
@@ -445,7 +479,7 @@ def parser_page(page, config: dict, numero_page: int = 1) -> ResultatParsing:
     creneaux = _detecter_creneaux(mots, marge_gauche_x, ys)
     resultat.creneaux_detectes = [c["label"] for c in creneaux]
 
-    bandeaux, ids_bandeau = _detecter_bandeaux(mots)
+    bandeaux, ids_bandeau = _detecter_bandeaux(mots, marge_gauche_x)
     labels_masques = _creneaux_masques_par_bandeau(creneaux, bandeaux)
 
     motif_resp = re.compile(config.get("motif_responsable", r"avec (?P<nom>.+?)(?:\s|$)"))

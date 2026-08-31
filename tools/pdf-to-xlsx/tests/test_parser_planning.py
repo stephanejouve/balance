@@ -441,3 +441,95 @@ def test_recomposer_extrait_heures_multiples():
     indice = r.erreurs_vraisemblance[0]["indice"]
     for h in ("16:45", "18:30", "19:00", "20:00"):
         assert h in indice, f"heure {h} manquante dans indice : {indice}"
+
+
+# ── PR : bandeaux courts + fragmentés A3.1 (2026-08-31) ─────────────────
+# `_detecter_bandeaux` échouait sur DÎNER (largeur < 60px) et sur les
+# bandeaux fragmentés cross-colonnes (GOÛTER en 2 runs). Nouveau critère
+# majuscules-pures + prise en compte marge gauche.
+
+
+def _mot(text, x0, x1=None, top=100.0):
+    """Fabrique un dict `mot` compatible avec pdfplumber (test unit)."""
+    return {"text": text, "x0": x0, "x1": x1 if x1 is not None else x0 + 5, "top": top, "bottom": top + 10}
+
+
+def test_detecter_bandeau_court_5_lettres_maj_dîner():
+    """DÎNER = 5 lettres majuscules serrées, largeur totale ~35px.
+    Ancien seuil largeur >= 60 le rejetait. Nouveau critère maj-pur
+    l'accepte."""
+    from balance_pdf_import.parser_planning import _detecter_bandeaux
+    mots = [
+        _mot("D", 100.0, 104.9, top=200.0),
+        _mot("Î", 109.2, 111.1, top=200.0),
+        _mot("N", 115.4, 120.2, top=200.0),
+        _mot("E", 124.5, 128.5, top=200.0),
+        _mot("R", 132.8, 137.2, top=200.0),
+    ]
+    bandeaux, ids = _detecter_bandeaux(mots)
+    assert len(bandeaux) == 1
+    assert bandeaux[0]["texte"] == "DÎNER"
+
+
+def test_detecter_bandeau_fragmenté_cross_colonnes_goûter():
+    """GOÛTER fragmenté en 2 runs cross-colonnes : `G O` (col 2) puis
+    `Û T E R` (col 3), séparés par un grand gap ~250px. Ancien critère
+    « meilleur run isolé ≥ 5 » rejetait (2 puis 4 mots). Nouveau critère
+    fusion des runs maj-pur les capture."""
+    from balance_pdf_import.parser_planning import _detecter_bandeaux
+    mots = [
+        _mot("G", 250.0, 254.9, top=140.0),
+        _mot("O", 259.2, 263.9, top=140.0),
+        # Grand gap cross-colonnes
+        _mot("Û", 480.0, 484.0, top=140.0),
+        _mot("T", 488.3, 492.7, top=140.0),
+        _mot("E", 497.0, 501.0, top=140.0),
+        _mot("R", 505.3, 509.7, top=140.0),
+    ]
+    bandeaux, _ = _detecter_bandeaux(mots)
+    assert len(bandeaux) == 1
+    assert bandeaux[0]["texte"] == "GOÛTER"
+
+
+def test_detecter_bandeau_ignore_mots_minuscules():
+    """Un mot fragmenté en minuscules (« P i a n o » = P majuscule + 4
+    minuscules) n'est PAS un bandeau — le nouveau filtre maj-pur exclut
+    les minuscules dès le premier étage."""
+    from balance_pdf_import.parser_planning import _detecter_bandeaux
+    mots = [
+        _mot("P", 100.0, 104.9),
+        _mot("i", 109.2, 111.1),
+        _mot("a", 115.4, 119.4),
+        _mot("n", 123.7, 128.5),
+        _mot("o", 132.8, 137.0),
+    ]
+    bandeaux, _ = _detecter_bandeaux(mots)
+    assert bandeaux == [], f"minuscules ne doivent pas former un bandeau : {bandeaux}"
+
+
+def test_detecter_bandeau_exclut_tirets_marge_gauche():
+    """Les tirets `-` des créneaux dans la marge gauche (« 16:00-16:30 »)
+    ne doivent PAS être fusionnés au bandeau de la même ligne — le fix
+    passe `marge_gauche_x` en paramètre pour filtrer."""
+    from balance_pdf_import.parser_planning import _detecter_bandeaux
+    mots = [
+        _mot("-", 54.0, 56.4, top=131.0),  # créneau 16:00-16:30
+        _mot("G", 250.0, 254.9, top=131.0),
+        _mot("O", 259.2, 263.9, top=131.0),
+        _mot("Û", 480.0, 484.0, top=131.0),
+        _mot("T", 488.3, 492.7, top=131.0),
+        _mot("E", 497.0, 501.0, top=131.0),
+        _mot("R", 505.3, 509.7, top=131.0),
+    ]
+    bandeaux, _ = _detecter_bandeaux(mots, marge_gauche_x=214.0)
+    assert len(bandeaux) == 1
+    assert bandeaux[0]["texte"] == "GOÛTER"  # pas "-GOÛTER"
+
+
+def test_detecter_bandeau_ignore_ponctuation_pure():
+    """Une ligne avec seulement des `-` (sans alpha) ne doit pas former
+    un bandeau (filet du critère `≥3 lettres alpha`)."""
+    from balance_pdf_import.parser_planning import _detecter_bandeaux
+    mots = [_mot("-", 100 + i * 8, 100 + i * 8 + 3) for i in range(6)]
+    bandeaux, _ = _detecter_bandeaux(mots)
+    assert bandeaux == [], "ponctuation pure n'est pas un bandeau"
