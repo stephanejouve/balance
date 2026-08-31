@@ -10,28 +10,25 @@ S6 exerce quatre cas limites documentés en tête de `fake-fixtures-s6.yml` —
 - **dimanche 25** : journée SANS aucune répétition. 0 séance est le
   résultat attendu (pas une anomalie de détection).
 - **mardi 27** : page en PORTRAIT (les 5 autres sont paysage) et une
-  répétition 15:30-17:30 qui **CHEVAUCHE** les créneaux voisins. Bug
-  connu du parser : `_detecter_creneaux` suppose non-recouvrement,
-  le contenu est recopié → 12 séances au lieu de 6. Documenté ici
-  en `xfail` strict pour verrouiller le bug avant fix.
+  répétition 15:30-17:30 qui **chevauche** les créneaux voisins. Bug
+  historique du parser (`_detecter_creneaux` supposait non-recouvrement)
+  corrigé par PR #31 via `_subdiviser_creneaux_chevauchants`.
 - **mercredi 28** : tableau réduit à DEUX lignes — éprouve le seuil
   de détection des montants de grille (fallback C3 3→2→1).
 - **jeudi 29** : cellule fusionnée annonçant la fermeture de deux
   salles dès 16:45 (pendant le créneau précédent). Doit être ignorée
   sans effet parasite sur les séances légitimes du créneau.
 
-Séances attendues, par fichier (récap Stéphane 2026-08-31) ::
+Séances attendues, par fichier ::
 
     s6_dimanche_25  →  0   (journée sans répétition — 0 est correct)
     s6_lundi_26     →  6
-    s6_mardi_27     →  6   ⚠ le parser en sort 12 (bug chevauchement)
+    s6_mardi_27     →  6
     s6_mercredi_28  →  6
     s6_jeudi_29     →  6
     s6_vendredi_30  → 12   (4 créneaux × 3 salles — valeur correcte)
 
-Total attendu **36**. Total observé **42** tant que le chevauchement
-n'est pas corrigé (verrouillé en `xfail` strict ci-dessous, à lever
-quand la PR « chevauchements horaires » corrigera `_detecter_creneaux`).
+Total **36 séances**.
 """
 from __future__ import annotations
 
@@ -103,49 +100,28 @@ def test_dimanche_25_zero_seance_sans_alerte_vraisemblance(resultats_par_jour):
     )
 
 
-# ── Cas limite : mardi chevauchement (BUG CONNU, xfail strict) ──────────
+# ── Cas limite : mardi chevauchement (bug fixé PR #31, subdivision) ─────
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="bug chevauchement créneaux — _detecter_creneaux suppose "
-           "non-recouvrement, la répétition 15:30-17:30 est recopiée sur "
-           "les créneaux 14:30-16:00 et 16:30-18:00 → 12 séances au lieu "
-           "de 6. À fixer dans PR dédiée « chevauchements horaires ».",
-)
 def test_mardi_27_chevauchement_pas_de_recopie(resultats_par_jour):
-    """Mardi 27 attendu 6 séances distinctes. Le parser en produit 12
-    (recouvrement 15:30-17:30 recopié sur 2 créneaux adjacents).
+    """Mardi 27 : 6 séances distinctes. La répétition 15:30-17:30 (Sables
+    Mouvants Le Kiosque) partage la case verticale y=[95, 188] avec les
+    créneaux 14:30 et 16:30 (aucune bordure horizontale interne dans le
+    PDF). Le fix `_subdiviser_creneaux_chevauchants` (PR #31) subdivise
+    ces cases via mi-hauteur entre tops des labels marge gauche —
+    chaque créneau récupère sa sous-zone et le contenu tombe dans la
+    seule sous-case correspondante.
 
-    Détail du bug (Stéphane 2026-08-31) : les 4 mêmes lignes 15:30-17:30
-    sont recopiées à l'identique sur les créneaux 14:30, 15:30 et 16:30 :
-
-        15:30-17:30  L'Atelier    Le Fil de Soie
-        15:30-17:30  La Grange    Vent Debout
-        15:30-17:30  Le Kiosque   Sables Mouvants
-        15:30-17:30  Salle Nord   Nuit d'Octobre
-
-    Attendu : **une seule** ligne 15:30-17:30 (Sables Mouvants, Le Kiosque
-    seul). Les morceaux « Comptine d'Hiver » et « La Dernière Averse »,
-    présents à 16:30 sur la feuille, sont écrasés par la recopie et
-    disparaissent complètement."""
+    Contenu attendu (feedback Stéphane 2026-08-31) :
+    - 14:30-16:00 : La Grange (Vent Debout), Salle Nord (Nuit d'Octobre),
+      L'Atelier (Le Fil de Soie)
+    - 15:30-17:30 : Le Kiosque (Sables Mouvants) — seul
+    - 16:30-18:00 : La Grange (Comptine d'Hiver), Salle Nord (La Dernière
+      Averse)"""
     r = resultats_par_jour["s6_mardi_27_octobre_2026.pdf"]
     assert len(r.seances) == 6, (
-        f"attendu 6 séances mardi, vu {len(r.seances)} — recopie "
-        f"chevauchement créneaux"
-    )
-
-
-def test_mardi_27_produit_effectivement_12_seances(resultats_par_jour):
-    """Verrouillage du bug actuel : documenter noir sur blanc que le
-    parser sort 12 séances aujourd'hui. Retirer ce test en même temps
-    que l'`xfail` ci-dessus quand le bug chevauchement sera fixé."""
-    r = resultats_par_jour["s6_mardi_27_octobre_2026.pdf"]
-    assert len(r.seances) == 12, (
-        f"comportement observé attendu 12, vu {len(r.seances)} — si ce "
-        f"test échoue, le bug chevauchement est peut-être fixé : "
-        f"vérifier et migrer test_mardi_27_chevauchement_pas_de_recopie "
-        f"en test normal."
+        f"attendu 6 séances mardi, vu {len(r.seances)} — régression du "
+        f"fix subdivision chevauchement ?"
     )
 
 
@@ -178,51 +154,28 @@ def test_jeudi_29_cellule_fusionnee_fermeture_pas_de_parasite(resultats_par_jour
 # ── Vue globale ─────────────────────────────────────────────────────────
 
 
-def test_repartition_par_jour_s6_observee(toutes_seances_s6):
-    """Verrouille le comportement OBSERVÉ actuel du parser : 42 séances.
+def test_repartition_par_jour_s6(toutes_seances_s6):
+    """Répartition métier : 0/6/6/6/6/12 = 36 séances (post-fix PR #31).
 
-    Composition : 0/6/12/6/6/12 (dim/lun/mar/mer/jeu/ven) — mardi 12
-    au lieu de 6 attendu à cause du bug chevauchement. Vendredi 12 est
-    normal (par design du jeu S6, journée dense à double occupation).
+    Vendredi 30 comptabilise 12 séances par design (4 créneaux × 3 salles).
+    Dimanche 25 : 0 séance légitime (journée sans répétition), donc
+    absent du dict par convention Python.
 
-    Ce test échouera *volontairement* le jour où le bug mardi sera fixé.
-    Signal : migrer la valeur 12 → 6 pour mardi et supprimer le test
-    complémentaire `test_repartition_par_jour_s6_apres_fix_bug_mardi`.
-    """
-    par_date: dict[str, int] = {}
-    for s in toutes_seances_s6:
-        par_date[s.date] = par_date.get(s.date, 0) + 1
-    assert par_date == {
-        "2026-10-26": 6,    # lundi
-        "2026-10-27": 12,   # mardi (bug chevauchement, 6 attendu)
-        "2026-10-28": 6,    # mercredi (tableau réduit)
-        "2026-10-29": 6,    # jeudi (cellule fermeture)
-        "2026-10-30": 12,   # vendredi (dense par design, pas un bug)
-        # dimanche 25 : 0 séance → absent du dict
-    }
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="bug chevauchement mardi actif — voir "
-           "test_mardi_27_chevauchement_pas_de_recopie",
-)
-def test_repartition_par_jour_s6_apres_fix_bug_mardi(toutes_seances_s6):
-    """Répartition ATTENDUE finale : 0/6/6/6/6/12 = 36 séances.
-
-    Verrouille l'objectif métier (mardi doit sortir 6, pas 12). Passera
-    au vert le jour où le bug chevauchement sera corrigé — à ce moment,
-    retirer `test_repartition_par_jour_s6_observee` (verrouillage bug)
-    et lever l'`xfail` ici."""
+    Ce test remplace la paire de verrous précédente
+    `test_repartition_par_jour_s6_observee` (bug 42) +
+    `test_repartition_par_jour_s6_apres_fix_bug_mardi` (xfail objectif 36)
+    fusionnée en une seule assertion métier claire depuis le merge de la
+    PR #31 (fix subdivision créneaux chevauchants)."""
     par_date: dict[str, int] = {}
     for s in toutes_seances_s6:
         par_date[s.date] = par_date.get(s.date, 0) + 1
     assert par_date == {
         "2026-10-26": 6,    # lundi
         "2026-10-27": 6,    # mardi (chevauchement corrigé)
-        "2026-10-28": 6,    # mercredi
-        "2026-10-29": 6,    # jeudi
-        "2026-10-30": 12,   # vendredi
+        "2026-10-28": 6,    # mercredi (tableau réduit)
+        "2026-10-29": 6,    # jeudi (cellule fermeture ignorée)
+        "2026-10-30": 12,   # vendredi (dense par design)
+        # dimanche 25 : 0 séance → absent du dict
     }
 
 
