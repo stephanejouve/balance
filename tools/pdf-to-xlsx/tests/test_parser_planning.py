@@ -286,3 +286,63 @@ def test_dates_presente_exhaustivite_jour_manquant_warn(config):
     assert any("dimanche" in w["raison"] for w in non_declares), (
         f"le nom du jour manquant doit apparaître : {non_declares}"
     )
+
+
+# ── PR : subdivision créneaux chevauchants (2026-08-31) ─────────────────
+# Bug identifié via fixtures S6 mardi 27 (PR #30) : les créneaux 14:30/15:30
+# /16:30 partagent la même case verticale car aucune bordure horizontale
+# interne n'est dessinée dans le PDF. Le fix subdivise en sous-cases à
+# partir des `top` des labels dans la marge gauche.
+
+
+def test_subdiviser_creneaux_chevauchants_cas_nominal_pas_de_partage():
+    """Cas où chaque créneau a sa propre case : pas de subdivision,
+    passage direct — évite les régressions sur les PDFs bien formés."""
+    from balance_pdf_import.parser_planning import _subdiviser_creneaux_chevauchants
+    creneaux = [
+        {"label": "10:00", "y_haut": 50.0, "y_bas": 80.0, "debut": "10:00", "fin": None, "top": 55.0},
+        {"label": "11:00", "y_haut": 80.0, "y_bas": 110.0, "debut": "11:00", "fin": None, "top": 85.0},
+    ]
+    out = _subdiviser_creneaux_chevauchants(creneaux)
+    assert len(out) == 2
+    assert (out[0]["y_haut"], out[0]["y_bas"]) == (50.0, 80.0)
+    assert (out[1]["y_haut"], out[1]["y_bas"]) == (80.0, 110.0)
+
+
+def test_subdiviser_creneaux_chevauchants_trois_creneaux_meme_case():
+    """Trois créneaux (mardi S6) partagent la même case y=[95, 188] avec
+    des `top` distincts 108/139/170. Chacun doit recevoir une sous-case
+    calculée sur la mi-hauteur entre tops consécutifs :
+    - créneau 14:30 (top=108) : y=[95, mi(108,139)=123.5]
+    - créneau 15:30 (top=139) : y=[123.5, mi(139,170)=154.5]
+    - créneau 16:30 (top=170) : y=[154.5, 188]"""
+    from balance_pdf_import.parser_planning import _subdiviser_creneaux_chevauchants
+    creneaux = [
+        {"label": "14:30-16:00", "y_haut": 95.0, "y_bas": 188.0, "debut": "14:30", "fin": "16:00", "top": 108.0},
+        {"label": "15:30-17:30", "y_haut": 95.0, "y_bas": 188.0, "debut": "15:30", "fin": "17:30", "top": 139.0},
+        {"label": "16:30-18:00", "y_haut": 95.0, "y_bas": 188.0, "debut": "16:30", "fin": "18:00", "top": 170.0},
+    ]
+    out = sorted(_subdiviser_creneaux_chevauchants(creneaux), key=lambda c: c["top"])
+    assert len(out) == 3
+    # 14:30 : bord haut du case, bord bas = mi(108, 139)
+    assert out[0]["label"] == "14:30-16:00"
+    assert (out[0]["y_haut"], out[0]["y_bas"]) == (95.0, 123.5)
+    # 15:30 : mi(108,139), mi(139,170)
+    assert out[1]["label"] == "15:30-17:30"
+    assert (out[1]["y_haut"], out[1]["y_bas"]) == (123.5, 154.5)
+    # 16:30 : mi(139,170), bord bas du case
+    assert out[2]["label"] == "16:30-18:00"
+    assert (out[2]["y_haut"], out[2]["y_bas"]) == (154.5, 188.0)
+
+
+def test_subdiviser_preserve_labels_et_horaires():
+    """La subdivision ne doit toucher que y_haut/y_bas — le reste des
+    champs (label, debut, fin, top) doit rester intact."""
+    from balance_pdf_import.parser_planning import _subdiviser_creneaux_chevauchants
+    creneaux = [
+        {"label": "10:00", "y_haut": 50.0, "y_bas": 80.0, "debut": "10:00", "fin": None, "top": 55.0},
+        {"label": "10:15", "y_haut": 50.0, "y_bas": 80.0, "debut": "10:15", "fin": None, "top": 62.0},
+    ]
+    out = sorted(_subdiviser_creneaux_chevauchants(creneaux), key=lambda c: c["top"])
+    assert out[0]["label"] == "10:00" and out[0]["debut"] == "10:00" and out[0]["top"] == 55.0
+    assert out[1]["label"] == "10:15" and out[1]["debut"] == "10:15" and out[1]["top"] == 62.0
