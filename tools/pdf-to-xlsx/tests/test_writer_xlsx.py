@@ -17,7 +17,7 @@ from balance_pdf_import.writer_xlsx import (
 )
 
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent / "fixtures" / "s0"
 CONFIG_PATH = Path(__file__).parent.parent / "config" / "fake-fixtures.yml"
 
 

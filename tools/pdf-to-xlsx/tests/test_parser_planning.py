@@ -20,7 +20,7 @@ import yaml
 from balance_pdf_import.parser_planning import parser_pdf
 
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent / "fixtures" / "s0"
 CONFIG_PATH = Path(__file__).parent.parent / "config" / "fake-fixtures.yml"
 
 

@@ -14,14 +14,20 @@ from .writer_xlsx import ecrire_xlsx
 
 def est_config_demo(config_path: Path) -> bool:
     """Détecte si la config chargée est celle de démonstration
-    (fake-fixtures embarqué dans le bundle PyInstaller ou dans le repo dev).
+    (`fake-fixtures*.yml` embarqué dans le bundle PyInstaller ou dans
+    le repo dev).
 
     Motivation A1 audit : la GUI charge silencieusement fake-fixtures.yml
     comme défaut, si l'user oublie de charger sa propre config ses PDFs
     réels donnent 0 séance (salles ne matchent pas) et l'audit produit
     un rapport apparent-mais-faux. On rend l'usage démo explicite.
+
+    Pattern préfixe (`startswith("fake-fixtures")`) plutôt qu'égalité
+    exacte : couvre `fake-fixtures.yml` (jeu S0/S1) ET `fake-fixtures-s6.yml`
+    (jeu S6 blindage), livrés côte à côte dans le repo. Tout futur jeu
+    de test devra suivre la même convention de nommage.
     """
-    return config_path.name == "fake-fixtures.yml"
+    return config_path.name.startswith("fake-fixtures") and config_path.suffix in {".yml", ".yaml"}
 
 
 @click.command()
