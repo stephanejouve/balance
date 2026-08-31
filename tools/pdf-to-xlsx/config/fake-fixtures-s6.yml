@@ -1,0 +1,60 @@
+# Config des fixtures de test — planning inventé (aucune PII).
+#
+# Session fictive : 25-30 octobre 2026, 6 salles imaginaires. Aucun lien
+# avec une vraie session Musiques Festives : lieux, morceaux et
+# intervenants sont inventés.
+#
+# Ce jeu sert de test de blindage du parser. Il contient volontairement
+# quatre cas limites :
+#   - dimanche 25 : journée SANS aucune répétition (0 séance est le
+#     résultat attendu, pas une anomalie)
+#   - mardi 27    : page en PORTRAIT, et une répétition 15:30-17:30 qui
+#     CHEVAUCHE les créneaux voisins (bug connu : 12 séances extraites
+#     au lieu de 6)
+#   - mercredi 28 : tableau réduit à DEUX lignes (éprouve le seuil de
+#     détection des montants de grille)
+#   - jeudi 29    : cellule fusionnée annonçant la fermeture de deux
+#     salles dès 16:45, donc pendant le créneau précédent
+#
+# Séances attendues : 0 / 6 / 6 / 6 / 6 / 12 = 36 au total.
+
+session: "Fixtures fake — session de test octobre 2026"
+
+# Les six jours sont déclarés : une correspondance partielle créerait une
+# vérification à trous (un jour absent n'est jamais confronté au PDF).
+dates:
+  dimanche: 2026-10-25
+  lundi: 2026-10-26
+  mardi: 2026-10-27
+  mercredi: 2026-10-28
+  jeudi: 2026-10-29
+  vendredi: 2026-10-30
+
+salles:
+  - "Le Pressoir"
+  - "La Grange"
+  - "Salle Nord"
+  - "L'Atelier"
+  - "Le Kiosque"
+  - "La Véranda"
+
+mots_cles_seance:
+  - "Répétition"
+  - "Pré-Production"
+  - "Post-Production"
+  - "Enregistrement"
+
+ignorer:
+  - "Préparations"
+  - "Échauffement"
+  - "Combo"
+  - "Jams"
+  - "En acoustique"
+  - "Salle Disponible"
+  - "Salle non-disponible"
+  - "Promenade"
+  # "Répétition Intervenants" = répétition privée des encadrants,
+  # pas un morceau du répertoire.
+  - "Intervenants"
+
+motif_responsable: 'avec (?P<nom>.+?)(?:\s|$)'

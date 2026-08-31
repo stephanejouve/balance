@@ -10,7 +10,7 @@ from openpyxl import load_workbook
 from balance_pdf_import.cli import main
 
 
-FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURES = Path(__file__).parent / "fixtures" / "s0"
 CONFIG_PATH = Path(__file__).parent.parent / "config" / "fake-fixtures.yml"
 
 
