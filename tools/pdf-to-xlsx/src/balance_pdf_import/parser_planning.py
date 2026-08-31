@@ -543,7 +543,110 @@ def parser_page(page, config: dict, numero_page: int = 1) -> ResultatParsing:
                     "salle": salle,
                     "texte": texte,
                 })
+
+    # Post-traitement : recomposition annonces cross-colonnes (A3.2).
+    _recomposer_annonces_cross_colonnes(resultat, config)
     return resultat
+
+
+# Regex : capture toutes les heures HH:MM ou HHhMM (utile pour extraire
+# une heure « antidatée » dans une annonce type « fermées dès 16:45 »).
+_HEURE_ANNONCE_RE = re.compile(r"\b\d{1,2}[h:]\d{2}\b")
+
+
+def _recomposer_annonces_cross_colonnes(
+    resultat: ResultatParsing, config: dict
+) -> None:
+    """Détecte les fragments cross-colonnes d'une même annonce écrite en
+    cellule fusionnée dans le PDF, les recompose et signale l'annonce
+    dans `erreurs_vraisemblance` avec un warning.
+
+    Signal syntaxique retenu : **parenthèses non appariées**. Une cellule
+    contenant `(` sans `)` et une cellule voisine (même créneau) contenant
+    `)` sans `(` sont marqueurs d'une phrase continue coupée par la
+    grille des colonnes. Ce critère est robuste — il n'exige pas de
+    lister à l'avance les mots-clés d'annonce (fermeture, montage,
+    installation, ...) qui varient d'une session à l'autre.
+
+    Cas de figure documenté (jeudi S6, cellule fermeture antidatée) :
+
+        L'Atelier   « (La Grange et Salle Nord »
+        Le Kiosque  « fermées dès 16:45 pour montage) »
+
+    → phrase recomposée : « (La Grange et Salle Nord fermées dès 16:45
+    pour montage) », heure antidatée 16:45 (prime sur le créneau
+    18:00-20:50), salles concernées : La Grange, Salle Nord.
+
+    Effet sur `resultat` (mutation en place) :
+    - Les fragments individuels sont retirés de `non_classees` (évite
+      la pollution du rapport avec 3 lignes « aucun mot-clé reconnu »).
+    - Un `warning` est ajouté à `erreurs_vraisemblance` avec le texte
+      recomposé, l'heure antidatée éventuelle et la liste des salles
+      nommées dans le texte.
+    - Le fragment est **signalé**, pas traité en séance — l'humain
+      valide/agit dans Balance selon la sémantique (fermeture, montage,
+      installation, événement transverse, ...).
+    """
+    from collections import defaultdict
+    salles_attendues = set(config.get("salles", []))
+
+    # Grouper les non_classees par créneau
+    par_creneau: dict[str, list[dict]] = defaultdict(list)
+    for nc in resultat.non_classees:
+        if nc.get("raison") == "aucun mot-clé reconnu":
+            par_creneau[nc.get("creneau", "?")].append(nc)
+
+    fragments_consommes: list[dict] = []
+    for creneau_label, ncs in par_creneau.items():
+        # Trouver les fragments avec parenthèses non appariées
+        ouvertures = [nc for nc in ncs if "(" in nc["texte"] and ")" not in nc["texte"]]
+        fermetures = [nc for nc in ncs if ")" in nc["texte"] and "(" not in nc["texte"]]
+        if not ouvertures or not fermetures:
+            continue
+        # V1 : associer directement première ouverture + dernière fermeture.
+        # Les fragments sans parenthèses ne sont PAS inclus — ils peuvent
+        # être des cellules légitimes voisines (ex. jeudi S6 : la cellule
+        # « 18:00 : Installation — 18:30 » de La Grange est légitime,
+        # aucune raison de la fusionner à l'annonce fermeture). Si un futur
+        # cas nécessite un fragment intermédiaire (annonce sur 3 colonnes
+        # ouv/milieu/ferm), on raffinera par tri x0.
+        ouverture = ouvertures[0]
+        fermeture = fermetures[-1]
+        # Recomposer le texte (ouverture + fermeture uniquement)
+        texte_recompose = f"{ouverture['texte']} {fermeture['texte']}"
+        # Extraire toutes les heures trouvées (l'user identifie l'heure
+        # métier pertinente — antidatée, échéance, ...). Une heure typique
+        # d'annonce est « fermées dès HH:MM » ; regex `dès (HH:MM)`
+        # capturerait plus précisément mais reste FR-only.
+        heures_trouvees = _HEURE_ANNONCE_RE.findall(texte_recompose)
+        # Extraire salles nommées (substring simple)
+        salles_nommees = sorted(s for s in salles_attendues if s in texte_recompose)
+        # Signaler l'annonce
+        raison = f"annonce cross-colonnes recomposée : « {texte_recompose} »"
+        indice_parts = []
+        if heures_trouvees:
+            indice_parts.append(f"heures dans le texte : {', '.join(heures_trouvees)}")
+        if salles_nommees:
+            indice_parts.append(f"salles nommées : {', '.join(salles_nommees)}")
+        indice_parts.append(
+            f"créneau porteur : {creneau_label} — vérifier manuellement "
+            f"(fermeture, montage, événement transverse, ...)"
+        )
+        resultat.erreurs_vraisemblance.append({
+            "niveau": "warning",
+            "raison": raison,
+            "indice": " ; ".join(indice_parts),
+        })
+        # Marquer les fragments consommés (ouverture + fermeture seulement)
+        fragments_consommes.append(ouverture)
+        fragments_consommes.append(fermeture)
+
+    # Retirer les fragments consommés de non_classees
+    if fragments_consommes:
+        consommes_ids = {id(f) for f in fragments_consommes}
+        resultat.non_classees = [
+            nc for nc in resultat.non_classees if id(nc) not in consommes_ids
+        ]
 
 
 # Regex robuste : on ne peut pas utiliser `\b` car en Python `_` est un
