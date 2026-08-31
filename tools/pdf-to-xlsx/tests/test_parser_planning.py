@@ -533,3 +533,90 @@ def test_detecter_bandeau_ignore_ponctuation_pure():
     mots = [_mot("-", 100 + i * 8, 100 + i * 8 + 3) for i in range(6)]
     bandeaux, _ = _detecter_bandeaux(mots)
     assert bandeaux == [], "ponctuation pure n'est pas un bandeau"
+
+
+# ── PR : verifier_morceaux_attendus — écart cross-PDF (2026-08-31) ──────
+# Idée fonctionnelle Stéphane : « signaler un écart quand un morceau n'a
+# pas le nombre de séances attendu, plutôt que de laisser lire le tableau ».
+# Doctrine facultative-mais-exhaustive (cohérente avec dates variante 3).
+
+
+def _seance(morceau, salle="Salle X", debut="10:00", fin="11:00", date="2026-04-12"):
+    from balance_pdf_import.parser_planning import Seance
+    return Seance(
+        date=date, debut=debut, fin=fin, salle=salle, morceau=morceau,
+        responsable=None, type="Répétition", source_page=1,
+    )
+
+
+def test_verifier_morceaux_attendus_cle_absente_aucun_controle():
+    """Config sans clé `morceaux_attendus` → aucun contrôle, aucune alerte
+    même si le comptage est irrégulier. Cohérent avec dates variante 3."""
+    from balance_pdf_import.parser_planning import verifier_morceaux_attendus
+    seances = [_seance("A"), _seance("A"), _seance("B")]
+    alertes = verifier_morceaux_attendus(seances, {})
+    assert alertes == []
+
+
+def test_verifier_morceaux_attendus_config_ok_aucune_alerte():
+    """Tous les morceaux attendus ont exactement le bon nombre → aucune alerte."""
+    from balance_pdf_import.parser_planning import verifier_morceaux_attendus
+    seances = [_seance("A"), _seance("A"), _seance("B"), _seance("B"), _seance("B")]
+    alertes = verifier_morceaux_attendus(seances, {"morceaux_attendus": {"A": 2, "B": 3}})
+    assert alertes == []
+
+
+def test_verifier_morceaux_attendus_ecart_negatif():
+    """Morceau attendu à 3 mais vu 2 fois → warning écart avec attendu/vu."""
+    from balance_pdf_import.parser_planning import verifier_morceaux_attendus
+    seances = [_seance("A"), _seance("A")]
+    alertes = verifier_morceaux_attendus(seances, {"morceaux_attendus": {"A": 3}})
+    assert len(alertes) == 1
+    a = alertes[0]
+    assert a["niveau"] == "warning"
+    assert "A" in a["raison"] and "attendu 3" in a["raison"] and "vu 2" in a["raison"]
+
+
+def test_verifier_morceaux_attendus_ecart_positif():
+    """Morceau attendu à 1 mais vu 3 fois → warning (attendu 1, vu 3)."""
+    from balance_pdf_import.parser_planning import verifier_morceaux_attendus
+    seances = [_seance("A"), _seance("A"), _seance("A")]
+    alertes = verifier_morceaux_attendus(seances, {"morceaux_attendus": {"A": 1}})
+    assert len(alertes) == 1
+    assert "attendu 1" in alertes[0]["raison"] and "vu 3" in alertes[0]["raison"]
+
+
+def test_verifier_morceaux_attendus_morceau_zero_seance_signale():
+    """Morceau déclaré attendu mais aucune séance vue (vu=0) → warning."""
+    from balance_pdf_import.parser_planning import verifier_morceaux_attendus
+    seances = [_seance("A")]
+    alertes = verifier_morceaux_attendus(seances, {"morceaux_attendus": {"A": 1, "B": 2}})
+    ecarts_b = [a for a in alertes if "« B »" in a["raison"]]
+    assert len(ecarts_b) == 1
+    assert "attendu 2, vu 0" in ecarts_b[0]["raison"]
+
+
+def test_verifier_morceaux_attendus_exhaustivite_morceau_vu_non_declare():
+    """Morceau vu mais absent de `morceaux_attendus` (config présente) →
+    warning exhaustivité. Garde-fou variante 3 : évite l'entre-deux
+    « j'ai déclaré 4 morceaux sur 6 et je crois être couvert »."""
+    from balance_pdf_import.parser_planning import verifier_morceaux_attendus
+    seances = [_seance("A"), _seance("B"), _seance("B")]
+    alertes = verifier_morceaux_attendus(seances, {"morceaux_attendus": {"A": 1}})
+    non_declares = [a for a in alertes if "absent" in a["raison"]]
+    assert len(non_declares) == 1
+    assert "« B »" in non_declares[0]["raison"]
+    assert "vu 2 séance(s)" in non_declares[0]["raison"]
+
+
+def test_verifier_morceaux_attendus_alertes_triees_deterministes():
+    """Les alertes doivent être triées (nom morceau alpha) — reporting
+    déterministe, cohérent avec la doctrine audit."""
+    from balance_pdf_import.parser_planning import verifier_morceaux_attendus
+    seances = [_seance("Zorro"), _seance("Alpha"), _seance("Alpha")]
+    alertes = verifier_morceaux_attendus(seances, {
+        "morceaux_attendus": {"Alpha": 3, "Zorro": 2},  # 2 écarts attendus
+    })
+    raisons = [a["raison"] for a in alertes]
+    assert "Alpha" in raisons[0], f"tri alpha attendu, vu : {raisons}"
+    assert "Zorro" in raisons[1]

@@ -8,7 +8,7 @@ import click
 import yaml
 
 from .audit import TraceFichier, ecrire_audit
-from .parser_planning import ResultatParsing, parser_pdf
+from .parser_planning import ResultatParsing, parser_pdf, verifier_morceaux_attendus
 from .writer_xlsx import ecrire_xlsx
 
 
@@ -96,6 +96,11 @@ def main(config_path: Path, pdfs: tuple[Path, ...], pdf_dir: Path | None,
         resultat_global.ignorees.extend(r.ignorees)
         resultat_global.non_classees.extend(r.non_classees)
         resultat_global.erreurs_vraisemblance.extend(r.erreurs_vraisemblance)
+
+    # Vérification cross-PDF morceaux attendus vs vus (config facultative).
+    resultat_global.erreurs_vraisemblance.extend(
+        verifier_morceaux_attendus(resultat_global.seances, config)
+    )
 
     # Fix A1 : refuse produire un xlsx vide si l'user a fourni des PDFs.
     # Un échec bruyant vaut mieux qu'un résultat plausible et faux.
