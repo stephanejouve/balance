@@ -529,23 +529,35 @@ def parser_pdf(chemin: Path, config: dict) -> ResultatParsing:
     `salles_detectees`, `creneaux_detectes`) sont conservées — les séances
     sont bien toutes agrégées.
 
-    **Utilisation de `config['dates']`** (audit Claude Desktop 2026-08-30
-    §« Sur le schéma de configuration ») : la clé `dates: {mercredi:
-    2026-08-26, ...}` est aujourd'hui **filet de sécurité**, pas source
-    principale. Deux usages :
-    - **cross-check** : si l'extraction titre a réussi et que la date
-      diverge de `dates[jour]` déduit du nom de fichier, on émet un
-      warning vraisemblance (« divergence date PDF vs config »).
-    - **fallback** : si l'extraction titre échoue mais qu'on peut déduire
-      le jour du nom (`3_mardi.pdf` → 'mardi'), on utilise `dates['mardi']`
-      pour peupler `date_page` et permettre au parseur de continuer sans
-      perdre les séances.
+    **Utilisation de `config['dates']`** (audit Claude Desktop 2026-08-30 +
+    décision Stéphane 2026-08-31 sur variante 3) : la clé `dates: {mercredi:
+    2026-08-26, ...}` est **facultative mais exhaustive si présente**.
 
-    Une redondance déclarée et jamais confrontée est une source d'erreur
-    silencieuse — ce garde-fou la transforme en signal actionnable.
+    - **clé absente** : aucun contrôle, aucune alerte — le titre du PDF fait
+      foi. Utile pour prototypage ou usage ponctuel où l'on n'a pas encore
+      formalisé le calendrier de la session.
+    - **clé présente** : trois contrôles complémentaires :
+      1. **cross-check** : titre PDF extrait et date diverge de
+         `dates[jour_déduit_du_nom_fichier]` → warning « divergence date ».
+      2. **fallback** : titre PDF non extrait mais jour déclaré dans `dates`
+         → utilisation de `dates[jour]` pour peupler `date_page` + warning.
+      3. **exhaustivité** : jour PDF rencontré (déduit du nom) mais absent
+         des clés de `dates` → warning « jour non déclaré ». C'est le
+         garde-fou de la variante 3 : évite l'entre-deux « j'ai déclaré
+         3 jours sur 6 et je crois être couvert ». Soit on ne contrôle
+         rien et on le sait (clé absente), soit on contrôle tout.
+
+    Motivation du croisement (pas de suppression pure) : la chaîne d'entrée
+    terrain visée par le brief Balance §15 est **photo tableau → transcription
+    IA → PDF → parser**. Une date mal transcrite produit un PDF impeccablement
+    formé et faux — le parser seul ne peut pas la détecter. La config `dates`
+    est une source **indépendante** (saisie humaine à l'avance, hors chaîne
+    IA), et c'est ce qui donne sa valeur au croisement — deux chemins
+    distincts vers la même information.
     """
     resultat_total = ResultatParsing()
     dates_config = config.get("dates") or {}
+    dates_active = bool(dates_config)
     jour_deduit = _deduire_jour_depuis_nom(chemin.name)
     date_config = dates_config.get(jour_deduit) if jour_deduit else None
 
@@ -560,6 +572,26 @@ def parser_pdf(chemin: Path, config: dict) -> ResultatParsing:
             resultat_total.date_page = partiel.date_page
             resultat_total.salles_detectees = partiel.salles_detectees
             resultat_total.creneaux_detectes = partiel.creneaux_detectes
+
+    if not dates_active:
+        # Clé absente : aucun contrôle. Cohérent avec la variante 3.
+        return resultat_total
+
+    # Exhaustivité : jour PDF rencontré mais absent des clés `dates`. Détecte
+    # l'entre-deux dangereux où l'user croit avoir déclaré ses dates alors
+    # qu'il en manque (avant la variante 3, silence total sur ces jours).
+    if jour_deduit and jour_deduit not in dates_config:
+        resultat_total.erreurs_vraisemblance.append({
+            "niveau": "warning",
+            "fichier": chemin.name,
+            "raison": f"jour '{jour_deduit}' déduit du nom fichier non déclaré "
+                      f"dans config['dates'] (clés présentes : "
+                      f"{sorted(dates_config.keys())})",
+            "indice": "ajouter la date attendue pour bénéficier du cross-check, "
+                      "ou retirer complètement la clé 'dates' pour désactiver "
+                      "tous les contrôles",
+        })
+        return resultat_total
 
     # Confrontation date titre vs date config (une redondance qui ne se
     # confronte à rien = source d'erreur silencieuse).
