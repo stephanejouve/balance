@@ -18,6 +18,7 @@
 
 import type { AlerteIdentite, PersonneRelecture } from '../domain/identites'
 import { normaliserNom } from '../domain/identites'
+import { grouperAlertesCoherence } from '../domain/coherence'
 import type { AnalyseIdentitesImport } from '../io/alertes-import'
 
 /**
@@ -85,6 +86,10 @@ export function filtrerPersonnes(
  * Vue synthèse pour le header : 3 compteurs bien séparés. Le total
  * d'alertes fusionne decisions + signalements mais l'user voit surtout
  * les décisions (poids visuel plus fort).
+ *
+ * Les compteurs `nb_decisions` et `nb_signalements` cumulent
+ * identité (A-H) + cohérence entre onglets (I-P) — l'utilisateur voit
+ * un seul chiffre par niveau de gravité.
  */
 export interface Synthese {
   nb_decisions: number
@@ -94,9 +99,10 @@ export interface Synthese {
 
 export function synthese(analyse: AnalyseIdentitesImport): Synthese {
   const { decisions, signalements } = grouperAlertes(analyse.alertes_identite)
+  const coh = grouperAlertesCoherence(analyse.alertes_coherence)
   return {
-    nb_decisions: decisions.length,
-    nb_signalements: signalements.length,
+    nb_decisions: decisions.length + coh.alertes.length,
+    nb_signalements: signalements.length + coh.signalements.length,
     nb_personnes: analyse.personnes_relecture.length,
   }
 }

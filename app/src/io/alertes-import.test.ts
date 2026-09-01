@@ -250,6 +250,7 @@ describe('mentionsDepuisGroupes / mentionsDepuisStagiaires — helpers unitaires
 
 describe('mentionsDepuisCandidat / analyserIdentitesCandidat — wire post-construireCandidatExcel', () => {
   const inscriptions = {
+    session_id: 's',
     personnes: [
       { id: 'p1', nom: 'Pierre', discriminant: '', role: 'musicien' as const,
         instruments: [{ pupitre: 'batterie', lourd: false }], indispos: [] },
@@ -259,11 +260,14 @@ describe('mentionsDepuisCandidat / analyserIdentitesCandidat — wire post-const
         instruments: [{ pupitre: 'chant', lourd: false }], indispos: [] },
     ],
     groupes: [
-      { titre: 'Sables Mouvants', membres: [
-        { personne_id: 'p1', pupitre: 'batterie' },
-        { personne_id: 'p2', pupitre: 'guitare' },
-      ] },
+      { id: 'g1', titre: 'Sables Mouvants', auteur: '', style: '', tonalite: '',
+        responsable_id: '', postes_cherches: [], repetitions_deja_faites: 0,
+        membres: [
+          { personne_id: 'p1', pupitre: 'batterie' },
+          { personne_id: 'p2', pupitre: 'guitare' },
+        ] },
     ],
+    imposes: [],
   }
 
   it('mentionsDepuisCandidat produit 1 mention par instrument stagiaire + 1 par MembreGroupe', () => {
@@ -287,18 +291,54 @@ describe('mentionsDepuisCandidat / analyserIdentitesCandidat — wire post-const
     expect(ghost!.nb_engagements).toBe(0)
   })
 
+  it('analyserIdentitesCandidat produit aussi des alertes de cohérence (I-P)', () => {
+    // Ghost est déclaré (p3) mais jamais cité → cas I stagiaire_orphelin
+    const analyse = analyserIdentitesCandidat(inscriptions)
+    const orphelins = analyse.alertes_coherence.filter((a) => a.type === 'stagiaire_orphelin')
+    expect(orphelins).toHaveLength(1)
+    expect(orphelins[0]).toMatchObject({ type: 'stagiaire_orphelin', personne: 'Ghost' })
+  })
+
+  it('cas N (nom_cite_absent_stagiaires) activé via stagiaires_ids dérivé de candidat.personnes', () => {
+    // p1 déclaré + cité, p2 cité mais absent de personnes → cas N
+    const inscriptionsCasN = {
+      session_id: 's',
+      personnes: [
+        { id: 'p1', nom: 'Alice', discriminant: '', role: 'musicien' as const,
+          instruments: [{ pupitre: 'chant' as const, lourd: false }], indispos: [] },
+      ],
+      groupes: [
+        { id: 'g1', titre: 'M', auteur: '', style: '', tonalite: '',
+          responsable_id: '', postes_cherches: [], repetitions_deja_faites: 0,
+          membres: [
+            { personne_id: 'p1', pupitre: 'chant' as const },
+            { personne_id: 'p2', pupitre: 'batterie' as const },
+          ] },
+      ],
+      imposes: [],
+    }
+    const analyse = analyserIdentitesCandidat(inscriptionsCasN)
+    const absents = analyse.alertes_coherence.filter((a) => a.type === 'nom_cite_absent_stagiaires')
+    expect(absents).toHaveLength(1)
+    expect(absents[0]).toMatchObject({ personne: 'p2', pupitre: 'batterie', morceau: 'M' })
+  })
+
   it('personne_id inconnu dans MembreGroupe → ignoré silencieusement', () => {
     const inscriptionsOrphelin = {
+      session_id: 's',
       personnes: [
         { id: 'p1', nom: 'Alpha', discriminant: '', role: 'musicien' as const,
           instruments: [{ pupitre: 'chant', lourd: false }], indispos: [] },
       ],
       groupes: [
-        { titre: 'X', membres: [
-          { personne_id: 'p1', pupitre: 'chant' },
-          { personne_id: 'inexistant', pupitre: 'batterie' },
-        ] },
+        { id: 'g1', titre: 'X', auteur: '', style: '', tonalite: '',
+          responsable_id: '', postes_cherches: [], repetitions_deja_faites: 0,
+          membres: [
+            { personne_id: 'p1', pupitre: 'chant' },
+            { personne_id: 'inexistant', pupitre: 'batterie' },
+          ] },
       ],
+      imposes: [],
     }
     const mentions = mentionsDepuisCandidat(inscriptionsOrphelin)
     // 1 stagiaire + 1 membre valide (l'inexistant est skippé)
