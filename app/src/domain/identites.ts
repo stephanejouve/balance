@@ -181,12 +181,33 @@ export function detecterAlertesIdentite(
 }
 
 /**
- * Homonymie : même nom (sans discriminant), ≥2 instruments distincts,
- * jamais ensemble dans un même morceau (aucune personne polyvalente).
+ * Homonymie : même nom (sans discriminant), ≥2 instruments **cités dans
+ * les morceaux**, qui ne coexistent dans aucun morceau (aucune personne
+ * polyvalente).
  *
  * Un discriminant explicite disqualifie l'alerte — « Pierre (L) » et
  * « Pierre (SIG) » sont volontairement distingués par le rédacteur du
  * planning. Seule l'ambiguïté SUR LE PRÉNOM SEUL est alertable.
+ *
+ * **Séparation identité vs cohérence** (feedback Stéphane 2026-09-01,
+ * post-mesure) : la détection d'homonymie ignore le pupitre déclaré
+ * dans l'onglet Stagiaires (`groupe_titre = ''`). Sinon on obtient un
+ * faux positif sur les cas de « pupitre contredit » (task #47) :
+ * Clara V. déclarée Piano et citée à la Batterie sur un morceau était
+ * remontée comme « 2 personnes portent peut-être le même nom » alors
+ * qu'il n'y en a qu'une avec une déclaration incohérente. Le libellé
+ * envoyait l'utilisateur chercher un homonyme, mais il fallait corriger
+ * une déclaration.
+ *
+ * Chacun sa source, plus de recouvrement :
+ * - identité (ici) → regarde ce qui est CITÉ dans les morceaux
+ * - cohérence (task #47) → comparera déclaré vs cité
+ *
+ * Vérif cas B (Pierre-Yves L. chant + guitare cités SUR LE MÊME
+ * morceau) : les 2 instruments sont dans la même case
+ * `instrParGroupe['Vent Debout']` → polyvalent, aucune alerte. La
+ * règle du « jamais ensemble » reste intacte, elle joue sur les
+ * mentions morceau qui restent.
  */
 function _detecterHomonymies(
   mentions: readonly MembreMention[],
@@ -215,15 +236,32 @@ function _detecterHomonymies(
       }
       parNom.set(cle, bucket)
     }
-    bucket.instruments.add(m.pupitre)
-    bucket.groupes.add(m.groupe_titre)
+    // Discriminants suivis peu importe la source (mention stagiaire ou
+    // morceau) — le tag est un attribut de la personne, pas de son
+    // engagement. Sert au filtre « discriminant explicite = pas d'alerte ».
     bucket.discriminants.add(m.discriminant)
+
+    // `instrParGroupe` inclut AUSSI la déclaration stagiaire
+    // (`groupe_titre = ''` fait office de pseudo-groupe). Motivation :
+    // un stagiaire déclaré polyvalent (Vincent K. Guitare + Chant en
+    // additionnel) doit disqualifier l'alerte homonymie même si ses
+    // 2 pupitres sont cités sur 2 morceaux distincts. Le pseudo-groupe
+    // stagiaire couvre alors tous les instruments cités → polyvalent
+    // légitime. Sans ça, Vincent K. serait faux-positif.
     let insGrp = bucket.instrParGroupe.get(m.groupe_titre)
     if (!insGrp) {
       insGrp = new Set()
       bucket.instrParGroupe.set(m.groupe_titre, insGrp)
     }
     insGrp.add(m.pupitre)
+
+    // `instruments` + `groupes` : SEULEMENT les mentions morceau. Le
+    // pupitre stagiaire ne compte pas comme « instrument observé »
+    // pour le critère « ≥2 instruments distincts » (sinon Clara V.
+    // déclarée Piano + citée Batterie remonte à tort, cf. docstring).
+    if (m.groupe_titre === '') continue
+    bucket.instruments.add(m.pupitre)
+    bucket.groupes.add(m.groupe_titre)
   }
 
   const alertes: AlerteIdentite[] = []
