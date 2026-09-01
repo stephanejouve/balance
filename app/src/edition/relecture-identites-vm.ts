@@ -18,8 +18,47 @@
 
 import type { AlerteIdentite, PersonneRelecture } from '../domain/identites'
 import { normaliserNom } from '../domain/identites'
-import { grouperAlertesCoherence } from '../domain/coherence'
+import { grouperAlertesCoherence, type AlerteCoherence } from '../domain/coherence'
 import type { AnalyseIdentitesImport } from '../io/alertes-import'
+
+/**
+ * Seuil au-delà duquel les `stagiaire_orphelin` s'agrègent en une seule
+ * ligne dépliable au lieu d'être listés individuellement.
+ *
+ * Justification Stéphane 2026-09-01 : sur `balance-stress-test.xlsx`
+ * 21 des 84 stagiaires ne sont dans aucun morceau (répertoire des
+ * intervenants — situation normale). 21 lignes noieraient les alertes
+ * réelles. « Trois occurrences se listent, vingt et une s'additionnent. »
+ *
+ * Aggrégation limitée au type `stagiaire_orphelin` — les autres types
+ * (pupitre_contredit, indispo_percutee, etc.) sont rares par nature et
+ * chaque occurrence porte une info actionnable spécifique.
+ */
+export const SEUIL_AGREGATION_ORPHELINS = 3
+
+export interface SignalementsCoherenceOrganises {
+  /** Signalements affichés individuellement (tous types sauf orphelins). */
+  autres: AlerteCoherence[]
+  /** Orphelins listés individuellement (si N ≤ SEUIL) ou vide (si agrégés). */
+  orphelins_individuels: Extract<AlerteCoherence, { type: 'stagiaire_orphelin' }>[]
+  /** Orphelins agrégés (si N > SEUIL) — l'UI rend 1 ligne dépliable. */
+  orphelins_agreges: Extract<AlerteCoherence, { type: 'stagiaire_orphelin' }>[]
+}
+
+export function organiserSignalementsCoherence(
+  signalements: readonly AlerteCoherence[],
+): SignalementsCoherenceOrganises {
+  const orphelins: Extract<AlerteCoherence, { type: 'stagiaire_orphelin' }>[] = []
+  const autres: AlerteCoherence[] = []
+  for (const s of signalements) {
+    if (s.type === 'stagiaire_orphelin') orphelins.push(s)
+    else autres.push(s)
+  }
+  if (orphelins.length > SEUIL_AGREGATION_ORPHELINS) {
+    return { autres, orphelins_individuels: [], orphelins_agreges: orphelins }
+  }
+  return { autres, orphelins_individuels: orphelins, orphelins_agreges: [] }
+}
 
 /**
  * Groupes séparés pour la hiérarchie visuelle. Le type stocké dans
