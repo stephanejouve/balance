@@ -1,0 +1,85 @@
+{
+ "objet": "Cohérence entre onglets — les noms sont sans ambiguïté, ce sont les données qui se contredisent.",
+ "attendus": [
+  {
+   "cas": "I — déclaré, jamais cité",
+   "personnes": [
+    "Amandine R. (resp. sans pupitre)",
+    "Boris T."
+   ],
+   "detail": "Boris T. figure en Stagiaires mais dans aucun morceau. Amandine R. est responsable d'un morceau où elle n'est citée à aucun pupitre.",
+   "attendu": "SIGNALEMENT informatif — un stagiaire sans engagement est légitime (inscrit tardif, spectateur), mais un responsable absent de son propre groupe est probablement une erreur de saisie."
+  },
+  {
+   "cas": "J — pupitre contredit",
+   "personnes": [
+    "Clara V.",
+    "Damien W."
+   ],
+   "detail": "Clara V. déclarée Piano, citée à la Batterie sur « Ligne de Fuite ». Damien W. déclaré Vents, cité à la Basse sur « Marée d'Équinoxe ». Ni l'un ni l'autre n'a de pupitre additionnel correspondant.",
+   "attendu": "ALERTE incohérence de pupitre — soit la déclaration est fausse, soit il manque un pupitre additionnel."
+  },
+  {
+   "cas": "K — pupitre additionnel légitime",
+   "personnes": [
+    "Estelle Y."
+   ],
+   "detail": "Déclarée Chant + Piano (additionnel), citée au Piano sur « Petit Matin ».",
+   "attendu": "AUCUNE alerte — le pupitre additionnel couvre le cas."
+  },
+  {
+   "cas": "L — latéralité sur un non-batteur",
+   "personnes": [
+    "Fabien Z."
+   ],
+   "detail": "Déclaré Guitare, avec latéralité « gaucher ».",
+   "attendu": "SIGNALEMENT mineur — la latéralité ne sert qu'à la batterie (inversion du kit). Champ probablement rempli par erreur."
+  },
+  {
+   "cas": "M — indisponibilité percutée",
+   "personnes": [
+    "Gaëlle A."
+   ],
+   "detail": "Indisponible lundi 14:30-16:00, or « Petit Matin » a une séance fixée le 2026-10-26 (lundi) 14:30-16:00 dans Proposés, où elle figure.",
+   "attendu": "ALERTE conflit — une séance déjà fixée convoque quelqu'un d'indisponible. Le solveur ne peut pas la déplacer, c'est une contradiction à trancher."
+  },
+  {
+   "cas": "N — nom cité, absent de Stagiaires",
+   "personnes": [
+    "Olivier X."
+   ],
+   "detail": "Cité à la guitare sur « Sous le Tilleul », ne figure pas en Stagiaires.",
+   "attendu": "SIGNALEMENT — soit oubli de saisie, soit faute de frappe. Ne pas créer la personne en silence."
+  },
+  {
+   "cas": "O — même personne, deux pupitres du même morceau",
+   "personnes": [
+    "Iris C."
+   ],
+   "detail": "Citée en Chant ET en Guitare sur « Tramontane ». Guitare est son pupitre déclaré, le chant ne l'est pas.",
+   "attendu": "À ARBITRER — c'est le cas B du jeu précédent (polyvalence, pas d'homonymie) MAIS le chant n'est pas déclaré. Cohérent avec J : signaler le pupitre non déclaré, sans alerte d'identité."
+  },
+  {
+   "cas": "P — morceau sans aucun membre",
+   "personnes": [],
+   "detail": "« Encore Sans Titre » : tous les pupitres à CHERCHE ou NON, responsable Amandine R. non citée.",
+   "attendu": "SIGNALEMENT informatif — groupe déclaré mais vide. Le solveur ne peut rien en faire, l'utilisateur doit le savoir avant de lancer."
+  }
+ ],
+ "resume": {
+  "alertes": [
+   "J (2 personnes)",
+   "M"
+  ],
+  "signalements": [
+   "I",
+   "L",
+   "N",
+   "O",
+   "P"
+  ],
+  "aucune_alerte": [
+   "K"
+  ]
+ }
+}
