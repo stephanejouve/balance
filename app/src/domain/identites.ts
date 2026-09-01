@@ -104,12 +104,17 @@ export interface PersonneRelecture {
    */
   nb_engagements: number
   /**
-   * Vrai si la personne apparaît uniquement dans la déclaration
-   * Stagiaires, jamais citée dans un morceau. Situation normale
-   * (répertoire des intervenants, inscrit tardif, spectateur) —
-   * l'UI peut la marquer discrètement pour distinguer sans alerter.
+   * Vrai si la personne est déclarée dans l'onglet Stagiaires mais
+   * n'apparaît dans aucun morceau. Situation normale (répertoire des
+   * intervenants, inscrit tardif, spectateur) — l'UI peut la marquer
+   * discrètement pour distinguer sans alerter.
+   *
+   * Nom choisi (Stéphane 2026-09-01) : `sans_engagement` plutôt que
+   * `stagiaire_seulement` qui n'expliquait pas ce qu'il portait
+   * (seulement stagiaire par opposition à quoi ?). Cohérent avec le
+   * compteur `nb_engagements` du même objet.
    */
-  stagiaire_seulement: boolean
+  sans_engagement: boolean
 }
 
 /**
@@ -488,13 +493,22 @@ export function personnesPourRelecture(
     // L'instrument est enregistré peu importe la source (stagiaire ou
     // morceau) — c'est un attribut de la personne.
     if (m.pupitre) bucket.instruments.add(m.pupitre)
-    // « engagement » = participation à un morceau, pas occurrence de
-    // nom. Une personne citée à 2 pupitres du MÊME morceau (Iris C.
-    // chant + guitare sur Tramontane) compte pour 1, pas 2. On stocke
-    // le morceau normalisé dans un Set → dédoublonnage naturel.
-    // La mention stagiaire seule (`groupe_titre = ''`) n'est jamais
-    // ajoutée → pas comptée comme engagement (feedback Stéphane
-    // 2026-09-01 : sinon un stagiaire non-cité afficherait 1 à tort).
+    // ⚠  Sémantique cruciale (Stéphane 2026-09-01, bug +1 né dans cette
+    // confusion — documenter noir sur blanc à l'endroit du calcul) :
+    //
+    //     On compte des PRÉSENCES dans un morceau, pas des pupitres.
+    //     Une personne citée à 5 pupitres du même morceau vaut 1 :
+    //     elle ne peut être qu'à un endroit à la fois. C'est ce qui
+    //     intéresse le solveur (contrainte de temps).
+    //
+    // Cette règle ne se propage PAS partout : la feuille de route d'un
+    // groupe DOIT afficher les 5 pupitres (là on parle d'instrumentation,
+    // pas de présence). Deux compteurs pour deux besoins — ne pas fusionner.
+    //
+    // Implémentation : `Set<groupe_titre_normalisé>` dédoublonne
+    // naturellement les multi-pupitres. La mention stagiaire seule
+    // (`groupe_titre = ''`) n'est jamais ajoutée → un stagiaire non
+    // cité affiche 0 (pas 1).
     if (m.groupe_titre !== '') {
       bucket.morceaux.add(normaliserNom(m.groupe_titre))
     }
@@ -504,7 +518,7 @@ export function personnesPourRelecture(
       nom_affichage: b.nom_affichage,
       instruments: [...b.instruments].sort(),
       nb_engagements: b.morceaux.size,
-      stagiaire_seulement: b.morceaux.size === 0,
+      sans_engagement: b.morceaux.size === 0,
     }))
     .sort((a, b) =>
       normaliserNom(a.nom_affichage).localeCompare(normaliserNom(b.nom_affichage)),

@@ -157,13 +157,13 @@
     </div>
     <ul class="liste-personnes">
       {#each personnesAffichees as p}
-        <li class="ligne-personne" class:stagiaire-seulement={p.stagiaire_seulement}>
+        <li class="ligne-personne" class:sans-engagement={p.sans_engagement}>
           <span class="nom">{p.nom_affichage}</span>
           <span class="instruments">{p.instruments.join(', ') || '—'}</span>
           <span class="engagements">
-            {#if p.stagiaire_seulement}
+            {#if p.sans_engagement}
               <span class="tag-stagiaire" title="Déclaré en Stagiaires, jamais cité dans un morceau — situation normale (répertoire intervenants, inscrit tardif)">
-                stagiaire seul
+                sans engagement
               </span>
             {:else}
               {p.nb_engagements} eng.
@@ -372,7 +372,7 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .ligne-personne.stagiaire-seulement .nom {
+  .ligne-personne.sans-engagement .nom {
     color: #6b7280;
   }
 

@@ -8,7 +8,7 @@ import {
 } from './relecture-identites-vm'
 
 function personne(nom_affichage: string, instruments: string[], nb: number): PersonneRelecture {
-  return { nom_affichage, instruments, nb_engagements: nb }
+  return { nom_affichage, instruments, nb_engagements: nb, sans_engagement: nb === 0 }
 }
 
 describe('grouperAlertes — hiérarchie visuelle (Stéphane 2026-09-01)', () => {

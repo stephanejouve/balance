@@ -408,7 +408,7 @@ describe('personnesPourRelecture', () => {
       const mentions = [m('Solo', '', 'batterie', '')]
       const [p] = personnesPourRelecture(mentions)
       expect(p.nb_engagements).toBe(0)
-      expect(p.stagiaire_seulement).toBe(true)
+      expect(p.sans_engagement).toBe(true)
     })
 
     it('stagiaire déclaré, cité UNE FOIS dans un morceau → 1 engagement', () => {
@@ -418,7 +418,7 @@ describe('personnesPourRelecture', () => {
       ]
       const [p] = personnesPourRelecture(mentions)
       expect(p.nb_engagements).toBe(1)
-      expect(p.stagiaire_seulement).toBe(false)
+      expect(p.sans_engagement).toBe(false)
     })
 
     it('stagiaire déclaré, cité dans TROIS morceaux → 3 engagements', () => {
@@ -443,11 +443,11 @@ describe('personnesPourRelecture', () => {
       expect(p.instruments).toEqual(['chant', 'guitare'])
     })
 
-    it('cité SANS être déclaré stagiaire → 1 engagement, pas stagiaire_seulement', () => {
+    it('cité SANS être déclaré stagiaire → 1 engagement, pas sans_engagement', () => {
       const mentions = [m('Nouveau', '', 'chant', 'Morceau A')]
       const [p] = personnesPourRelecture(mentions)
       expect(p.nb_engagements).toBe(1)
-      expect(p.stagiaire_seulement).toBe(false)
+      expect(p.sans_engagement).toBe(false)
     })
   })
 
