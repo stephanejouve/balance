@@ -35,7 +35,11 @@ import {
   type MembreMention,
   type PersonneRelecture,
 } from '../domain/identites'
-import type { Personne } from '../domain/model'
+import {
+  detecterAlertesCoherence,
+  type AlerteCoherence,
+} from '../domain/coherence'
+import type { Inscriptions, Personne } from '../domain/model'
 import { extraireDiscriminant } from './stagiaires-adapter'
 
 /**
@@ -111,11 +115,17 @@ export function mentionsDepuisStagiaires(
 }
 
 /**
- * Résultat de l'analyse d'identité à l'import. Champ dédié `alertes_identite`
- * séparé de warnings généraux (feedback Q1 Stéphane).
+ * Résultat de l'analyse à l'import — identité (A-H, `domain/identites.ts`)
+ * + cohérence entre onglets (I-P, `domain/coherence.ts`). Champs dédiés
+ * séparés de warnings généraux (feedback Q1 Stéphane).
+ *
+ * Le nom hérité de la PR3 Sujet C est conservé pour compatibilité — la
+ * structure porte maintenant les deux familles d'alertes issues du même
+ * point de contrôle (import xlsx).
  */
 export interface AnalyseIdentitesImport {
   alertes_identite: AlerteIdentite[]
+  alertes_coherence: AlerteCoherence[]
   personnes_relecture: PersonneRelecture[]
 }
 
@@ -169,14 +179,22 @@ export function mentionsDepuisCandidat(inscriptions: {
  * Variante de `analyserIdentitesImport` qui opère sur un `Inscriptions`
  * candidat (post `construireCandidatExcel`). Utilisée par l'écran de
  * relecture wire dans le flow d'import (App.svelte).
+ *
+ * Calcule aussi les alertes de cohérence entre onglets (cas I à P) en
+ * s'appuyant sur `candidat.personnes` comme ensemble des « stagiaires
+ * déclarés » — dans le flow d'import xlsx, `personnes` ne contient que
+ * les identités ajoutées par l'onglet Stagiaires (les noms cités dans la
+ * Liste ne créent pas de personne). Cela permet la détection du cas N
+ * (nom cité absent de la déclaration Stagiaires).
  */
-export function analyserIdentitesCandidat(inscriptions: {
-  readonly personnes: readonly Personne[]
-  readonly groupes: readonly { titre: string; membres: readonly { personne_id: string; pupitre: string }[] }[]
-}): AnalyseIdentitesImport {
+export function analyserIdentitesCandidat(
+  inscriptions: Inscriptions,
+): AnalyseIdentitesImport {
   const mentions = mentionsDepuisCandidat(inscriptions)
+  const stagiaires_ids = new Set(inscriptions.personnes.map((p) => p.id))
   return {
     alertes_identite: detecterAlertesIdentite(mentions),
+    alertes_coherence: detecterAlertesCoherence(inscriptions, { stagiaires_ids }),
     personnes_relecture: personnesPourRelecture(mentions),
   }
 }
@@ -196,6 +214,11 @@ export function analyserIdentitesImport(input: {
   ]
   return {
     alertes_identite: detecterAlertesIdentite(mentions),
+    // Variante « pré-candidat » : pas d'Inscriptions à ce stade, donc
+    // pas de détection de cohérence entre onglets. Le wire principal
+    // (App.svelte) passe par `analyserIdentitesCandidat` qui, lui, a
+    // l'Inscriptions complet.
+    alertes_coherence: [],
     personnes_relecture: personnesPourRelecture(mentions),
   }
 }

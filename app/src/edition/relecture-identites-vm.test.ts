@@ -110,6 +110,7 @@ describe('synthese', () => {
         { type: 'rapprochement_propose', nom_court: 'A', nom_long: 'A B', groupe: null },
         { type: 'rapprochement_propose', nom_court: 'Solène', nom_long: 'Solene', groupe: null },
       ],
+      alertes_coherence: [],
       personnes_relecture: [
         personne('Alpha', ['chant'], 1),
         personne('Beta', ['piano'], 2),
@@ -118,9 +119,45 @@ describe('synthese', () => {
     expect(s).toEqual({ nb_decisions: 2, nb_signalements: 2, nb_personnes: 2 })
   })
 
+  it('cumule identité + cohérence dans les compteurs decisions / signalements', () => {
+    // Cas M (indispo_percutee) et J (pupitre_contredit) = alertes cohérence
+    // Cas I resp, L, N, O, P = signalements cohérence
+    const s = synthese({
+      alertes_identite: [
+        { type: 'homonymie_probable', nom: 'Pierre', instruments: ['a', 'b'], groupes: ['X'] },
+        { type: 'rapprochement_propose', nom_court: 'A', nom_long: 'A B', groupe: null },
+      ],
+      alertes_coherence: [
+        {
+          type: 'indispo_percutee',
+          personne: 'Gaëlle',
+          morceau: 'X',
+          date: '2026-08-24',
+          debut: '14:30',
+          fin: '16:00',
+          motif_indispo: 'lundi après-midi',
+        },
+        {
+          type: 'pupitre_contredit',
+          personne: 'Alice',
+          pupitres_declares: ['piano'],
+          pupitre_cite: 'batterie',
+          morceau: 'X',
+        },
+        { type: 'morceau_vide', morceau: 'X' },
+        { type: 'stagiaire_orphelin', personne: 'Solo' },
+      ],
+      personnes_relecture: [personne('Alpha', ['chant'], 1)],
+    })
+    // 1 identité (homonymie) + 2 cohérence (M+J) = 3 decisions
+    // 1 identité (rapprochement) + 2 cohérence (P+I stagiaire) = 3 signalements
+    expect(s).toEqual({ nb_decisions: 3, nb_signalements: 3, nb_personnes: 1 })
+  })
+
   it('0 alertes → écran franchissable en 1 clic (compteurs à 0)', () => {
     const s = synthese({
       alertes_identite: [],
+      alertes_coherence: [],
       personnes_relecture: [personne('Solo', [], 0)],
     })
     expect(s).toEqual({ nb_decisions: 0, nb_signalements: 0, nb_personnes: 1 })

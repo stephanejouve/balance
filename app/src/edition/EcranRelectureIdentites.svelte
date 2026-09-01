@@ -26,6 +26,8 @@
    */
   import type { AnalyseIdentitesImport } from '../io/alertes-import'
   import type { AlerteIdentite } from '../domain/identites'
+  import type { AlerteCoherence } from '../domain/coherence'
+  import { grouperAlertesCoherence } from '../domain/coherence'
   import {
     filtrerPersonnes,
     grouperAlertes,
@@ -46,6 +48,7 @@
   let signalementsDeplies = $state(false)
 
   const groupes = $derived(grouperAlertes(analyse.alertes_identite))
+  const groupesCoherence = $derived(grouperAlertesCoherence(analyse.alertes_coherence))
   const compteurs = $derived(synthese(analyse))
   const personnesAffichees = $derived(
     trierPersonnes(filtrerPersonnes(analyse.personnes_relecture, recherche), tri),
@@ -73,6 +76,57 @@
           : `Sur le morceau « ${a.groupe} ». À confirmer.`,
     }
   }
+
+  /**
+   * Formatage des alertes de cohérence entre onglets (cas I à P).
+   * Le cas M (indispo percutée) est le seul qui produit une contradiction
+   * insoluble par le solveur — il ouvre le titre par « À arbitrer » pour
+   * signaler à l'utilisateur qu'il doit trancher avant validation.
+   */
+  function formaterAlerteCoherence(a: AlerteCoherence): { titre: string; detail: string } {
+    switch (a.type) {
+      case 'indispo_percutee':
+        return {
+          titre: `À arbitrer — « ${a.personne} » indisponible sur la séance « ${a.morceau} »`,
+          detail: `Séance figée le ${a.date} de ${a.debut} à ${a.fin}, mais indisponibilité déclarée${a.motif_indispo ? ` (${a.motif_indispo})` : ''}. Le solveur ne peut pas déplacer une séance figée : il faut lever l'indisponibilité, retirer la personne du morceau, ou déplacer la séance manuellement avant validation.`,
+        }
+      case 'pupitre_contredit':
+        return {
+          titre: `Pupitre contredit — « ${a.personne} » citée en ${a.pupitre_cite} sur « ${a.morceau} »`,
+          detail: `Instruments déclarés dans Stagiaires : ${a.pupitres_declares.join(', ')}. Le pupitre cité n'y figure pas. Corriger la déclaration Stagiaires (ajouter le pupitre) ou la Liste (changer l'instrument cité).`,
+        }
+      case 'responsable_non_cite':
+        return {
+          titre: `Responsable non cité — « ${a.personne} » responsable de « ${a.morceau} »`,
+          detail: `Aucune mention de cette personne parmi les membres du morceau. Soit oubli de la citer dans un pupitre, soit responsable non-instrumentiste (chef, coach) — dans ce cas rien à faire.`,
+        }
+      case 'stagiaire_orphelin':
+        return {
+          titre: `Stagiaire orphelin — « ${a.personne} » déclaré mais jamais cité`,
+          detail: `Personne déclarée dans Stagiaires sans engagement dans aucun morceau. Situation normale si intervenant du répertoire ou inscrit tardif ; à vérifier sinon.`,
+        }
+      case 'lateralite_non_batteur':
+        return {
+          titre: `Latéralité hors batterie — « ${a.personne} »`,
+          detail: `Une latéralité (droitier/gaucher) a été renseignée mais aucun des instruments déclarés (${a.instruments.join(', ')}) n'est la batterie. Info inexploitée par le solveur — retirer la latéralité ou ajouter batterie aux pupitres si oubli.`,
+        }
+      case 'nom_cite_absent_stagiaires':
+        return {
+          titre: `Nom cité absent de Stagiaires — « ${a.personne} » sur « ${a.morceau} » (${a.pupitre})`,
+          detail: `Cité dans la Liste mais aucune personne à ce nom dans l'onglet Stagiaires. Faute de frappe, oubli de saisir le stagiaire, ou variante non détectée par le rapprochement automatique.`,
+        }
+      case 'pupitre_non_declare_polyvalent':
+        return {
+          titre: `Polyvalence non déclarée — « ${a.personne} » joue ${a.pupitre_non_declare} sur « ${a.morceau} »`,
+          detail: `Pupitres cités sur ce morceau : ${a.pupitres_cites.join(' + ')}. Pupitres déclarés en Stagiaires : ${a.pupitres_declares.join(', ')}. La polyvalence est prouvée par la présence multi-pupitre ; il manque juste d'ajouter « ${a.pupitre_non_declare} » aux instruments déclarés.`,
+        }
+      case 'morceau_vide':
+        return {
+          titre: `Morceau sans membre — « ${a.morceau} »`,
+          detail: `Aucun stagiaire cité dans aucun pupitre. Postes CHERCHE éventuels ne comptent pas comme membres — un morceau sans musicien effectif ne pourra pas être placé.`,
+        }
+    }
+  }
 </script>
 
 <div class="ecran-relecture">
@@ -94,10 +148,18 @@
     </div>
   </header>
 
-  {#if groupes.decisions.length > 0}
+  {#if groupes.decisions.length + groupesCoherence.alertes.length > 0}
     <section class="section-decisions" aria-labelledby="titre-decisions">
       <h3 id="titre-decisions">Alertes — décision requise</h3>
       <ul class="liste-alertes">
+        <!-- Cohérence en tête (cas M = contradiction insoluble prioritaire) -->
+        {#each groupesCoherence.alertes as alerte}
+          {@const info = formaterAlerteCoherence(alerte)}
+          <li class="carte-alerte carte-decision">
+            <div class="titre-alerte">{info.titre}</div>
+            <div class="detail-alerte">{info.detail}</div>
+          </li>
+        {/each}
         {#each groupes.decisions as alerte}
           {@const info = formaterAlerte(alerte)}
           <li class="carte-alerte carte-decision">
@@ -109,7 +171,8 @@
     </section>
   {/if}
 
-  {#if groupes.signalements.length > 0}
+  {#if groupes.signalements.length + groupesCoherence.signalements.length > 0}
+    {@const nbSig = groupes.signalements.length + groupesCoherence.signalements.length}
     <section class="section-signalements" aria-labelledby="titre-signalements">
       <button
         type="button"
@@ -119,13 +182,20 @@
       >
         <h3 id="titre-signalements">
           {signalementsDeplies ? '▼' : '▶'}
-          Signalements — {groupes.signalements.length} rapprochement{groupes.signalements.length > 1 ? 's' : ''} proposé{groupes.signalements.length > 1 ? 's' : ''}
+          Signalements — {nbSig} à vérifier
         </h3>
       </button>
       {#if signalementsDeplies}
         <ul class="liste-alertes">
           {#each groupes.signalements as alerte}
             {@const info = formaterAlerte(alerte)}
+            <li class="carte-alerte carte-signalement">
+              <div class="titre-alerte">{info.titre}</div>
+              <div class="detail-alerte">{info.detail}</div>
+            </li>
+          {/each}
+          {#each groupesCoherence.signalements as alerte}
+            {@const info = formaterAlerteCoherence(alerte)}
             <li class="carte-alerte carte-signalement">
               <div class="titre-alerte">{info.titre}</div>
               <div class="detail-alerte">{info.detail}</div>
