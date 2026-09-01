@@ -147,7 +147,16 @@
     diagnostics: ReturnType<typeof diagnostiquer>
     groupesPerdus: GroupeSansSalle[]
     duree_ms: number
+    arret_precoce: 'complet' | 'max-essais' | 'budget'
+    essais_executes: number
   }
+  /**
+   * Budget wall-clock du solveur — par défaut 3000 ms (garde-fou anti-gel
+   * Chrome, task #51). L'utilisateur peut l'étendre via le bouton
+   * « relancer plus longtemps » qui passe à Infinity — opt-in explicite
+   * qui accepte le gel possible pour un calcul plus poussé.
+   */
+  let budgetMsCourant = $state<number>(3000)
   let solution = $state<Solution | null>(null)
   let calculEnCours = $state(false)
   let vue = $state<'groupes' | 'salles' | 'musiciens' | 'carte' | 'concert' | 'quotas'>('groupes')
@@ -451,11 +460,13 @@
     // imposés restants, pour que le solveur les évite automatiquement.
     const inscFiltrees = preparerInscriptionsPourSolveur(inscriptions, lieu)
     const inscEnrichies = enrichirIndispos(inscFiltrees)
-    const { placement } = repartir(session, lieu, inscEnrichies, creneaux, {
+    const resRepartir = repartir(session, lieu, inscEnrichies, creneaux, {
       seed: 42,
       registre,
       figees,
+      budgetMs: budgetMsCourant,
     })
+    const { placement } = resRepartir
     const { assignations, groupesPerdus } = attribuerSalles(
       placement,
       lieu,
@@ -473,6 +484,8 @@
       diagnostics,
       groupesPerdus,
       duree_ms: Math.round(performance.now() - t0),
+      arret_precoce: resRepartir.arret_precoce,
+      essais_executes: resRepartir.essais_executes,
     }
     ordreConducteur = ordonnerConcert(inscriptions.groupes).etapes
     calculEnCours = false
@@ -1066,9 +1079,27 @@
           groupes complets
         </div>
         <div><b>{solution.assignations.length}</b> répétitions posées</div>
-        <div><b>{solution.duree_ms} ms</b> de calcul</div>
+        <div>
+          <b>{solution.duree_ms} ms</b> de calcul
+          <span class="ink-soft">({solution.essais_executes} essai{solution.essais_executes > 1 ? 's' : ''})</span>
+        </div>
         <div><b>{solution.problemes.length}</b> problème(s) détecté(s)</div>
       </div>
+      {#if solution.arret_precoce === 'budget'}
+        <div class="msg warn">
+          <b>Calcul interrompu à {Math.round(budgetMsCourant / 1000)} s pour ne pas geler l'écran.</b>
+          Solution partielle affichée — le solveur n'a pas exploré toutes les
+          combinaisons. Vous pouvez la conserver, ou relancer avec un budget étendu
+          si vous acceptez que l'onglet soit figé quelques secondes de plus.
+          <button
+            class="ghost mini-ajout"
+            onclick={() => { budgetMsCourant = Infinity; lancer() }}
+            disabled={calculEnCours}
+          >
+            Relancer sans limite de temps
+          </button>
+        </div>
+      {/if}
       {#if solution.problemes.length > 0}
         <div class="msg err">
           <b>Contrôle indépendant :</b>
