@@ -25,6 +25,7 @@
   import ImportUnique from './edition/ImportUnique.svelte'
   import { analyserIdentitesCandidat, type AnalyseIdentitesImport } from './io/alertes-import'
   import MiseAJourBandeau from './edition/MiseAJourBandeau.svelte'
+  import PiedDePage from './edition/PiedDePage.svelte'
   import Carte from './vues/Carte.svelte'
   import Concert from './vues/Concert.svelte'
   import ParGroupe from './vues/ParGroupe.svelte'
@@ -1271,6 +1272,8 @@
 </main>
 
 <MiseAJourBandeau />
+
+<PiedDePage />
 
 <style>
   /* Styles UI globaux extraits dans src/app.css (importé par main.ts).
