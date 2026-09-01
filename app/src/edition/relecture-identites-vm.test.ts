@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import type { AlerteCoherence } from '../domain/coherence'
 import type { AlerteIdentite, PersonneRelecture } from '../domain/identites'
 import {
+  SEUIL_AGREGATION_ORPHELINS,
   filtrerPersonnes,
   grouperAlertes,
+  organiserSignalementsCoherence,
   synthese,
   trierPersonnes,
 } from './relecture-identites-vm'
@@ -161,6 +164,50 @@ describe('synthese', () => {
       personnes_relecture: [personne('Solo', [], 0)],
     })
     expect(s).toEqual({ nb_decisions: 0, nb_signalements: 0, nb_personnes: 1 })
+  })
+})
+
+describe('organiserSignalementsCoherence — agrégation orphelins (Stéphane 2026-09-01)', () => {
+  const orphelin = (nom: string): AlerteCoherence => ({ type: 'stagiaire_orphelin', personne: nom })
+  const morceauVide = (m: string): AlerteCoherence => ({ type: 'morceau_vide', morceau: m })
+  const lateralite = (nom: string): AlerteCoherence => ({
+    type: 'lateralite_non_batteur', personne: nom, instruments: ['chant'],
+  })
+
+  it('N ≤ seuil (3) : orphelins listés individuellement', () => {
+    const sig = [orphelin('Alice'), orphelin('Bob'), orphelin('Carla'), morceauVide('X')]
+    const o = organiserSignalementsCoherence(sig)
+    expect(o.orphelins_individuels).toHaveLength(3)
+    expect(o.orphelins_agreges).toHaveLength(0)
+    expect(o.autres).toEqual([morceauVide('X')])
+  })
+
+  it('N > seuil : orphelins agrégés (les 21 stagiaires du stress-test)', () => {
+    const orphelins = Array.from({ length: 21 }, (_, i) => orphelin(`Stag${i}`))
+    const o = organiserSignalementsCoherence([...orphelins, lateralite('X')])
+    expect(o.orphelins_agreges).toHaveLength(21)
+    expect(o.orphelins_individuels).toHaveLength(0)
+    expect(o.autres).toEqual([lateralite('X')])
+  })
+
+  it('N = seuil+1 : bascule agrégation', () => {
+    const orphelins = Array.from({ length: SEUIL_AGREGATION_ORPHELINS + 1 }, (_, i) => orphelin(`P${i}`))
+    const o = organiserSignalementsCoherence(orphelins)
+    expect(o.orphelins_agreges).toHaveLength(SEUIL_AGREGATION_ORPHELINS + 1)
+    expect(o.orphelins_individuels).toHaveLength(0)
+  })
+
+  it('0 orphelin → tout dans autres', () => {
+    const o = organiserSignalementsCoherence([morceauVide('X'), lateralite('Y')])
+    expect(o.orphelins_individuels).toHaveLength(0)
+    expect(o.orphelins_agreges).toHaveLength(0)
+    expect(o.autres).toHaveLength(2)
+  })
+
+  it('input vide → tout vide', () => {
+    expect(organiserSignalementsCoherence([])).toEqual({
+      autres: [], orphelins_individuels: [], orphelins_agreges: [],
+    })
   })
 })
 

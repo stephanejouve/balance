@@ -31,6 +31,7 @@
   import {
     filtrerPersonnes,
     grouperAlertes,
+    organiserSignalementsCoherence,
     synthese,
     trierPersonnes,
     type TriPersonnes,
@@ -46,9 +47,13 @@
   let recherche = $state('')
   let tri = $state<TriPersonnes>('alpha')
   let signalementsDeplies = $state(false)
+  let orphelinsDeplies = $state(false)
 
   const groupes = $derived(grouperAlertes(analyse.alertes_identite))
   const groupesCoherence = $derived(grouperAlertesCoherence(analyse.alertes_coherence))
+  const signalementsCoherenceOrganises = $derived(
+    organiserSignalementsCoherence(groupesCoherence.signalements),
+  )
   const compteurs = $derived(synthese(analyse))
   const personnesAffichees = $derived(
     trierPersonnes(filtrerPersonnes(analyse.personnes_relecture, recherche), tri),
@@ -194,13 +199,47 @@
               <div class="detail-alerte">{info.detail}</div>
             </li>
           {/each}
-          {#each groupesCoherence.signalements as alerte}
+          {#each signalementsCoherenceOrganises.autres as alerte}
             {@const info = formaterAlerteCoherence(alerte)}
             <li class="carte-alerte carte-signalement">
               <div class="titre-alerte">{info.titre}</div>
               <div class="detail-alerte">{info.detail}</div>
             </li>
           {/each}
+          {#each signalementsCoherenceOrganises.orphelins_individuels as alerte}
+            {@const info = formaterAlerteCoherence(alerte)}
+            <li class="carte-alerte carte-signalement">
+              <div class="titre-alerte">{info.titre}</div>
+              <div class="detail-alerte">{info.detail}</div>
+            </li>
+          {/each}
+          {#if signalementsCoherenceOrganises.orphelins_agreges.length > 0}
+            {@const nb = signalementsCoherenceOrganises.orphelins_agreges.length}
+            <li class="carte-alerte carte-signalement carte-orphelins-agrege">
+              <button
+                type="button"
+                class="deplier-orphelins"
+                onclick={() => (orphelinsDeplies = !orphelinsDeplies)}
+                aria-expanded={orphelinsDeplies}
+              >
+                <span class="titre-alerte">
+                  {orphelinsDeplies ? '▼' : '▶'}
+                  {nb} stagiaires ne figurent dans aucun morceau
+                </span>
+              </button>
+              <div class="detail-alerte">
+                Situation normale pour les intervenants qui travaillent le répertoire hors morceaux nommés.
+                À vérifier ponctuellement si un inscrit tardif a été oublié.
+              </div>
+              {#if orphelinsDeplies}
+                <ul class="liste-orphelins">
+                  {#each signalementsCoherenceOrganises.orphelins_agreges as o}
+                    <li>« {o.personne} »</li>
+                  {/each}
+                </ul>
+              {/if}
+            </li>
+          {/if}
         </ul>
       {/if}
     </section>
@@ -337,6 +376,31 @@
     cursor: pointer;
     text-align: left;
     width: 100%;
+  }
+
+  .deplier-orphelins {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+    font-size: inherit;
+    color: inherit;
+  }
+
+  .liste-orphelins {
+    margin: 0.5rem 0 0 0;
+    padding-left: 1.25rem;
+    columns: 2;
+    column-gap: 1.5rem;
+    font-size: 0.85rem;
+    color: #4b5563;
+  }
+
+  .liste-orphelins li {
+    break-inside: avoid;
+    margin-bottom: 0.15rem;
   }
 
   .liste-alertes {
