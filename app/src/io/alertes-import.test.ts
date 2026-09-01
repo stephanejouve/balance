@@ -179,6 +179,34 @@ describe('analyserIdentitesImport — end-to-end contre fixture identites-ambigu
   })
 })
 
+describe('mesure jeu de stress (livraison Stéphane 2026-09-01)', () => {
+  const STRESS_XLSX = join(__dirname, '..', '..', 'tests', 'fixtures', 'balance-stress-test.xlsx')
+  const skipIfStressMissing = existsSync(STRESS_XLSX) ? it : it.skip
+
+  skipIfStressMissing('mesure volume écran relecture — attendu 84 stagiaires + 20 morceaux', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sheets = (await (readXlsxFile as any)(STRESS_XLSX)) as Array<{ sheet: string; data: unknown[][] }>
+    const st = extraireStagiaires(sheets.find((s) => s.sheet === 'Stagiaires')!.data, MAPPING_STAGIAIRES_DEFAUT)
+    const li = extraireListe(sheets.find((s) => s.sheet === 'Liste')!.data, MAPPING_LISTE_DEFAUT)
+    const analyse = analyserIdentitesImport({ groupes: li.groupes, stagiaires: st.personnes })
+    // eslint-disable-next-line no-console
+    console.log(`
+=== VOLUME JEU DE STRESS (mesure PR3 écran de relecture) ===
+Stagiaires extraits    : ${st.personnes.length}
+Morceaux extraits      : ${li.groupes.length}
+Personnes relecture    : ${analyse.personnes_relecture.length}
+Alertes total          : ${analyse.alertes_identite.length}
+  homonymies           : ${analyse.alertes_identite.filter((a) => a.type === 'homonymie_probable').length}
+  doublons             : ${analyse.alertes_identite.filter((a) => a.type === 'doublon_intra_groupe').length}
+  rapprochements       : ${analyse.alertes_identite.filter((a) => a.type === 'rapprochement_propose').length}
+===========================================================
+`)
+    // Ordres de grandeur attendus (Stéphane) : 84 stagiaires, 20 morceaux
+    expect(st.personnes.length).toBeGreaterThanOrEqual(80)
+    expect(li.groupes.length).toBeGreaterThanOrEqual(15)
+  })
+})
+
 describe('mentionsDepuisGroupes / mentionsDepuisStagiaires — helpers unitaires', () => {
   it('mentionsDepuisGroupes parse « Pierre (L) (batterie) » correctement', () => {
     const groupes = [

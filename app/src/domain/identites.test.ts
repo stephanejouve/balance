@@ -237,7 +237,10 @@ describe('cas F — normalisation (feedback Stéphane 2026-09-01)', () => {
     // (pas la version normalisée « sofia t. »)
     expect(personnes[0].nom_affichage).toBe('Sofia  T.')
     expect(personnes[0].instruments).toEqual(['basse', 'chant'])
-    expect(personnes[0].nb_engagements).toBe(2)
+    // Même morceau à 2 pupitres = 1 engagement (dédoublonnage par
+    // morceau, feedback Stéphane 2026-09-01 « Iris C. chant+guitare
+    // Tramontane doit afficher 1 »)
+    expect(personnes[0].nb_engagements).toBe(1)
   })
 
   it('« BRUNO V. » (majuscules + espace final) et « Bruno V. » rapprochées via normalisation', () => {
@@ -392,6 +395,60 @@ describe('personnesPourRelecture', () => {
       m('Solo', '', 'batterie', 'A'),
     ])
     expect(personnes[0].nom_affichage).toBe('Solo')
+  })
+
+  describe('nb_engagements — comptage rigoureux (feedback Stéphane 2026-09-01)', () => {
+    // Le bug d'origine : ma correction précédente comptait les mentions,
+    // pas les morceaux. Décalage systématique +1 sur tout le monde
+    // (mention stagiaire comptait) et +1 par pupitre supplémentaire
+    // sur un même morceau. Refactor : compte morceaux distincts.
+
+    it('stagiaire déclaré, cité NULLE PART → 0 engagements', () => {
+      // Une seule mention stagiaire (groupe_titre = '')
+      const mentions = [m('Solo', '', 'batterie', '')]
+      const [p] = personnesPourRelecture(mentions)
+      expect(p.nb_engagements).toBe(0)
+      expect(p.stagiaire_seulement).toBe(true)
+    })
+
+    it('stagiaire déclaré, cité UNE FOIS dans un morceau → 1 engagement', () => {
+      const mentions = [
+        m('Solo', '', 'batterie', ''),              // stagiaire
+        m('Solo', '', 'batterie', 'Morceau A'),     // cité 1x
+      ]
+      const [p] = personnesPourRelecture(mentions)
+      expect(p.nb_engagements).toBe(1)
+      expect(p.stagiaire_seulement).toBe(false)
+    })
+
+    it('stagiaire déclaré, cité dans TROIS morceaux → 3 engagements', () => {
+      const mentions = [
+        m('Solo', '', 'batterie', ''),
+        m('Solo', '', 'batterie', 'Morceau A'),
+        m('Solo', '', 'batterie', 'Morceau B'),
+        m('Solo', '', 'batterie', 'Morceau C'),
+      ]
+      const [p] = personnesPourRelecture(mentions)
+      expect(p.nb_engagements).toBe(3)
+    })
+
+    it('Iris C. chant+guitare MÊME morceau (Tramontane) → 1 engagement (dédoublonnage morceau)', () => {
+      // « engagement » = participation à un morceau, pas occurrence de nom
+      const mentions = [
+        m('Iris C.', '', 'chant', 'Tramontane'),
+        m('Iris C.', '', 'guitare', 'Tramontane'),
+      ]
+      const [p] = personnesPourRelecture(mentions)
+      expect(p.nb_engagements).toBe(1)
+      expect(p.instruments).toEqual(['chant', 'guitare'])
+    })
+
+    it('cité SANS être déclaré stagiaire → 1 engagement, pas stagiaire_seulement', () => {
+      const mentions = [m('Nouveau', '', 'chant', 'Morceau A')]
+      const [p] = personnesPourRelecture(mentions)
+      expect(p.nb_engagements).toBe(1)
+      expect(p.stagiaire_seulement).toBe(false)
+    })
   })
 
   it('trois Pierre à la batterie sont bien listés séparément (repérage visuel humain)', () => {
