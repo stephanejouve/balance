@@ -96,8 +96,25 @@ export interface PersonneRelecture {
   nom_affichage: string
   /** Instruments distincts observés sur cette identité. */
   instruments: string[]
-  /** Nombre total de mentions (engagements) de cette identité. */
+  /**
+   * Nombre d'engagements RÉELS dans des morceaux — exclut la mention
+   * issue de la déclaration Stagiaire (feedback Stéphane 2026-09-01 :
+   * un stagiaire jamais cité ne doit pas afficher « 1 engagement » à
+   * tort). Compté sur les mentions avec `groupe_titre` non vide.
+   */
   nb_engagements: number
+  /**
+   * Vrai si la personne est déclarée dans l'onglet Stagiaires mais
+   * n'apparaît dans aucun morceau. Situation normale (répertoire des
+   * intervenants, inscrit tardif, spectateur) — l'UI peut la marquer
+   * discrètement pour distinguer sans alerter.
+   *
+   * Nom choisi (Stéphane 2026-09-01) : `sans_engagement` plutôt que
+   * `stagiaire_seulement` qui n'expliquait pas ce qu'il portait
+   * (seulement stagiaire par opposition à quoi ?). Cohérent avec le
+   * compteur `nb_engagements` du même objet.
+   */
+  sans_engagement: boolean
 }
 
 /**
@@ -451,7 +468,11 @@ export function personnesPourRelecture(
 ): PersonneRelecture[] {
   const parIdentite = new Map<
     string,
-    { nom_affichage: string; instruments: Set<string>; nb: number }
+    {
+      nom_affichage: string
+      instruments: Set<string>
+      morceaux: Set<string>       // morceaux DISTINCTS où la personne apparaît
+    }
   >()
   for (const m of mentions) {
     const nomAffichage = m.discriminant
@@ -462,17 +483,42 @@ export function personnesPourRelecture(
     const cle = normaliserNom(nomAffichage)
     let bucket = parIdentite.get(cle)
     if (!bucket) {
-      bucket = { nom_affichage: nomAffichage, instruments: new Set(), nb: 0 }
+      bucket = {
+        nom_affichage: nomAffichage,
+        instruments: new Set(),
+        morceaux: new Set(),
+      }
       parIdentite.set(cle, bucket)
     }
-    bucket.instruments.add(m.pupitre)
-    bucket.nb++
+    // L'instrument est enregistré peu importe la source (stagiaire ou
+    // morceau) — c'est un attribut de la personne.
+    if (m.pupitre) bucket.instruments.add(m.pupitre)
+    // ⚠  Sémantique cruciale (Stéphane 2026-09-01, bug +1 né dans cette
+    // confusion — documenter noir sur blanc à l'endroit du calcul) :
+    //
+    //     On compte des PRÉSENCES dans un morceau, pas des pupitres.
+    //     Une personne citée à 5 pupitres du même morceau vaut 1 :
+    //     elle ne peut être qu'à un endroit à la fois. C'est ce qui
+    //     intéresse le solveur (contrainte de temps).
+    //
+    // Cette règle ne se propage PAS partout : la feuille de route d'un
+    // groupe DOIT afficher les 5 pupitres (là on parle d'instrumentation,
+    // pas de présence). Deux compteurs pour deux besoins — ne pas fusionner.
+    //
+    // Implémentation : `Set<groupe_titre_normalisé>` dédoublonne
+    // naturellement les multi-pupitres. La mention stagiaire seule
+    // (`groupe_titre = ''`) n'est jamais ajoutée → un stagiaire non
+    // cité affiche 0 (pas 1).
+    if (m.groupe_titre !== '') {
+      bucket.morceaux.add(normaliserNom(m.groupe_titre))
+    }
   }
   return [...parIdentite.values()]
     .map((b) => ({
       nom_affichage: b.nom_affichage,
       instruments: [...b.instruments].sort(),
-      nb_engagements: b.nb,
+      nb_engagements: b.morceaux.size,
+      sans_engagement: b.morceaux.size === 0,
     }))
     .sort((a, b) =>
       normaliserNom(a.nom_affichage).localeCompare(normaliserNom(b.nom_affichage)),
