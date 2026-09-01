@@ -64,6 +64,23 @@ export interface FigeeItem {
 export interface RepartirOptions {
   seed?: number
   maxEssais?: number
+  /**
+   * Budget wall-clock en millisecondes. Par défaut 3000 ms. Le solveur
+   * vérifie ce budget entre deux essais et s'arrête si dépassé, en
+   * retournant le meilleur essai trouvé jusqu'ici. Le champ
+   * `arret_precoce` du résultat vaut alors `'budget'`.
+   *
+   * Garde-fou introduit après le gel Chrome observé sur MacBook sur
+   * `balance-stress-test.xlsx` (20 morceaux × 84 stagiaires × 36 séances
+   * imposées) — doctrine Stéphane 2026-09-01 : « mieux vaut s'arrêter
+   * plus tôt avec une solution correcte que de figer l'écran pour un
+   * gain marginal ».
+   *
+   * Passer `Infinity` pour désactiver (usage benchmark, ou opt-in
+   * utilisateur qui accepte le gel pour un calcul plus poussé).
+   * `0` équivaut aussi à désactivé.
+   */
+  budgetMs?: number
   /** Registre des contraintes actives. Défaut : toutes actives. */
   registre?: RegistreContraintes
   /**
@@ -80,11 +97,24 @@ export interface PlacementItem {
   creneau_id: string
 }
 
+/**
+ * Cause d'arrêt de la boucle d'essais du solveur.
+ * - `complet` : un essai a placé tous les groupes à leur cible (early stop naturel).
+ * - `max-essais` : la boucle a atteint `maxEssais` sans trouver de solution complète.
+ * - `budget` : le budget wall-clock a été dépassé — solution partielle retournée
+ *   pour éviter de geler l'interface (voir `RepartirOptions.budgetMs`).
+ */
+export type ArretPrecoce = 'complet' | 'max-essais' | 'budget'
+
 export interface RepartirResultat {
   placement: PlacementItem[]
   groupes_complets: number
   places_totales: number
   jours_couverts: number
+  /** Nombre d'essais effectivement exécutés (≤ maxEssais). */
+  essais_executes: number
+  /** Cause d'arrêt. Voir `ArretPrecoce`. */
+  arret_precoce: ArretPrecoce
 }
 
 interface EtatEssai {
@@ -279,6 +309,11 @@ export function repartir(
   options: RepartirOptions = {},
 ): RepartirResultat {
   const maxEssais = options.maxEssais ?? 2500
+  // Budget wall-clock : 3000 ms par défaut. `Infinity` ou 0 désactive.
+  // Voir docstring `RepartirOptions.budgetMs` pour la justification.
+  const budgetMs = options.budgetMs ?? 3000
+  const budgetActif = Number.isFinite(budgetMs) && budgetMs > 0
+  const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now()
   const rng = makeRng(options.seed ?? 1)
   const reg = options.registre
   const personnesParId = new Map(inscriptions.personnes.map((p) => [p.id, p]))
@@ -400,8 +435,20 @@ export function repartir(
     etale: number
   }
   let best: Best | null = null
+  let essaisExecutes = 0
+  let arret: ArretPrecoce = 'max-essais'
+  const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now())
 
   for (let essai = 0; essai < maxEssais; essai++) {
+    // Garde-fou budget wall-clock : vérifié entre deux essais (le corps
+    // d'un essai ne peut pas être interrompu — le coût maxi d'un essai
+    // est donc la borne à respecter côté UI si on veut vraiment 0 gel).
+    // Sur 20 groupes × 3 répétitions × ~40 créneaux, un essai coûte
+    // typiquement <50 ms : le retard sur budget reste sous la seconde.
+    if (budgetActif && essai > 0 && now() - t0 >= budgetMs) {
+      arret = 'budget'
+      break
+    }
     const e: EtatEssai = {
       plan: new Map(),
       occSlot: new Map(),
@@ -418,7 +465,18 @@ export function repartir(
       poser(c, g, e)
     }
 
+    // Sentinelle intra-essai : sur gros volume (N=50+), un seul essai
+    // peut dépasser 3 s. Le check entre essais est insuffisant — on
+    // interrompt l'essai en cours dès que le budget est atteint pour
+    // éviter le gel. L'essai partiellement rempli n'est pas retenu
+    // comme `best` (voir `budgetDepasseIntraEssai` plus bas).
+    let budgetDepasseIntraEssai = false
+
     for (let tour = 0; tour < cible; tour++) {
+      if (budgetActif && now() - t0 >= budgetMs) {
+        budgetDepasseIntraEssai = true
+        break
+      }
       // Essai 0 : ordre par difficulté décroissante (les plus contraints
       // choisissent avant que le graphe ne soit saturé). Essais suivants :
       // shuffle biaisé où les plus difficiles restent souvent en tête.
@@ -432,7 +490,17 @@ export function repartir(
       } else {
         ordre = shuffle(groupes, rng)
       }
+      // Check budget toutes les 5 tentatives de pose : sur gros volume
+      // (N≥50) un seul tour peut prendre >3 s à cause du scoring O(N²).
+      // Sans ce check intra-tour, le garde-fou ne peut pas interrompre
+      // avant la fin du tour courant.
+      let gIdx = 0
       for (const g of ordre) {
+        if (budgetActif && gIdx > 0 && gIdx % 5 === 0 && now() - t0 >= budgetMs) {
+          budgetDepasseIntraEssai = true
+          break
+        }
+        gIdx++
         if ((e.plan.get(g.id)?.length ?? 0) >= cibleGroupe(g)) continue
         if ((e.plan.get(g.id)?.length ?? 0) > tour) continue
         let cands = creneaux.filter((c) => estLibre(c, g, e, true))
@@ -446,29 +514,49 @@ export function repartir(
         const k = essai === 0 ? 0 : Math.floor(rng() * Math.min(4, cands.length))
         poser(cands[k], g, e)
       }
+      if (budgetDepasseIntraEssai) break
     }
 
     // Phase de réparation : pour un groupe incomplet, tenter de déloger
     // jusqu'à MAX_BLOQUEURS_REPAR bloqueurs partageant un membre, avec
     // rollback complet si l'opération n'aboutit pas.
-    reparer(groupes, memP, e, creneaux, cible, cibleGroupe, estLibre, poser)
+    // Skipped si le budget a déjà été dépassé pendant les tours ci-dessus
+    // — inutile de dépenser plus de temps sur un essai qu'on va rejeter.
+    if (!budgetDepasseIntraEssai) {
+      reparer(groupes, memP, e, creneaux, cible, cibleGroupe, estLibre, poser)
+    }
 
-    const complets = groupes.filter((g) => (e.plan.get(g.id)?.length ?? 0) >= cibleGroupe(g)).length
-    const totalPosé = [...e.plan.values()].reduce((s, cs) => s + cs.length, 0)
-    let etale = 0
-    for (const cs of e.plan.values()) {
-      etale += new Set(cs.map((id) => creneauxParId.get(id)?.date).filter(Boolean)).size
+    // Un essai interrompu par le budget produit un plan partiel — on
+    // laisse `best` inchangé sauf s'il est encore null (1er essai
+    // interrompu = on garde quand même le partiel pour éviter un crash
+    // sur `best!` en aval).
+    const acceptEssai = !budgetDepasseIntraEssai || best === null
+    if (acceptEssai) {
+      const complets = groupes.filter((g) => (e.plan.get(g.id)?.length ?? 0) >= cibleGroupe(g)).length
+      const totalPosé = [...e.plan.values()].reduce((s, cs) => s + cs.length, 0)
+      let etale = 0
+      for (const cs of e.plan.values()) {
+        etale += new Set(cs.map((id) => creneauxParId.get(id)?.date).filter(Boolean)).size
+      }
+      const cand: Best = { plan: e.plan, complets, total: totalPosé, etale }
+      if (
+        !best ||
+        cand.complets > best.complets ||
+        (cand.complets === best.complets && cand.total > best.total) ||
+        (cand.complets === best.complets && cand.total === best.total && cand.etale > best.etale)
+      ) {
+        best = cand
+      }
     }
-    const cand: Best = { plan: e.plan, complets, total: totalPosé, etale }
-    if (
-      !best ||
-      cand.complets > best.complets ||
-      (cand.complets === best.complets && cand.total > best.total) ||
-      (cand.complets === best.complets && cand.total === best.total && cand.etale > best.etale)
-    ) {
-      best = cand
+    essaisExecutes = essai + 1
+    if (budgetDepasseIntraEssai) {
+      arret = 'budget'
+      break
     }
-    if (best.complets === total) break
+    if (best!.complets === total) {
+      arret = 'complet'
+      break
+    }
   }
 
   const placement: PlacementItem[] = []
@@ -480,5 +568,7 @@ export function repartir(
     groupes_complets: best!.complets,
     places_totales: best!.total,
     jours_couverts: best!.etale,
+    essais_executes: essaisExecutes,
+    arret_precoce: arret,
   }
 }
