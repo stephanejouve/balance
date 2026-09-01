@@ -16,7 +16,13 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import readXlsxFile from 'read-excel-file/node'
 
-import { analyserIdentitesImport, mentionsDepuisGroupes, mentionsDepuisStagiaires } from './alertes-import'
+import {
+  analyserIdentitesCandidat,
+  analyserIdentitesImport,
+  mentionsDepuisCandidat,
+  mentionsDepuisGroupes,
+  mentionsDepuisStagiaires,
+} from './alertes-import'
 import { extraireListe, MAPPING_LISTE_DEFAUT } from './liste-adapter'
 import { extraireStagiaires, MAPPING_STAGIAIRES_DEFAUT } from './stagiaires-adapter'
 
@@ -239,5 +245,63 @@ describe('mentionsDepuisGroupes / mentionsDepuisStagiaires — helpers unitaires
     const mentions = mentionsDepuisStagiaires(personnes)
     expect(mentions).toHaveLength(1)
     expect(mentions[0].pupitre).toBe('')
+  })
+})
+
+describe('mentionsDepuisCandidat / analyserIdentitesCandidat — wire post-construireCandidatExcel', () => {
+  const inscriptions = {
+    personnes: [
+      { id: 'p1', nom: 'Pierre', discriminant: '', role: 'musicien' as const,
+        instruments: [{ pupitre: 'batterie', lourd: false }], indispos: [] },
+      { id: 'p2', nom: 'Pierre Lemoine', discriminant: '', role: 'musicien' as const,
+        instruments: [{ pupitre: 'guitare', lourd: false }], indispos: [] },
+      { id: 'p3', nom: 'Ghost', discriminant: '', role: 'musicien' as const,
+        instruments: [{ pupitre: 'chant', lourd: false }], indispos: [] },
+    ],
+    groupes: [
+      { titre: 'Sables Mouvants', membres: [
+        { personne_id: 'p1', pupitre: 'batterie' },
+        { personne_id: 'p2', pupitre: 'guitare' },
+      ] },
+    ],
+  }
+
+  it('mentionsDepuisCandidat produit 1 mention par instrument stagiaire + 1 par MembreGroupe', () => {
+    const mentions = mentionsDepuisCandidat(inscriptions)
+    // 3 stagiaires (chacun 1 instrument) + 2 MembreGroupe = 5 mentions
+    expect(mentions).toHaveLength(5)
+    // Ghost apparaît uniquement en stagiaire
+    const ghostMentions = mentions.filter((m) => m.nom === 'Ghost')
+    expect(ghostMentions).toHaveLength(1)
+    expect(ghostMentions[0].groupe_titre).toBe('')
+  })
+
+  it('analyserIdentitesCandidat détecte doublon Pierre + Pierre Lemoine (cas D)', () => {
+    const analyse = analyserIdentitesCandidat(inscriptions)
+    const doublons = analyse.alertes_identite.filter((a) => a.type === 'doublon_intra_groupe')
+    expect(doublons).toHaveLength(1)
+    // Ghost apparaît dans la relecture avec sans_engagement=true
+    const ghost = analyse.personnes_relecture.find((p) => p.nom_affichage === 'Ghost')
+    expect(ghost).toBeDefined()
+    expect(ghost!.sans_engagement).toBe(true)
+    expect(ghost!.nb_engagements).toBe(0)
+  })
+
+  it('personne_id inconnu dans MembreGroupe → ignoré silencieusement', () => {
+    const inscriptionsOrphelin = {
+      personnes: [
+        { id: 'p1', nom: 'Alpha', discriminant: '', role: 'musicien' as const,
+          instruments: [{ pupitre: 'chant', lourd: false }], indispos: [] },
+      ],
+      groupes: [
+        { titre: 'X', membres: [
+          { personne_id: 'p1', pupitre: 'chant' },
+          { personne_id: 'inexistant', pupitre: 'batterie' },
+        ] },
+      ],
+    }
+    const mentions = mentionsDepuisCandidat(inscriptionsOrphelin)
+    // 1 stagiaire + 1 membre valide (l'inexistant est skippé)
+    expect(mentions).toHaveLength(2)
   })
 })

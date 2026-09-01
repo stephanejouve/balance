@@ -21,7 +21,9 @@
   import LieuEdit from './edition/Lieu.svelte'
   import PersonnesEdit from './edition/Personnes.svelte'
   import SessionEdit from './edition/Session.svelte'
+  import EcranRelectureIdentites from './edition/EcranRelectureIdentites.svelte'
   import ImportUnique from './edition/ImportUnique.svelte'
+  import { analyserIdentitesCandidat, type AnalyseIdentitesImport } from './io/alertes-import'
   import MiseAJourBandeau from './edition/MiseAJourBandeau.svelte'
   import Carte from './vues/Carte.svelte'
   import Concert from './vues/Concert.svelte'
@@ -51,7 +53,7 @@
     preparerImportExcel,
     preparerImportJson,
   } from './io/import-detection'
-  import type { BilanImport, Detection, SelectionExcel } from './io/import-detection'
+  import type { BilanImport, Detection, DetectionExcel, SelectionExcel } from './io/import-detection'
   import { MAPPING_LISTE_DEFAUT } from './io/liste-adapter'
   import { MAPPING_PROPOSES_DEFAUT } from './io/proposes-adapter'
   import { MAPPING_STAGIAIRES_DEFAUT } from './io/stagiaires-adapter'
@@ -286,26 +288,69 @@
     }
   }
 
+  /**
+   * État transitoire entre extraction xlsx et commit : un candidat
+   * calculé + son analyse d'identités attend la validation humaine
+   * dans l'écran de relecture (Sujet C PR4 wire). `null` = pas en
+   * attente, flow normal.
+   *
+   * Doctrine « proposé, jamais appliqué » (Stéphane 2026-09-01) :
+   * on ne modifie PAS `inscriptions` avant que l'humain n'ait vu
+   * les alertes et confirmé. Ne pas court-circuiter cette étape même
+   * si l'analyse est propre.
+   */
+  let importEnAttente = $state<{
+    candidat: Inscriptions
+    bilan: BilanImport
+    sourceLabel: string
+    analyse: AnalyseIdentitesImport
+    detection: DetectionExcel
+    sel: SelectionExcel
+  } | null>(null)
+
   function appliquerImportExcel(sel: SelectionExcel) {
     if (detection?.type !== 'xlsx') return
     const candidat = construireCandidatExcel(detection, sel, inscriptions, session.id)
-    // Auto-activation : si un onglet Proposés a été appliqué (candidat.imposes
-    // non vide alors qu'ils venaient de l'import), on active la fonction du
-    // lieu (brief 4b — décoché signifie « n'entre pas dans le calcul »).
+    const b = bilanExcel(detection, sel)
+    // Analyse d'identités (Sujet C) : on ne commit pas encore — l'user
+    // valide via EcranRelectureIdentites. Franchissable en 1 clic si
+    // 0 alerte (blocage vient du contenu, pas de la mécanique).
+    importEnAttente = {
+      candidat,
+      bilan: b,
+      sourceLabel: `${detection.nomFichier} — ${b.onglets_appliques.length} onglet(s) appliqué(s)`,
+      analyse: analyserIdentitesCandidat(candidat),
+      detection,
+      sel,
+    }
+  }
+
+  function validerRelectureIdentites() {
+    if (!importEnAttente) return
+    const { candidat, bilan: b, sourceLabel: sl, detection: det, sel } = importEnAttente
+    // Auto-activation Proposés (brief 4b) — même logique qu'avant
+    // wire, calculée ici au moment du commit
     const aAppliqueProposes = [...sel.ongletsCoches].some((nom) => {
-      const o = detection?.type === 'xlsx' ? detection.onglets.find((x) => x.nom === nom) : null
+      const o = det.onglets.find((x) => x.nom === nom)
       return o?.destination === 'proposes' && o.statut === 'ok'
     })
     if (aAppliqueProposes && !lieu.fonctionsActivees.proposes) {
       lieu.fonctionsActivees.proposes = true
     }
     inscriptions = candidat
-    bilan = bilanExcel(detection, sel)
-    warningsImport = bilan.warnings
-    sourceLabel = `${detection.nomFichier} — ${bilan.onglets_appliques.length} onglet(s) appliqué(s)`
+    bilan = b
+    warningsImport = b.warnings
+    sourceLabel = sl
     solution = null
     modeDemo = false
     detection = null
+    importEnAttente = null
+  }
+
+  function annulerRelectureIdentites() {
+    // Retour à l'écran de sélection — le detection reste, l'user peut
+    // ajuster sa sélection ou changer de fichier.
+    importEnAttente = null
   }
 
   function appliquerImportJson() {
@@ -879,21 +924,32 @@
     </p>
   </header>
 
-  <ImportUnique
-    {sourceLabel}
-    {detection}
-    {bilan}
-    {erreurImport}
-    {warningsImport}
-    chargementEnCours={chargementImport}
-    onFichier={traiterFichier}
-    onImporterExcel={appliquerImportExcel}
-    onImporterJson={appliquerImportJson}
-    onAnnuler={annulerImport}
-    onUtiliserDemo={utiliserDemo}
-    onNouvelleSession={nouvelleSessionVide}
-    onTelechargerTemplate={telechargerTemplate}
-  />
+  {#if importEnAttente}
+    <!-- Étape intermédiaire Sujet C : relecture des identités avant
+         commit. Franchissable en 1 clic si 0 alerte (blocage vient
+         du contenu, pas de la mécanique). -->
+    <EcranRelectureIdentites
+      analyse={importEnAttente.analyse}
+      onValider={validerRelectureIdentites}
+      onAnnuler={annulerRelectureIdentites}
+    />
+  {:else}
+    <ImportUnique
+      {sourceLabel}
+      {detection}
+      {bilan}
+      {erreurImport}
+      {warningsImport}
+      chargementEnCours={chargementImport}
+      onFichier={traiterFichier}
+      onImporterExcel={appliquerImportExcel}
+      onImporterJson={appliquerImportJson}
+      onAnnuler={annulerImport}
+      onUtiliserDemo={utiliserDemo}
+      onNouvelleSession={nouvelleSessionVide}
+      onTelechargerTemplate={telechargerTemplate}
+    />
+  {/if}
 
   <PersonnesEdit
     {inscriptions}
