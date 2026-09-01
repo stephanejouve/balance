@@ -356,9 +356,9 @@ synthétiques. À reprendre comme tests de non-régression.
 
 - `apero_mercredi.json` — données réelles : 13 morceaux, 39 musiciens, cas difficile
   (une personne sur 6 morceaux rend le problème infaisable)
-- `demo_session5.json` — cas nominal, 5 groupes
+- `demo_session5.json` — cas nominal, 5 groupes (rangé dans `app/tests/fixtures/`)
 - `demo_session5_sature.json` — 8 groupes, 16 morceaux pour un plafond de 13 : déclenche
-  l'arbitrage
+  l'arbitrage (rangé dans `app/tests/fixtures/`)
 
 Un générateur de jeux synthétiques paramétrable serait utile pour les tests de charge :
 il a permis de mesurer les seuils de rupture (ex. en dessous de 4 batteurs pour 12
