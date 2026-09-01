@@ -120,6 +120,68 @@ export interface AnalyseIdentitesImport {
 }
 
 /**
+ * Construit les mentions depuis un `Inscriptions` déjà bâti par
+ * `construireCandidatExcel` (personne_id résolus, `Groupe.membres` avec
+ * `MembreGroupe` typés). Utile pour analyser un CANDIDAT AVANT commit —
+ * l'étape intermédiaire du flow d'import (PR3/PR4 Sujet C).
+ *
+ * Chaque personne stagiaire donne 1 mention par instrument déclaré (ou
+ * 1 mention avec pupitre vide si aucun instrument) avec
+ * `groupe_titre = ''`. Chaque `MembreGroupe` donne 1 mention avec
+ * `groupe_titre = titre du morceau`. Le `personne_id` est résolu vers
+ * la personne pour récupérer nom + discriminant.
+ */
+export function mentionsDepuisCandidat(inscriptions: {
+  readonly personnes: readonly Personne[]
+  readonly groupes: readonly { titre: string; membres: readonly { personne_id: string; pupitre: string }[] }[]
+}): MembreMention[] {
+  const personneParId = new Map(inscriptions.personnes.map((p) => [p.id, p]))
+  const mentions: MembreMention[] = []
+  // 1. Stagiaires — 1 mention par instrument déclaré (ou 1 mention
+  //    pupitre='' si aucun instrument, pour couvrir le stagiaire orphelin
+  //    dans la relecture)
+  for (const p of inscriptions.personnes) {
+    if (p.instruments.length === 0) {
+      mentions.push({ nom: p.nom, discriminant: p.discriminant, pupitre: '', groupe_titre: '' })
+    } else {
+      for (const ins of p.instruments) {
+        mentions.push({ nom: p.nom, discriminant: p.discriminant, pupitre: ins.pupitre, groupe_titre: '' })
+      }
+    }
+  }
+  // 2. Engagements dans les morceaux
+  for (const g of inscriptions.groupes) {
+    for (const mg of g.membres) {
+      const p = personneParId.get(mg.personne_id)
+      if (!p) continue
+      mentions.push({
+        nom: p.nom,
+        discriminant: p.discriminant,
+        pupitre: mg.pupitre,
+        groupe_titre: g.titre,
+      })
+    }
+  }
+  return mentions
+}
+
+/**
+ * Variante de `analyserIdentitesImport` qui opère sur un `Inscriptions`
+ * candidat (post `construireCandidatExcel`). Utilisée par l'écran de
+ * relecture wire dans le flow d'import (App.svelte).
+ */
+export function analyserIdentitesCandidat(inscriptions: {
+  readonly personnes: readonly Personne[]
+  readonly groupes: readonly { titre: string; membres: readonly { personne_id: string; pupitre: string }[] }[]
+}): AnalyseIdentitesImport {
+  const mentions = mentionsDepuisCandidat(inscriptions)
+  return {
+    alertes_identite: detecterAlertesIdentite(mentions),
+    personnes_relecture: personnesPourRelecture(mentions),
+  }
+}
+
+/**
  * Orchestre la détection : construit les mentions cumulées
  * (stagiaires + engagements dans les morceaux), appelle la logique
  * domain, retourne les alertes structurées et la liste pour relecture.
