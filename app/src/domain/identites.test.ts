@@ -397,6 +397,101 @@ describe('personnesPourRelecture', () => {
     expect(personnes[0].nom_affichage).toBe('Solo')
   })
 
+  describe('homonymie ignore le pupitre déclaré Stagiaires (feedback Stéphane 2026-09-01, post-mesure)', () => {
+    // Séparation identité vs cohérence : la détection d'homonymie
+    // regarde ce qui est CITÉ dans les morceaux, pas le pupitre déclaré
+    // en Stagiaires (qui est du ressort de la cohérence, task #47).
+
+    it('cas J déguisé : Clara déclarée Piano + citée à Batterie (1 seul morceau) → aucune alerte homonymie', () => {
+      // Cas Clara V. de coherence-onglets — le pupitre déclaré Piano
+      // ne doit PAS compter comme un instrument observé pour la
+      // détection homonymie. Sinon on remonte à tort « 2 personnes
+      // portent peut-être le même nom » alors qu'il n'y en a qu'une
+      // avec une déclaration incohérente (à traiter en cohérence).
+      const mentions = [
+        m('Clara', '', 'piano', ''),              // stagiaire (déclaration)
+        m('Clara', '', 'batterie', 'Ligne de Fuite'),  // cité morceau
+      ]
+      const alertes = detecterAlertesIdentite(mentions)
+      const homonymies = alertes.filter((a) => a.type === 'homonymie_probable')
+      expect(homonymies).toEqual([])
+    })
+
+    it('cas A conservé : Pierre à batterie 2 morceaux + guitare 1 morceau → alerte', () => {
+      // Vérif : le fix ne casse pas le vrai cas d'homonymie. Pierre
+      // n'a QUE des mentions morceau, distincts, jamais ensemble → alerte.
+      const mentions = [
+        m('Pierre', '', 'batterie', ''),                     // stagiaire (ignoré)
+        m('Pierre', '', 'batterie', 'Nuit d\'Octobre'),      // cité
+        m('Pierre', '', 'guitare', 'Le Fil de Soie'),        // cité
+        m('Pierre', '', 'batterie', 'Sables Mouvants'),      // cité
+      ]
+      const alertes = detecterAlertesIdentite(mentions)
+      const homonymies = alertes.filter((a) => a.type === 'homonymie_probable')
+      expect(homonymies).toHaveLength(1)
+      if (homonymies[0].type !== 'homonymie_probable') throw new Error('type')
+      expect(homonymies[0].nom).toBe('Pierre')
+      // instruments et groupes ne listent QUE les cités (pas le pupitre
+      // stagiaire, même si identique) — cohérent
+      expect(homonymies[0].instruments).toEqual(['batterie', 'guitare'])
+    })
+
+    it('cas B conservé : Pierre-Yves déclaré chant+guitare, cité chant+guitare MÊME morceau → aucune alerte (polyvalent)', () => {
+      // Le fix ne rompt pas la règle « polyvalent = jamais alerte » :
+      // 2 instruments cités sur le même morceau → coexistent → OK
+      const mentions = [
+        m('Pierre-Yves L.', '', 'chant', ''),               // stagiaire
+        m('Pierre-Yves L.', '', 'guitare', ''),              // stagiaire (additionnel)
+        m('Pierre-Yves L.', '', 'chant', 'Vent Debout'),    // cité chant
+        m('Pierre-Yves L.', '', 'guitare', 'Vent Debout'),  // cité guitare
+      ]
+      const alertes = detecterAlertesIdentite(mentions)
+      expect(alertes.filter((a) => a.type === 'homonymie_probable')).toEqual([])
+    })
+
+    it('stagiaire déclaré 2 instruments + cité NULLE PART → aucune alerte (le fix évite le bruit)', () => {
+      const mentions = [
+        m('Solo', '', 'chant', ''),
+        m('Solo', '', 'guitare', ''),
+      ]
+      const alertes = detecterAlertesIdentite(mentions)
+      expect(alertes.filter((a) => a.type === 'homonymie_probable')).toEqual([])
+    })
+
+    it('polyvalence déclarée stagiaire couvre les cités → aucune alerte (Vincent K. cas identites-ambigues)', () => {
+      // Vincent K. déclaré Guitare + Chant (additionnel), cité aux 2
+      // pupitres sur 2 morceaux DIFFÉRENTS. Sans mécanisme, remonte
+      // à tort comme homonymie. La déclaration stagiaire polyvalente
+      // doit disqualifier (le pseudo-groupe '' couvre tous les cités).
+      const mentions = [
+        m('Vincent K.', '', 'guitare', ''),                    // stagiaire
+        m('Vincent K.', '', 'chant', ''),                       // stagiaire additionnel
+        m('Vincent K.', '', 'chant', 'Sables Mouvants'),        // cité
+        m('Vincent K.', '', 'guitare', 'La Dernière Averse'),   // cité (autre morceau)
+      ]
+      const alertes = detecterAlertesIdentite(mentions)
+      expect(alertes.filter((a) => a.type === 'homonymie_probable')).toEqual([])
+    })
+
+    it('polyvalence déclarée INCOMPLÈTE (déclaré 1, cité 2) → alerte (cas Pierre A)', () => {
+      // Contre-preuve : si le stagiaire n'a déclaré QUE 1 pupitre mais
+      // est cité à 2, le pseudo-groupe ne couvre PAS tout → alerte.
+      // C'est le cas A du corrigé Stéphane (Pierre déclaré batterie,
+      // cité aussi guitare sur 1 morceau).
+      const mentions = [
+        m('Pierre', '', 'batterie', ''),                     // déclaré 1
+        m('Pierre', '', 'batterie', 'Nuit d\'Octobre'),
+        m('Pierre', '', 'guitare', 'Le Fil de Soie'),        // cité 2ᵉ instrument
+        m('Pierre', '', 'batterie', 'Sables Mouvants'),
+      ]
+      const alertes = detecterAlertesIdentite(mentions)
+      const homonymies = alertes.filter((a) => a.type === 'homonymie_probable')
+      expect(homonymies).toHaveLength(1)
+      if (homonymies[0].type !== 'homonymie_probable') throw new Error('type')
+      expect(homonymies[0].nom).toBe('Pierre')
+    })
+  })
+
   describe('nb_engagements — comptage rigoureux (feedback Stéphane 2026-09-01)', () => {
     // Le bug d'origine : ma correction précédente comptait les mentions,
     // pas les morceaux. Décalage systématique +1 sur tout le monde
