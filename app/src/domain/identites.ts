@@ -257,9 +257,17 @@ function _detecterHomonymies(
 function _detecterDoublons(
   mentions: readonly MembreMention[],
 ): AlerteIdentite[] {
-  // Groupement par (nom normalisé, groupe normalisé)
+  const alertes: AlerteIdentite[] = []
+  const dejaSignales = new Set<string>()
+
+  // 1. Groupement par (nom normalisé, groupe normalisé) — cas où le
+  //    même nom apparaît plusieurs fois sur le même morceau
+  //    (« Pierre (L) » + « Pierre (SIG) » ou pupitre répété).
   const parCouple = new Map<string, MembreMention[]>()
-  for (const m of mentions) {
+  // Ignore les mentions du pseudo-groupe stagiaires (`groupe_titre = ''`)
+  // — un stagiaire n'a pas d'engagement sur ce « morceau vide ».
+  const mentionsMorceaux = mentions.filter((m) => normaliserNom(m.groupe_titre) !== '')
+  for (const m of mentionsMorceaux) {
     const cle = `${normaliserNom(m.nom)}|${normaliserNom(m.groupe_titre)}`
     let liste = parCouple.get(cle)
     if (!liste) {
@@ -269,7 +277,6 @@ function _detecterDoublons(
     liste.push(m)
   }
 
-  const alertes: AlerteIdentite[] = []
   const clesTriees = [...parCouple.keys()].sort()
   for (const cle of clesTriees) {
     const occurrences = parCouple.get(cle)!
@@ -282,12 +289,55 @@ function _detecterDoublons(
     const polyvalentLegitime =
       discriminants.length === 1 && pupitresUniques.size === pupitres.length
     if (polyvalentLegitime) continue
+    const marqueur = `${cle}|self`
+    dejaSignales.add(marqueur)
     alertes.push({
       type: 'doublon_intra_groupe',
       nom: occurrences[0].nom,  // forme brute (garde-fou affichage)
       discriminants,
       groupe: occurrences[0].groupe_titre,
     })
+  }
+
+  // 2. Détection préfixe sur MÊME morceau : « Pierre » + « Pierre
+  //    Lemoine » sur « Sables Mouvants ». Cas D du corrigé Stéphane —
+  //    presque sûrement une personne saisie deux fois sous deux formes
+  //    (prénom seul + nom complet). Signal plus fort que le simple
+  //    rapprochement cross-morceaux (cas C).
+  const parGroupe = new Map<string, MembreMention[]>()
+  for (const m of mentionsMorceaux) {
+    const g = normaliserNom(m.groupe_titre)
+    let liste = parGroupe.get(g)
+    if (!liste) {
+      liste = []
+      parGroupe.set(g, liste)
+    }
+    liste.push(m)
+  }
+  for (const grp of [...parGroupe.keys()].sort()) {
+    const mentionsGrp = parGroupe.get(grp)!
+    const nomsGrp = [...new Set(mentionsGrp.map((m) => normaliserNom(m.nom)))]
+    for (const nomA of nomsGrp) {
+      for (const nomB of nomsGrp) {
+        if (nomA === nomB) continue
+        if (nomB.startsWith(nomA + ' ')) {
+          // nomA = préfixe court, nomB = forme longue. Ordre lexico :
+          // signaler une seule fois par paire.
+          const cleRappr = [nomA, nomB].sort().join('|')
+          const marqueur = `${cleRappr}|${grp}|prefix`
+          if (dejaSignales.has(marqueur)) continue
+          dejaSignales.add(marqueur)
+          const mentionA = mentionsGrp.find((m) => normaliserNom(m.nom) === nomA)!
+          const mentionB = mentionsGrp.find((m) => normaliserNom(m.nom) === nomB)!
+          alertes.push({
+            type: 'doublon_intra_groupe',
+            nom: mentionA.nom,  // forme la plus courte pour affichage
+            discriminants: [mentionA.nom, mentionB.nom].sort(),
+            groupe: mentionA.groupe_titre,
+          })
+        }
+      }
+    }
   }
   return alertes
 }
@@ -303,14 +353,14 @@ function _detecterDoublons(
  * (constaté sur prototype : 3 Pierre fusionnés → conflits imaginaires +
  * réels masqués).
  *
- * **Règle d'arbitrage (cas D)** : quand un préfixe apparaît sur le MÊME
- * morceau que sa forme longue (« Pierre » + « Pierre Lemoine » sur
- * « Sables Mouvants »), `_detecterDoublons` remonte l'alerte en amont.
- * Cette fonction ne double PAS le signalement — le doublon est plus fort
- * que le rapprochement (indice d'erreur de saisie plutôt que de deux
- * personnes distinctes qui apparaissent séparément). La règle n'est pas
- * explicitée dans le corrigé Stéphane, mais D pouvait légitimement lever
- * les deux ; l'arbitrage est documenté ici.
+ * **Coexistence rapprochement + doublon (cas C+D combinés)** : le
+ * rapprochement porte sur la PAIRE globale de noms (« ces 2 formes
+ * désignent probablement la même personne »), le doublon porte sur un
+ * MORCEAU spécifique (« sur ce morceau, la même personne apparaît
+ * deux fois »). Les deux alertes coexistent quand les 2 formes se
+ * rencontrent à la fois sur des morceaux distincts (cas C) ET sur un
+ * morceau commun (cas D). Attendu par le corrigé Stéphane 2026-09-01
+ * (1 rapprochement + 1 doublon pour Pierre/Pierre Lemoine).
  *
  * **Pas de propagation en chaîne (cas H)** : les paires sont testées
  * indépendamment. `Renée B.` ↔ `Renee B.` ne rapproche pas `Renée B.`
@@ -357,18 +407,10 @@ function _detecterRapprochements(
       // a est-il un préfixe de b (mot entier) ? Ex. « pierre » préfixe de « pierre lemoine »
       if (a === b) continue
       if (b.startsWith(a + ' ')) {
-        // Vérifier qu'ils ne sont pas déjà sur le même morceau (cas D → doublon)
-        const groupesA = new Set(
-          mentions.filter((m) => normaliserNom(m.nom) === a).map((m) => normaliserNom(m.groupe_titre)),
-        )
-        const groupesB = new Set(
-          mentions.filter((m) => normaliserNom(m.nom) === b).map((m) => normaliserNom(m.groupe_titre)),
-        )
-        const groupesCommuns = [...groupesA].filter((g) => groupesB.has(g))
-        if (groupesCommuns.length > 0) {
-          // Cas D — déjà signalé comme doublon, ne pas dupliquer
-          continue
-        }
+        // Rapprochement toujours proposé — même si la paire coexiste
+        // aussi sur un morceau commun (le doublon local sera émis en
+        // plus par _detecterDoublons, cf. cas C+D combinés du corrigé
+        // Stéphane 2026-09-01).
         ajouter(nomsUniques[i], nomsUniques[j], null)
       }
     }

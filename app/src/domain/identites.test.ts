@@ -276,15 +276,19 @@ describe('rapprochement_propose — cas C et accents', () => {
     expect(rapprochements[0].groupe).toBeNull()
   })
 
-  it('cas D : Pierre + Pierre Lemoine sur MÊME morceau → doublon, PAS rapprochement (signal plus fort)', () => {
+  it('cas D + C : Pierre + Pierre Lemoine sur MÊME morceau → doublon ET rapprochement coexistent', () => {
+    // Correction règle Stéphane 2026-09-01 (post-jeu de test) : le
+    // rapprochement porte sur la paire globale, le doublon sur le
+    // morceau spécifique. Les 2 alertes coexistent.
     const mentions = [
       m('Pierre', '', 'batterie', 'Sables Mouvants'),
       m('Pierre Lemoine', '', 'guitare', 'Sables Mouvants'),
     ]
     const alertes = detecterAlertesIdentite(mentions)
-    // Le rapprochement ne doit PAS remonter (le doublon est plus fort)
+    const doublons = alertes.filter((a) => a.type === 'doublon_intra_groupe')
     const rapprochements = alertes.filter((a) => a.type === 'rapprochement_propose')
-    expect(rapprochements).toEqual([])
+    expect(doublons).toHaveLength(1)  // doublon sur le morceau
+    expect(rapprochements).toHaveLength(1)  // rapprochement sur la paire globale
   })
 
   it('rapprochement accents : « Solène » ↔ « Solene » → proposé', () => {
