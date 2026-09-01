@@ -119,7 +119,7 @@ export function parserIndispoLibre(brut: string): Indispo | null {
   }
 }
 
-function extraireDiscriminant(nom: string): { nom: string; discriminant: string } {
+export function extraireDiscriminant(nom: string): { nom: string; discriminant: string } {
   const m = nom.match(/^(.*?)\s*\(([^)]+)\)\s*$/)
   if (m) return { nom: m[1].trim(), discriminant: `(${m[2].trim()})` }
   return { nom: nom.trim(), discriminant: '' }

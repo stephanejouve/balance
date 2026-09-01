@@ -1,0 +1,92 @@
+{
+ "attendus": [
+  {
+   "cas": "A — homonymie probable",
+   "personnes": [
+    "Pierre"
+   ],
+   "detail": "« Pierre » à la batterie sur « Nuit d'Octobre » et « Sables Mouvants », à la guitare sur « Le Fil de Soie ». Les deux instruments ne coexistent dans aucun morceau.",
+   "attendu": "ALERTE homonymie probable"
+  },
+  {
+   "cas": "B — polyvalence",
+   "personnes": [
+    "Pierre-Yves L."
+   ],
+   "detail": "Chant ET guitare sur « Vent Debout » — même morceau.",
+   "attendu": "AUCUNE alerte (les deux instruments coexistent)"
+  },
+  {
+   "cas": "C — nom de famille vs initiale",
+   "personnes": [
+    "Pierre Lemoine",
+    "Pierre"
+   ],
+   "detail": "« Pierre Lemoine » déclaré en Stagiaires, « Pierre » seul dans la Liste.",
+   "attendu": "RAPPROCHEMENT PROPOSÉ, jamais appliqué automatiquement"
+  },
+  {
+   "cas": "D — doublon intra-groupe",
+   "personnes": [
+    "Pierre",
+    "Pierre Lemoine"
+   ],
+   "detail": "Tous deux sur « Sables Mouvants », batterie et guitare.",
+   "attendu": "SIGNALEMENT doublon (probablement une seule personne saisie deux fois)"
+  },
+  {
+   "cas": "E — bruit légitime",
+   "personnes": [
+    "Camille A.",
+    "Camille B.",
+    "Camille C.",
+    "Marie D.",
+    "Marie F.",
+    "Jean-Louis M.",
+    "Jean-Michel R."
+   ],
+   "detail": "Prénoms partagés mais tous distingués par une initiale ou un nom complet.",
+   "attendu": "AUCUNE alerte — visibles seulement à l'écran de relecture"
+  },
+  {
+   "cas": "G — accent manquant, même personne",
+   "personnes": [
+    "Solène J.",
+    "Solene J."
+   ],
+   "detail": "« Solène J. » déclarée en Stagiaires, écrite « Solene J. » au piano sur « Sables Mouvants ». Même initiale, seul l'accent diffère.",
+   "attendu": "RAPPROCHEMENT PROPOSÉ, jamais appliqué"
+  },
+  {
+   "cas": "H — accents proches, personnes distinctes",
+   "personnes": [
+    "Renée B.",
+    "Renee C."
+   ],
+   "detail": "« Renée B. » et « Renee C. » jouent ensemble sur « Refrain de Novembre ». Les prénoms ne diffèrent que par l'accent, mais les initiales diffèrent.",
+   "attendu": "AUCUN rapprochement — l'initiale distingue. Vérifie aussi que le rapprochement d'accents ne se propage pas en chaîne."
+  },
+  {
+   "cas": "F — espaces et casse",
+   "personnes": [
+    "Sofia  T.",
+    "BRUNO V. "
+   ],
+   "detail": "« Sofia  T. » (double espace) écrit « sofia t. » dans la Liste ; « BRUNO V. » (majuscules, espace final) écrit « Bruno V. ».",
+   "attendu": "RAPPROCHÉES SANS ALERTE — la normalisation (espaces, casse) doit suffire"
+  }
+ ],
+ "resume": {
+  "alertes_homonymie": 1,
+  "signalements_doublon": 1,
+  "rapprochements_proposes": 2,
+  "aucune_alerte_attendue": [
+   "Pierre-Yves L.",
+   "les 3 Camille",
+   "les 2 Marie",
+   "les 2 Jean-",
+   "Sofia T.",
+   "Bruno V."
+  ]
+ }
+}
