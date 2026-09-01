@@ -67,19 +67,29 @@
   }
  ],
  "resume": {
-  "alertes": [
-   "J (2 personnes)",
-   "M"
-  ],
-  "signalements": [
-   "I",
-   "L",
-   "N",
-   "O",
-   "P"
-  ],
+  "alertes": {
+   "total": 3,
+   "detail": [
+    "pupitre_contredit — Clara V.",
+    "pupitre_contredit — Damien W.",
+    "indispo_percutee — Gaëlle A."
+   ]
+  },
+  "signalements": {
+   "total": 8,
+   "detail": [
+    "pupitre_non_declare_polyvalent — Iris C.",
+    "responsable_non_cite — Amandine R.",
+    "stagiaire_orphelin × 3",
+    "lateralite_non_batteur — Fabien Z.",
+    "nom_cite_absent_stagiaires — Olivier X.",
+    "morceau_vide — Encore Sans Titre"
+   ]
+  },
   "aucune_alerte": [
-   "K"
-  ]
- }
+   "K — Estelle Y., pupitre additionnel légitime (témoin : doit rester muet)"
+  ],
+  "corrige_le": "2026-09-01, après confrontation à l'implémentation (task #47)"
+ },
+ "note_comptage": "Les décomptes ci-dessous sont exprimés en OCCURRENCES (une entrée par personne concernée), pas en catégories. Un même type d'anomalie touchant trois personnes produit trois entrées : c'est chaque correction à apporter que l'utilisateur doit voir, pas chaque type."
 }

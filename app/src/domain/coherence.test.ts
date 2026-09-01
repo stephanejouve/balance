@@ -345,12 +345,20 @@ describe('grouperAlertesCoherence — alertes rouges vs signalements orange', ()
 const FIX_XLSX = join(__dirname, '..', '..', 'tests', 'fixtures', 'coherence-onglets.xlsx')
 const FIX_CORRIGE = join(__dirname, '..', '..', 'tests', 'fixtures', 'coherence-onglets-corrige.json')
 
+/**
+ * Format du corrigé Stéphane 2026-09-01 (v2, occurrences).
+ *
+ * Le v1 comptait des catégories (« J (2 personnes) »), le v2 compte des
+ * occurrences (une entrée par personne concernée) — voir `note_comptage`
+ * dans le JSON. C'est cette forme qui est le contrat testé.
+ */
 interface Corrige {
   resume: {
-    alertes: string[]       // ex. ['J (2 personnes)', 'M']
-    signalements: string[]  // ex. ['I', 'L', 'N', 'O', 'P']
-    aucune_alerte: string[] // ex. ['K']
+    alertes: { total: number; detail: readonly string[] }
+    signalements: { total: number; detail: readonly string[] }
+    aucune_alerte: readonly string[]
   }
+  note_comptage: string
 }
 
 const skipMissing = existsSync(FIX_XLSX) ? it : it.skip
@@ -406,8 +414,11 @@ describe('cas I à P end-to-end contre coherence-onglets.xlsx', () => {
     const estelleAlertes = alertes.filter((a) => 'personne' in a && a.personne === 'Estelle Y.')
     expect(estelleAlertes).toEqual([])
 
-    // Contrat externe (compte-catégories du corrigé)
-    expect(corrige.resume.alertes).toEqual(['J (2 personnes)', 'M'])
-    expect(corrige.resume.signalements.sort()).toEqual(['I', 'L', 'N', 'O', 'P'])
+    // Contrat externe (compte-occurrences du corrigé v2 Stéphane 2026-09-01)
+    // — chaque personne concernée compte pour 1, pas chaque type.
+    expect(corrige.resume.alertes.total).toBe(g.alertes.length)
+    expect(corrige.resume.alertes.total).toBe(3)
+    expect(corrige.resume.signalements.total).toBe(g.signalements.length)
+    expect(corrige.resume.signalements.total).toBe(8)
   })
 })
