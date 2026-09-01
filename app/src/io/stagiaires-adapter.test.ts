@@ -76,18 +76,21 @@ describe('extraireStagiaires', () => {
     expect(personnes[2].instruments[0].lateralite).toBe('droitier')
   })
 
-  it("warn si latéralité renseignée sans instrument batterie", () => {
+  it('préserve la latéralité sur un non-batteur (fallback instrument[0], signalé par cohérence)', () => {
+    // Fix Stéphane 2026-09-01 (task #47 cas L) : ne plus stripper
+    // silencieusement — le signalement « latéralité sur non-batteur »
+    // est produit par `domain/coherence.ts`, pas ici. L'adapter préserve
+    // l'info pour que le check aval puisse l'attraper.
     const rows: unknown[][] = [
       ['Nom', 'Pupitre', 'Latéralité'],
       ['Emma', 'chant', 'droitier'],
     ]
-    const { personnes, warnings } = extraireStagiaires(rows, {
+    const { personnes } = extraireStagiaires(rows, {
       colonneNom: 'Nom',
       colonnePupitrePrincipal: 'Pupitre',
       colonneLateralite: 'Latéralité',
     })
-    expect(personnes[0].instruments[0].lateralite).toBeUndefined()
-    expect(warnings.some((w) => w.includes('pas d\'instrument batterie'))).toBe(true)
+    expect(personnes[0].instruments[0].lateralite).toBe('droitier')
   })
 
   it('signale les doublons de nom (même id)', () => {

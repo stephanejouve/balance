@@ -250,9 +250,17 @@ export function extraireStagiaires(
       const insBatterie = instruments.find((i) => i.pupitre === 'batterie')
       if (insBatterie) {
         insBatterie.lateralite = lateralite
+      } else if (instruments.length > 0) {
+        // Feedback Stéphane 2026-09-01 (task #47 cas L) : préserver
+        // l'info sur le premier instrument déclaré même si non-batteur.
+        // `domain/coherence.ts` remontera un signalement L
+        // (« latéralité renseignée sur un non-batteur »). Ne plus
+        // stripper silencieusement — l'info devient un signal
+        // actionnable au lieu d'un warning qu'on lit à peine.
+        instruments[0].lateralite = lateralite
       } else {
         warnings.push(
-          `ligne ${r + 1} (${brut}) : latéralité « ${lateralite} » ignorée — pas d'instrument batterie déclaré`,
+          `ligne ${r + 1} (${brut}) : latéralité « ${lateralite} » sans instrument porteur`,
         )
       }
     }
