@@ -107,6 +107,32 @@ export interface RepartirOptions {
    * `0` équivaut aussi à désactivé.
    */
   essaisSansAmelioration?: number
+  /**
+   * Stratégie d'exploration. Défaut **`'deterministic'`** (chantier A —
+   * Stéphane 2026-09-02, PR-A2).
+   *
+   * - `'deterministic'` : un unique essai qui applique la seule
+   *   heuristique déterministe (ordre par difficulté décroissante + top-1
+   *   candidat par score). Aucun shuffle, aucun tirage RNG. Le solveur
+   *   est déterministe au sens fort : même input → même placement, sur
+   *   toute machine, avec ou sans `seed`.
+   *
+   * - `'random-restart'` : comportement historique préservé pour
+   *   ré-activation en 1 param si un cas piégeant l'heuristique
+   *   déterministe émerge un jour. Multi-essais avec shuffle de l'ordre
+   *   + tirage `rng() * Math.min(4, N)` du candidat. Les paramètres
+   *   `maxEssais`, `essaisSansAmelioration`, `budgetMs`, `seed`
+   *   n'ont d'effet observable qu'avec ce mode.
+   *
+   * Réserve CD verbatim : « 3 fixtures (balance-stress-test,
+   * demo_session5_sature, solveur-adversaire) ne prouvent pas qu'aucun
+   * cas ne piège l'heuristique. Ce chemin est retenu à titre historique
+   * — désactivé par défaut car mesures 2026-09-02 ont montré qu'il
+   * n'améliorait jamais le résultat. Si vous suspectez un cas piégeant
+   * l'heuristique déterministe, réactivez via `strategie: 'random-restart'`
+   * et mesurez avant de conclure. »
+   */
+  strategie?: 'deterministic' | 'random-restart'
   /** Registre des contraintes actives. Défaut : toutes actives. */
   registre?: RegistreContraintes
   /**
@@ -338,17 +364,23 @@ export function repartir(
   creneaux: Creneau[],
   options: RepartirOptions = {},
 ): RepartirResultat {
-  const maxEssais = options.maxEssais ?? 2500
-  // Budget wall-clock : 3000 ms par défaut. `Infinity` ou 0 désactive.
-  // Voir docstring `RepartirOptions.budgetMs` pour la justification.
-  const budgetMs = options.budgetMs ?? 3000
+  // Stratégie d'exploration — voir docstring `RepartirOptions.strategie`.
+  // Défaut 'deterministic' (chantier A Stéphane 2026-09-02, PR-A2) :
+  // - short-circuit shuffle + RNG + boucle multi-essais
+  // - un unique essai qui applique l'heuristique déterministe
+  // Le mode 'random-restart' préserve le comportement historique pour
+  // ré-activation en 1 param si un cas piégeant émerge.
+  const strategie = options.strategie ?? 'deterministic'
+  const deterministic = strategie === 'deterministic'
+  // En mode deterministic : force maxEssais=1, désactive budget +
+  // stagnation. Les autres modes appliquent les défauts historiques.
+  const maxEssais = deterministic ? 1 : (options.maxEssais ?? 2500)
+  const budgetMs = deterministic ? Infinity : (options.budgetMs ?? 3000)
   const budgetActif = Number.isFinite(budgetMs) && budgetMs > 0
   // Palier de stagnation : nb d'essais consécutifs sans amélioration
-  // avant abandon. Défaut **1** depuis PR-A1 (chantier A Stéphane
-  // 2026-09-02) : mesures CD ont montré que le random-restart n'améliore
-  // jamais le placement — dès qu'un essai stagne, tous les suivants
-  // stagneront. Voir docstring `RepartirOptions.essaisSansAmelioration`.
-  const essaisSansAmelioration = options.essaisSansAmelioration ?? 1
+  // avant abandon. Défaut 1 en mode random-restart (chantier A PR-A1) —
+  // en mode deterministic la boucle ne tourne qu'une fois de toute façon.
+  const essaisSansAmelioration = deterministic ? 0 : (options.essaisSansAmelioration ?? 1)
   const stagnationActive = Number.isFinite(essaisSansAmelioration) && essaisSansAmelioration > 0
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now()
   const rng = makeRng(options.seed ?? 1)

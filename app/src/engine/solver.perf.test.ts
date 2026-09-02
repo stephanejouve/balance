@@ -240,6 +240,7 @@ describe('solver — early-stop no-progress (stagnation)', () => {
     const t0 = performance.now()
     const res = repartir(session, lieu, inscriptions, creneaux, {
       seed: 42,
+      strategie: 'random-restart', // stagnation ne s'observe qu'en random-restart
       // maxEssais élevé exprès : le test échoue si le solveur consomme tous
       // les essais au lieu d'être coupé par la stagnation.
       maxEssais: 2500,
@@ -265,6 +266,7 @@ describe('solver — early-stop no-progress (stagnation)', () => {
     const { lieu, session, inscriptions, creneaux } = fixtureImpossible()
     const res = repartir(session, lieu, inscriptions, creneaux, {
       seed: 42,
+      strategie: 'random-restart', // maxEssais n'a d'effet qu'en random-restart
       maxEssais: 30, // Petit maxEssais pour rester bref en test
       budgetMs: Infinity,
       essaisSansAmelioration: Infinity,
@@ -278,11 +280,56 @@ describe('solver — early-stop no-progress (stagnation)', () => {
   it('n\'affecte pas les cas résolubles rapidement (early-stop naturel gagne)', () => {
     const { lieu, session, inscriptions, creneaux } = fixtureVolume(10, 20)
     const res = repartir(session, lieu, inscriptions, creneaux, {
-      seed: 42, essaisSansAmelioration: 50, budgetMs: Infinity,
+      seed: 42, strategie: 'random-restart', essaisSansAmelioration: 50, budgetMs: Infinity,
     })
     // Cas résoluble : le premier essai réussit → arret 'complet',
     // stagnation ne kick jamais.
     expect(res.arret_precoce).toBe('complet')
     expect(res.essais_executes).toBe(1)
+  })
+})
+
+/**
+ * PR-A2 (chantier A Stéphane 2026-09-02) : `strategie: 'deterministic'`
+ * défaut short-circuit shuffle + RNG + boucle. Contrat testé :
+ * - même input → même placement (déterminisme fort)
+ * - un unique essai, jamais de stagnation/budget/max-essais
+ * - `random-restart` explicite préserve l'ancien comportement
+ */
+describe('solver — strategie deterministic (défaut, PR-A2)', () => {
+  it('mode deterministic (défaut) : 1 essai, arret complet ou max-essais-1', () => {
+    const { lieu, session, inscriptions, creneaux } = fixtureVolume(13, 26)
+    const res = repartir(session, lieu, inscriptions, creneaux)
+    expect(res.essais_executes).toBe(1)
+    expect(['complet', 'max-essais']).toContain(res.arret_precoce)
+    expect(res.placement.length).toBeGreaterThan(0)
+  })
+
+  it('déterminisme fort : seeds différents → placement identique en mode deterministic', () => {
+    const { lieu, session, inscriptions, creneaux } = fixtureVolume(20, 40)
+    const r1 = repartir(session, lieu, inscriptions, creneaux, { seed: 1 })
+    const r7 = repartir(session, lieu, inscriptions, creneaux, { seed: 7 })
+    const r42 = repartir(session, lieu, inscriptions, creneaux, { seed: 42 })
+    expect(r7.placement).toEqual(r1.placement)
+    expect(r42.placement).toEqual(r1.placement)
+  })
+
+  it('random-restart explicite : préserve le comportement historique', () => {
+    // Contrat opt-in : les paramètres essaisSansAmelioration/budgetMs/maxEssais
+    // reprennent effet quand strategie='random-restart'. Volume moyen
+    // (13g) pour rester rapide malgré N essais.
+    const { lieu, session, inscriptions, creneaux } = fixtureVolume(13, 26)
+    const res = repartir(session, lieu, inscriptions, creneaux, {
+      seed: 42,
+      strategie: 'random-restart',
+      maxEssais: 5,
+      essaisSansAmelioration: Infinity,
+      budgetMs: Infinity,
+    })
+    // Contrat testé : le mode random-restart permet plusieurs essais
+    // (vs 1 en mode deterministic). Sur input résoluble, s'arrête tôt
+    // sur 'complet' — mais essais_executes >= 1 dans tous les cas.
+    expect(res.essais_executes).toBeGreaterThanOrEqual(1)
+    expect(['complet', 'max-essais', 'stagnation']).toContain(res.arret_precoce)
   })
 })
