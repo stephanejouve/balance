@@ -64,7 +64,7 @@
     couleurStyle,
     statsConducteur,
   } from './stores/app-conducteur'
-  import { resetFigees, resetSolution, runLancer, solveurStore } from './stores/solveur-store.svelte'
+  import { marquerObsolete, resetFigees, resetSolution, runLancer, solveurStore } from './stores/solveur-store.svelte'
   import fixture from './fixtures/apero_mercredi.json'
 
   /* --- Données de démarrage --------------------------------------------- */
@@ -544,12 +544,12 @@
       postes_cherches: [],
       repetitions_deja_faites: 0,
     })
-    resetSolution()
+    marquerObsolete()
   }
   function supprimerGroupe(i: number) {
     if (!confirm(`Supprimer « ${inscriptions.groupes[i].titre} » ?`)) return
     inscriptions.groupes.splice(i, 1)
-    resetSolution()
+    marquerObsolete()
   }
   /** Affecte un renfort à un groupe : ajoute aux membres, retire du postes_cherches. */
   function affecterRenfort(groupe_id: string, personne_id: string, pupitre: string) {
@@ -558,7 +558,7 @@
     g.membres.push({ personne_id, pupitre })
     const idx = g.postes_cherches.indexOf(pupitre)
     if (idx >= 0) g.postes_cherches.splice(idx, 1)
-    resetSolution()
+    marquerObsolete()
   }
   /** Retire un membre d'un groupe. Si le pupitre n'est plus tenu, l'ajoute à `postes_cherches`. */
   function retirerMembre(groupe_id: string, membreIdx: number) {
@@ -575,7 +575,7 @@
     if (!encore && !g.postes_cherches.includes(m.pupitre)) {
       g.postes_cherches.push(m.pupitre)
     }
-    resetSolution()
+    marquerObsolete()
   }
 
   /* --- Édition Personnes ------------------------------------------------- */
@@ -589,7 +589,7 @@
       role: 'musicien',
       indispos: [],
     })
-    resetSolution()
+    marquerObsolete()
   }
   function supprimerPersonne(pid: string) {
     const p = inscriptions.personnes.find((x) => x.id === pid)
@@ -607,19 +607,19 @@
       }
     }
     inscriptions.personnes = inscriptions.personnes.filter((x) => x.id !== pid)
-    resetSolution()
+    marquerObsolete()
   }
   function ajouterInstrument(pid: string) {
     const p = inscriptions.personnes.find((x) => x.id === pid)
     if (!p) return
     p.instruments.push({ pupitre: 'chant', lourd: false })
-    resetSolution()
+    marquerObsolete()
   }
   function supprimerInstrument(pid: string, i: number) {
     const p = inscriptions.personnes.find((x) => x.id === pid)
     if (!p) return
     p.instruments.splice(i, 1)
-    resetSolution()
+    marquerObsolete()
   }
 
   /* --- Édition Indispos personnes ---------------------------------------- */
@@ -634,13 +634,13 @@
       roles: [],
       motif: '',
     })
-    resetSolution()
+    marquerObsolete()
   }
   function supprimerIndispo(pid: string, i: number) {
     const p = inscriptions.personnes.find((x) => x.id === pid)
     if (!p) return
     p.indispos.splice(i, 1)
-    resetSolution()
+    marquerObsolete()
   }
   const nbIndispoTotal = $derived(
     inscriptions.personnes.reduce((s, p) => s + p.indispos.length, 0),
@@ -664,12 +664,12 @@
       membres: [],
       seances: [],
     })
-    resetSolution()
+    marquerObsolete()
   }
   function supprimerImpose(i: number) {
     if (!confirm(`Supprimer l'imposé « ${inscriptions.imposes[i].morceau} » ?`)) return
     inscriptions.imposes.splice(i, 1)
-    resetSolution()
+    marquerObsolete()
   }
   function ajouterSeance(imposeIdx: number) {
     inscriptions.imposes[imposeIdx].seances.push({
@@ -677,11 +677,11 @@
       debut: '14:00',
       fin: '15:30',
     })
-    resetSolution()
+    marquerObsolete()
   }
   function supprimerSeance(imposeIdx: number, seanceIdx: number) {
     inscriptions.imposes[imposeIdx].seances.splice(seanceIdx, 1)
-    resetSolution()
+    marquerObsolete()
   }
 
   /* --- Ajustement manuel : figer/dégeler une répé ------------------------ */
@@ -907,7 +907,7 @@
     onSupprimerPersonne={supprimerPersonne}
     onAjouterInstrument={ajouterInstrument}
     onSupprimerInstrument={supprimerInstrument}
-    onInvalider={resetSolution}
+    onInvalider={marquerObsolete}
   />
 
   <InscriptionsEdit
@@ -917,7 +917,7 @@
     onAjouterGroupe={ajouterGroupe}
     onSupprimerGroupe={supprimerGroupe}
     onRetirerMembre={retirerMembre}
-    onInvalider={resetSolution}
+    onInvalider={marquerObsolete}
   />
 
   <IndisposEdit
@@ -926,7 +926,7 @@
     {nbIndispoTotal}
     onAjouterIndispo={ajouterIndispo}
     onSupprimerIndispo={supprimerIndispo}
-    onInvalider={resetSolution}
+    onInvalider={marquerObsolete}
   />
 
   <ImposesEdit
@@ -936,7 +936,7 @@
     onSupprimerImpose={supprimerImpose}
     onAjouterSeance={ajouterSeance}
     onSupprimerSeance={supprimerSeance}
-    onInvalider={resetSolution}
+    onInvalider={marquerObsolete}
   />
 
   <LieuEdit
@@ -1011,6 +1011,11 @@
       {solveurStore.calculEnCours ? 'Recherche en cours…' : solveurStore.solution ? 'Relancer la répartition' : 'Lancer la répartition'}
     </button>
     {#if solveurStore.solution}
+      {#if solveurStore.solutionObsolete}
+        <div class="msg warn" role="status">
+          Ce planning ne tient pas compte de vos dernières modifications — relancer la répartition.
+        </div>
+      {/if}
       <div class="stats">
         <div>
           <b>{solveurStore.solution.couverture.filter((c) => c.obtenu >= c.cible).length}/{inscriptions.groupes.length}</b>
