@@ -81,6 +81,23 @@ export interface RepartirOptions {
    * `0` équivaut aussi à désactivé.
    */
   budgetMs?: number
+  /**
+   * Nombre d'essais consécutifs sans amélioration du meilleur candidat
+   * après lesquels la boucle s'arrête (défaut 50). Le champ
+   * `arret_precoce` vaut alors `'stagnation'`.
+   *
+   * Justification Stéphane 2026-09-02 : mesures sur main @05226c4 avec
+   * 20 groupes / 84 personnes / 40 créneaux → 56 s pour épuiser 100
+   * essais alors qu'un seul groupe reste non plaçable ; le solveur
+   * brûle 99 essais à chasser une solution parfaite qui n'existe pas.
+   * « Un solveur qui a trouvé 19/20 au dixième essai ne trouvera pas
+   * 20/20 au deux-millième si le vingtième groupe est structurellement
+   * infaisable. »
+   *
+   * Passer `Infinity` pour désactiver (usage benchmark ou opt-in).
+   * `0` équivaut aussi à désactivé.
+   */
+  essaisSansAmelioration?: number
   /** Registre des contraintes actives. Défaut : toutes actives. */
   registre?: RegistreContraintes
   /**
@@ -103,8 +120,12 @@ export interface PlacementItem {
  * - `max-essais` : la boucle a atteint `maxEssais` sans trouver de solution complète.
  * - `budget` : le budget wall-clock a été dépassé — solution partielle retournée
  *   pour éviter de geler l'interface (voir `RepartirOptions.budgetMs`).
+ * - `stagnation` : N essais consécutifs sans amélioration du meilleur candidat
+ *   (voir `RepartirOptions.essaisSansAmelioration`). L'échantillon a plafonné :
+ *   il reste probablement un groupe structurellement infaisable, poursuivre
+ *   coûterait cher sans rien changer.
  */
-export type ArretPrecoce = 'complet' | 'max-essais' | 'budget'
+export type ArretPrecoce = 'complet' | 'max-essais' | 'budget' | 'stagnation'
 
 export interface RepartirResultat {
   placement: PlacementItem[]
@@ -313,6 +334,13 @@ export function repartir(
   // Voir docstring `RepartirOptions.budgetMs` pour la justification.
   const budgetMs = options.budgetMs ?? 3000
   const budgetActif = Number.isFinite(budgetMs) && budgetMs > 0
+  // Palier de stagnation : nb d'essais consécutifs sans amélioration
+  // avant abandon. Défaut 50 — mesuré empiriquement sur les paliers
+  // volumétriques : les améliorations naturelles arrivent dans les
+  // 5-15 premiers essais, au-delà de 50 sans progrès le meilleur est
+  // fixé. Voir docstring `RepartirOptions.essaisSansAmelioration`.
+  const essaisSansAmelioration = options.essaisSansAmelioration ?? 50
+  const stagnationActive = Number.isFinite(essaisSansAmelioration) && essaisSansAmelioration > 0
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now()
   const rng = makeRng(options.seed ?? 1)
   const reg = options.registre
@@ -437,6 +465,10 @@ export function repartir(
   let best: Best | null = null
   let essaisExecutes = 0
   let arret: ArretPrecoce = 'max-essais'
+  // Compteur d'essais consécutifs sans amélioration du meilleur candidat.
+  // Réinitialisé à 0 dès qu'un essai fait progresser `best`. Voir usage
+  // plus bas + docstring `RepartirOptions.essaisSansAmelioration`.
+  let essaisSansProgres = 0
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now())
 
   for (let essai = 0; essai < maxEssais; essai++) {
@@ -531,6 +563,7 @@ export function repartir(
     // interrompu = on garde quand même le partiel pour éviter un crash
     // sur `best!` en aval).
     const acceptEssai = !budgetDepasseIntraEssai || best === null
+    let ameliore = false
     if (acceptEssai) {
       const complets = groupes.filter((g) => (e.plan.get(g.id)?.length ?? 0) >= cibleGroupe(g)).length
       const totalPosé = [...e.plan.values()].reduce((s, cs) => s + cs.length, 0)
@@ -546,6 +579,7 @@ export function repartir(
         (cand.complets === best.complets && cand.total === best.total && cand.etale > best.etale)
       ) {
         best = cand
+        ameliore = true
       }
     }
     essaisExecutes = essai + 1
@@ -556,6 +590,17 @@ export function repartir(
     if (best!.complets === total) {
       arret = 'complet'
       break
+    }
+    // Palier de stagnation : reset compteur si l'essai a amélioré `best`,
+    // sinon incrémente. Break dès que le palier est atteint — l'exploration
+    // suivante coûterait sans plus rien changer.
+    if (stagnationActive) {
+      if (ameliore) essaisSansProgres = 0
+      else essaisSansProgres++
+      if (essaisSansProgres >= essaisSansAmelioration) {
+        arret = 'stagnation'
+        break
+      }
     }
   }
 

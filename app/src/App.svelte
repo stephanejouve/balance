@@ -147,7 +147,7 @@
     diagnostics: ReturnType<typeof diagnostiquer>
     groupesPerdus: GroupeSansSalle[]
     duree_ms: number
-    arret_precoce: 'complet' | 'max-essais' | 'budget'
+    arret_precoce: 'complet' | 'max-essais' | 'budget' | 'stagnation'
     essais_executes: number
   }
   /**
@@ -1085,19 +1085,39 @@
         </div>
         <div><b>{solution.problemes.length}</b> problème(s) détecté(s)</div>
       </div>
-      {#if solution.arret_precoce === 'budget'}
+      {#if solution.arret_precoce !== 'complet'}
+        {@const nComplets = solution.couverture.filter((c) => c.obtenu >= c.cible).length}
+        {@const nTotal = inscriptions.groupes.length}
+        {@const nManquants = nTotal - nComplets}
         <div class="msg warn">
-          <b>Calcul interrompu à {Math.round(budgetMsCourant / 1000)} s pour ne pas geler l'écran.</b>
-          Solution partielle affichée — le solveur n'a pas exploré toutes les
-          combinaisons. Vous pouvez la conserver, ou relancer avec un budget étendu
-          si vous acceptez que l'onglet soit figé quelques secondes de plus.
-          <button
-            class="ghost mini-ajout"
-            onclick={() => { budgetMsCourant = Infinity; lancer() }}
-            disabled={calculEnCours}
-          >
-            Relancer sans limite de temps
-          </button>
+          {#if solution.arret_precoce === 'budget'}
+            <b>Calcul interrompu à {Math.round(budgetMsCourant / 1000)} s pour ne pas geler l'écran.</b>
+            {nComplets}/{nTotal} groupes complets après {solution.essais_executes}
+            essai{solution.essais_executes > 1 ? 's' : ''}. Le solveur n'a pas exploré
+            toutes les combinaisons.
+            <button
+              class="ghost mini-ajout"
+              onclick={() => { budgetMsCourant = Infinity; lancer() }}
+              disabled={calculEnCours}
+            >
+              Relancer sans limite de temps
+            </button>
+          {:else if solution.arret_precoce === 'stagnation'}
+            <b>{nManquants > 0 ? `${nManquants} groupe${nManquants > 1 ? 's non placés' : ' non placé'}` : 'Optimum atteint'}
+              après {solution.essais_executes} essais sans progrès.</b>
+            {#if nManquants > 0}
+              Le solveur a plafonné à {nComplets}/{nTotal} — probablement un ou
+              plusieurs groupes structurellement infaisables (voir « Pourquoi ça
+              bloque » ci-dessous et le contrôle en amont).
+            {:else}
+              Solution complète trouvée, essais supplémentaires jugés inutiles.
+            {/if}
+          {:else if solution.arret_precoce === 'max-essais'}
+            <b>{nManquants} groupe{nManquants > 1 ? 's non placés' : ' non placé'}
+              après épuisement des {solution.essais_executes} essais.</b>
+            Le solveur a plafonné à {nComplets}/{nTotal} — voir le diagnostic
+            « Pourquoi ça bloque » ci-dessous pour identifier ce qui bloque.
+          {/if}
         </div>
       {/if}
       {#if solution.problemes.length > 0}
