@@ -187,7 +187,7 @@ describe('construireCandidatExcel — candidat complet, une seule affectation', 
 
   it("un onglet en échec de lecture n'entre pas, même s'il est coché", () => {
     const actuel = insc({
-      groupes: [{ id: 'gExist', titre: 'G', auteur: '', style: '', tonalite: '', responsable_id: '', membres: [], postes_cherches: [], repetitions_deja_faites: 0 }],
+      groupes: [{ id: 'gExist', titre: 'G', auteur: '', style: '', tonalite: '', responsable_id: '', membres: [], postes_cherches: [], repetitions_deja_faites: 0, echeance: 'apero_mercredi' }],
     })
     const det = detection([{ nom: 'Liste', destination: 'liste', statut: 'echec' }], new Map())
     const sel: SelectionExcel = { ongletsCoches: new Set(['Liste']), destinationsManuelles: new Map() }
@@ -198,7 +198,7 @@ describe('construireCandidatExcel — candidat complet, une seule affectation', 
 
   it('Liste (remplace) écrase les groupes existants', () => {
     const actuel = insc({
-      groupes: [{ id: 'ancien', titre: 'Ancien', auteur: '', style: '', tonalite: '', responsable_id: '', membres: [], postes_cherches: [], repetitions_deja_faites: 0 }],
+      groupes: [{ id: 'ancien', titre: 'Ancien', auteur: '', style: '', tonalite: '', responsable_id: '', membres: [], postes_cherches: [], repetitions_deja_faites: 0, echeance: 'apero_mercredi' }],
     })
     const det = detection(
       [{ nom: 'Liste', destination: 'liste', statut: 'ok' }],
@@ -207,7 +207,7 @@ describe('construireCandidatExcel — candidat complet, une seule affectation', 
           'Liste',
           {
             destination: 'liste',
-            groupes: [{ id: 'nouveau', titre: 'Nouveau', auteur: '', style: '', tonalite: '', responsable_id: '', membres: [], postes_cherches: [], repetitions_deja_faites: 0 }],
+            groupes: [{ id: 'nouveau', titre: 'Nouveau', auteur: '', style: '', tonalite: '', responsable_id: '', membres: [], postes_cherches: [], repetitions_deja_faites: 0, echeance: 'apero_mercredi' }],
           },
         ],
       ]),

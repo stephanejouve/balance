@@ -154,6 +154,7 @@ export function migrerInscriptions(legacy: LegacyInscriptions, session_id: strin
       membres,
       postes_cherches: extrairePupitresCherches(g.cherche),
       repetitions_deja_faites: 0,
+      echeance: 'apero_mercredi' as const,
     }
   })
 

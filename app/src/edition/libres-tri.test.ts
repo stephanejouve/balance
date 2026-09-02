@@ -37,7 +37,7 @@ function inscriptions(): Inscriptions {
         ],
         postes_cherches: [],
         repetitions_deja_faites: 0,
-      },
+      echeance: 'apero_mercredi',},
       {
         id: 'g2',
         titre: 'Y',
@@ -48,7 +48,7 @@ function inscriptions(): Inscriptions {
         membres: [{ personne_id: 'julia', pupitre: 'chant' }],
         postes_cherches: [],
         repetitions_deja_faites: 0,
-      },
+      echeance: 'apero_mercredi',},
     ],
     imposes: [],
   }

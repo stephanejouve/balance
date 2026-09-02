@@ -262,6 +262,7 @@ describe('mentionsDepuisCandidat / analyserIdentitesCandidat — wire post-const
     groupes: [
       { id: 'g1', titre: 'Sables Mouvants', auteur: '', style: '', tonalite: '',
         responsable_id: '', postes_cherches: [], repetitions_deja_faites: 0,
+        echeance: 'apero_mercredi' as const,
         membres: [
           { personne_id: 'p1', pupitre: 'batterie' },
           { personne_id: 'p2', pupitre: 'guitare' },
@@ -310,6 +311,7 @@ describe('mentionsDepuisCandidat / analyserIdentitesCandidat — wire post-const
       groupes: [
         { id: 'g1', titre: 'M', auteur: '', style: '', tonalite: '',
           responsable_id: '', postes_cherches: [], repetitions_deja_faites: 0,
+          echeance: 'apero_mercredi' as const,
           membres: [
             { personne_id: 'p1', pupitre: 'chant' as const },
             { personne_id: 'p2', pupitre: 'batterie' as const },
@@ -333,6 +335,7 @@ describe('mentionsDepuisCandidat / analyserIdentitesCandidat — wire post-const
       groupes: [
         { id: 'g1', titre: 'X', auteur: '', style: '', tonalite: '',
           responsable_id: '', postes_cherches: [], repetitions_deja_faites: 0,
+          echeance: 'apero_mercredi' as const,
           membres: [
             { personne_id: 'p1', pupitre: 'chant' },
             { personne_id: 'inexistant', pupitre: 'batterie' },

@@ -39,7 +39,7 @@ describe('cas J — pupitre contredit (alerte)', () => {
       groupes: [
         { id: 'g1', titre: 'Ligne de Fuite', auteur: '', style: '', tonalite: '',
           responsable_id: '', membres: [{ personne_id: 'clara', pupitre: 'batterie' }],
-          postes_cherches: [], repetitions_deja_faites: 0 },
+          postes_cherches: [], repetitions_deja_faites: 0, echeance: 'apero_mercredi' },
       ],
     }
     const alertes = detecterAlertesCoherence(insc)
@@ -70,7 +70,7 @@ describe('cas K — pupitre additionnel légitime (aucune alerte)', () => {
       groupes: [
         { id: 'g1', titre: 'Petit Matin', auteur: '', style: '', tonalite: '',
           responsable_id: '', membres: [{ personne_id: 'estelle', pupitre: 'piano' }],
-          postes_cherches: [], repetitions_deja_faites: 0 },
+          postes_cherches: [], repetitions_deja_faites: 0, echeance: 'apero_mercredi' },
       ],
     }
     expect(detecterAlertesCoherence(insc)).toEqual([])
@@ -93,7 +93,7 @@ describe('cas O — polyvalence + pupitre non déclaré (signalement)', () => {
             { personne_id: 'iris', pupitre: 'chant' },
             { personne_id: 'iris', pupitre: 'guitare' },
           ],
-          postes_cherches: [], repetitions_deja_faites: 0 },
+          postes_cherches: [], repetitions_deja_faites: 0, echeance: 'apero_mercredi' },
       ],
     }
     const alertes = detecterAlertesCoherence(insc)
@@ -195,7 +195,7 @@ describe('cas I — responsable non cité (signalement) + stagiaire orphelin', (
       ],
       groupes: [
         { id: 'g', titre: 'Encore Sans Titre', auteur: '', style: '', tonalite: '',
-          responsable_id: 'amandine', membres: [], postes_cherches: [], repetitions_deja_faites: 0 },
+          responsable_id: 'amandine', membres: [], postes_cherches: [], repetitions_deja_faites: 0, echeance: 'apero_mercredi' },
       ],
     }
     const alertes = detecterAlertesCoherence(insc)
@@ -261,7 +261,7 @@ describe('cas N — nom cité dans un morceau, absent de Stagiaires (signalement
       groupes: [
         { id: 'g', titre: 'Sous le Tilleul', auteur: '', style: '', tonalite: '',
           responsable_id: '', membres: [{ personne_id: 'olivier-x', pupitre: 'guitare' }],
-          postes_cherches: [], repetitions_deja_faites: 0 },
+          postes_cherches: [], repetitions_deja_faites: 0, echeance: 'apero_mercredi' },
       ],
     }
     // stagiaires_ids vide → Olivier n'est pas dans les officiels → signalement
@@ -279,7 +279,7 @@ describe('cas N — nom cité dans un morceau, absent de Stagiaires (signalement
       groupes: [
         { id: 'g', titre: 'M', auteur: '', style: '', tonalite: '',
           responsable_id: '', membres: [{ personne_id: 'inconnu', pupitre: 'chant' }],
-          postes_cherches: [], repetitions_deja_faites: 0 },
+          postes_cherches: [], repetitions_deja_faites: 0, echeance: 'apero_mercredi' },
       ],
     }
     expect(detecterAlertesCoherence(insc).filter((a) => a.type === 'nom_cite_absent_stagiaires')).toEqual([])
@@ -294,7 +294,7 @@ describe('cas P — morceau sans aucun membre (signalement)', () => {
       ...inscriptionsVides(),
       groupes: [
         { id: 'g', titre: 'Encore Sans Titre', auteur: '', style: '', tonalite: '',
-          responsable_id: '', membres: [], postes_cherches: [], repetitions_deja_faites: 0 },
+          responsable_id: '', membres: [], postes_cherches: [], repetitions_deja_faites: 0, echeance: 'apero_mercredi' },
       ],
     }
     const alertes = detecterAlertesCoherence(insc)
@@ -310,7 +310,7 @@ describe('cas P — morceau sans aucun membre (signalement)', () => {
       groupes: [
         { id: 'g', titre: 'Encore Sans Titre', auteur: '', style: '', tonalite: '',
           responsable_id: '', membres: [],
-          postes_cherches: ['chant', 'piano'], repetitions_deja_faites: 0 },
+          postes_cherches: ['chant', 'piano'], repetitions_deja_faites: 0, echeance: 'apero_mercredi' },
       ],
     }
     expect(detecterAlertesCoherence(insc).filter((a) => a.type === 'morceau_vide')).toHaveLength(1)

@@ -543,6 +543,7 @@
       membres: [],
       postes_cherches: [],
       repetitions_deja_faites: 0,
+      echeance: 'apero_mercredi',
     })
     resetSolution()
   }

@@ -43,6 +43,14 @@ MODE_EMPLOI = [
     ("mardi 14:30 - 16:00", "Jour et plage horaire seuls", False),
     ("convalescence", "Texte libre conservé sans horaire spécifique (motif pour relecture humaine)", False),
     (None, None, False),
+    ("— Onglet Stagiaires : intervenants inclus —", None, True),
+    (
+        "Bertrand au piano d'un morceau de stagiaires",
+        "L'onglet Stagiaires accueille toutes les personnes du stage, intervenants compris. "
+        "Un intervenant qui vient jouer dans un morceau se déclare ici comme les autres, avec son pupitre.",
+        False,
+    ),
+    (None, None, False),
     ("— Onglet Proposés : concert du vendredi —", None, True),
     ("1 ligne = 1 séance", "Plusieurs séances du même morceau : autant de lignes avec le même titre", False),
     ("Date : 2026-08-28 ou 28/08/2026", "ISO ou format FR — les deux sont tolérés à l'import", False),
@@ -62,17 +70,6 @@ MODE_EMPLOI = [
 ]
 
 
-def _resp_par_morceau(seances: list[Seance]) -> dict[str, str | None]:
-    """Extrait le responsable de chaque morceau (première occurrence non-vide)."""
-    out: dict[str, str | None] = {}
-    for s in seances:
-        if s.morceau not in out and s.responsable:
-            out[s.morceau] = s.responsable
-        elif s.morceau not in out:
-            out[s.morceau] = None
-    return out
-
-
 def ecrire_xlsx(seances: list[Seance], chemin_sortie: Path) -> None:
     """Écrit le classeur Balance dans `chemin_sortie` à partir des séances."""
     wb = Workbook()
@@ -83,10 +80,11 @@ def ecrire_xlsx(seances: list[Seance], chemin_sortie: Path) -> None:
     for i, col in enumerate(COLONNES_LISTE, start=1):
         cell = ws_liste.cell(row=1, column=i, value=col)
         cell.font = gras
-    resp_map = _resp_par_morceau(seances)
-    for r, morceau in enumerate(sorted(resp_map), start=2):
-        ws_liste.cell(row=r, column=1, value=morceau)
-        ws_liste.cell(row=r, column=5, value=resp_map[morceau])
+    # Onglet Liste laissé vide : le PDF n'apporte que les morceaux
+    # d'intervenants (grille du stage) qui vivent dans Proposés. Écrire
+    # ces morceaux ici créait des Groupe fantômes que le solveur essayait
+    # de placer en double des Impose. Liste est destinée aux stagiaires,
+    # que l'utilisateur y saisit après import.
 
     ws_stag = wb.create_sheet("Stagiaires")
     for i, col in enumerate(COLONNES_STAGIAIRES, start=1):

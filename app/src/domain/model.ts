@@ -288,6 +288,19 @@ export const MembreGroupe = z.object({
 })
 export type MembreGroupe = z.infer<typeof MembreGroupe>
 
+/**
+ * Échéance d'un morceau de stagiaires — pour quel concert il est monté.
+ * - `apero_mercredi` : cas nominal, montage dimanche → mercredi 14h, joué à l'apéro.
+ * - `restitution_vendredi` : exception, morceau ciblé pour la restitution vendredi
+ *   (« ce morceau est particulièrement au point, on le garde pour vendredi »).
+ *
+ * Les morceaux d'intervenants (`Impose`) sont implicitement `restitution_vendredi` :
+ * pas de champ symétrique tant que le mouvement inverse (intervenant → apéro) reste
+ * hypothétique. Migration triviale si l'invariant tombe.
+ */
+export const Echeance = z.enum(['apero_mercredi', 'restitution_vendredi'])
+export type Echeance = z.infer<typeof Echeance>
+
 export const Groupe = z.object({
   id: z.string().min(1),
   titre: z.string().min(1),
@@ -303,6 +316,13 @@ export const Groupe = z.object({
    * créneaux supplémentaires pour ce groupe. Défaut 0 = rien de fait.
    */
   repetitions_deja_faites: z.number().int().min(0).default(0),
+  /**
+   * Défaut `apero_mercredi` — cas nominal des morceaux de stagiaires. Éditable
+   * en UI pour le mouvement apéro → vendredi (« morceau assez au point pour
+   * la restitution »). Les inscriptions persistées avant l'ajout du champ
+   * héritent du défaut automatiquement via Zod.
+   */
+  echeance: Echeance.default('apero_mercredi'),
 })
 export type Groupe = z.infer<typeof Groupe>
 
