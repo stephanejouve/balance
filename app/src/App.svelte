@@ -2,7 +2,6 @@
   import { genererCreneaux } from './domain/grille'
   import { parseLegacyInscriptions } from './domain/legacy'
   import { migrerInscriptions } from './domain/migrate'
-  import type { Inscriptions } from './domain/model'
   import {
     Lieu,
     Session,
@@ -11,8 +10,8 @@
     nouvelIdImpose,
     nouvelIdPersonne,
     nouvelIdSalle,
+    type Inscriptions,
   } from './domain/model'
-  import { attribuerSalles } from './engine/allocate-rooms'
   import { chargeParMusicien } from './engine/charge'
   import Contraintes from './edition/Contraintes.svelte'
   import ImposesEdit from './edition/Imposes.svelte'
@@ -35,14 +34,14 @@
   import { ordonnerConcert } from './engine/concert'
   import type { EtapeConcert } from './engine/concert'
   import type { IdContrainte } from './engine/contraintes'
-  import { REGISTRE_TOUT, registrePersonnalise } from './engine/contraintes'
-  import { analyserInfaisabilite, diagnostiquer } from './engine/diagnostic'
+  import { registrePersonnalise } from './engine/contraintes'
+  import { analyserInfaisabilite } from './engine/diagnostic'
   import { preparerInscriptionsPourSolveur } from './engine/fonctions-activees'
   import { enrichirIndispos } from './engine/imposes'
   import { ciblesValides } from './engine/manuel'
   import { suggererRenforts } from './engine/renforts'
   import { repartir } from './engine/solver'
-  import type { Assignation, GroupeSansSalle, Probleme } from './engine/types'
+  import type { Assignation } from './engine/types'
   import { couverture, verifier } from './engine/verify'
   import { csvParGroupe, csvParMusicien, csvParSalle, telechargerCsv } from './io/csv'
   import { exporterClasseurExcel } from './io/excel-export'
@@ -58,13 +57,14 @@
   import { MAPPING_LISTE_DEFAUT } from './io/liste-adapter'
   import { MAPPING_PROPOSES_DEFAUT } from './io/proposes-adapter'
   import { MAPPING_STAGIAIRES_DEFAUT } from './io/stagiaires-adapter'
-  import { CONTRAINTES_ACTIVES_DEFAUT, LIBELLE_CONTRAINTE } from './stores/app-config'
+  import { LIBELLE_CONTRAINTE } from './stores/app-config'
   import {
     calculerConducteurMinuté,
     calculerRepartitionStyles,
     couleurStyle,
     statsConducteur,
   } from './stores/app-conducteur'
+  import { resetFigees, resetSolution, runLancer, solveurStore } from './stores/solveur-store.svelte'
   import fixture from './fixtures/apero_mercredi.json'
 
   /* --- Données de démarrage --------------------------------------------- */
@@ -140,25 +140,6 @@
   let bilan = $state<BilanImport | null>(null)
   let chargementImport = $state<boolean>(false)
 
-  type Solution = {
-    assignations: Assignation[]
-    problemes: Probleme[]
-    couverture: Array<{ groupe_id: string; obtenu: number; cible: number; min: number }>
-    diagnostics: ReturnType<typeof diagnostiquer>
-    groupesPerdus: GroupeSansSalle[]
-    duree_ms: number
-    arret_precoce: 'complet' | 'heuristique' | 'max-essais' | 'budget' | 'stagnation'
-    essais_executes: number
-  }
-  /**
-   * Budget wall-clock du solveur — par défaut 3000 ms (garde-fou anti-gel
-   * Chrome, task #51). L'utilisateur peut l'étendre via le bouton
-   * « relancer plus longtemps » qui passe à Infinity — opt-in explicite
-   * qui accepte le gel possible pour un calcul plus poussé.
-   */
-  let budgetMsCourant = $state<number>(3000)
-  let solution = $state<Solution | null>(null)
-  let calculEnCours = $state(false)
   let vue = $state<'groupes' | 'salles' | 'musiciens' | 'carte' | 'concert' | 'quotas'>('groupes')
   /** Deltas d'exploration par pupitre (dans la vue Quotas). */
   let deltasQuotas = $state<Record<string, number>>({})
@@ -176,11 +157,8 @@
   let seuilChargeJour = $state(4)
   /** Si vrai, la grille écarte les créneaux dont l'heure de début est passée. */
   let filtrerPasse = $state(false)
-  /** Clés `groupe_id|creneau_id` des assignations à préserver lors des recalculs. */
-  let figeesKeys = $state(new Set<string>())
   /** Assignation en cours de déplacement (bascule la vue Par salle en mode cibles). */
   let deplacementEnCours = $state<Assignation | null>(null)
-  let contraintesActives = $state<Record<IdContrainte, boolean>>({ ...CONTRAINTES_ACTIVES_DEFAUT })
 
   const creneaux = $derived.by(() => {
     try {
@@ -215,7 +193,7 @@
     sourceLabel = 'démo · apero_mercredi.json'
     warningsImport = []
     erreurImport = ''
-    solution = null
+    resetSolution()
     modeDemo = true
   }
   function nouvelleSessionVide() {
@@ -257,8 +235,8 @@
     sourceLabel = `nouvelle session dans « ${lieu.nom} »`
     warningsImport = []
     erreurImport = ''
-    solution = null
-    figeesKeys = new Set()
+    resetSolution()
+    resetFigees()
     modeDemo = false
   }
 
@@ -351,7 +329,7 @@
     bilan = b
     warningsImport = b.warnings
     sourceLabel = sl
-    solution = null
+    resetSolution()
     modeDemo = false
     detection = null
     importEnAttente = null
@@ -378,8 +356,8 @@
     }
     if (patch.inscriptions) inscriptions = patch.inscriptions
     if (patch.contraintesActives) {
-      contraintesActives = {
-        ...contraintesActives,
+      solveurStore.contraintesActives = {
+        ...solveurStore.contraintesActives,
         ...(patch.contraintesActives as Record<IdContrainte, boolean>),
       }
     }
@@ -391,7 +369,7 @@
       onglets_ignores: [],
       warnings: detection.warningsGlobaux,
     }
-    solution = null
+    resetSolution()
     modeDemo = false
     detection = null
   }
@@ -443,84 +421,40 @@
   }
 
   async function lancer() {
-    calculEnCours = true
-    await new Promise((r) => setTimeout(r, 20))
-    const t0 = performance.now()
-    const ids = (Object.entries(contraintesActives) as [IdContrainte, boolean][])
-      .filter(([, v]) => v)
-      .map(([k]) => k)
-    const registre = registrePersonnalise(ids)
-    // Récupère les assignations figées depuis la solution précédente
-    const figees = (solution?.assignations ?? []).filter((a) => figeesKeys.has(`${a.groupe_id}|${a.creneau_id}`))
-    // Cascade fonctions activées → solveur : quand `lieu.fonctionsActivees.proposes`
-    // est décoché, les imposés sont retirés avant `enrichirIndispos` (sinon le
-    // solveur poserait des contraintes invisibles côté UI, cf. brief §
-    // « décoché doit signifier n'entre pas dans le calcul »).
-    // Puis on enrichit les indispos des personnes avec les séances des
-    // imposés restants, pour que le solveur les évite automatiquement.
-    const inscFiltrees = preparerInscriptionsPourSolveur(inscriptions, lieu)
-    const inscEnrichies = enrichirIndispos(inscFiltrees)
-    const resRepartir = repartir(session, lieu, inscEnrichies, creneaux, {
-      seed: 42,
-      registre,
-      figees,
-      budgetMs: budgetMsCourant,
-    })
-    const { placement } = resRepartir
-    const { assignations, groupesPerdus } = attribuerSalles(
-      placement,
-      lieu,
-      inscEnrichies,
-      creneaux,
-      { figees, registre },
-    )
-    const problemes = verifier(session, lieu, inscEnrichies, creneaux, assignations, registre)
-    const cov = couverture(session, inscEnrichies, assignations)
-    const diagnostics = diagnostiquer(session, inscFiltrees, creneaux, placement)
-    solution = {
-      assignations,
-      problemes,
-      couverture: cov,
-      diagnostics,
-      groupesPerdus,
-      duree_ms: Math.round(performance.now() - t0),
-      arret_precoce: resRepartir.arret_precoce,
-      essais_executes: resRepartir.essais_executes,
-    }
+    await runLancer({ session, lieu, inscriptions, creneaux })
     ordreConducteur = ordonnerConcert(inscriptions.groupes).etapes
-    calculEnCours = false
   }
 
   function exporterGroupes() {
-    if (!solution) return
+    if (!solveurStore.solution) return
     telechargerCsv(
       'balance_par_groupe.csv',
-      csvParGroupe(session, lieu, inscriptions, creneaux, solution.assignations),
+      csvParGroupe(session, lieu, inscriptions, creneaux, solveurStore.solution.assignations),
     )
   }
   function exporterSalles() {
-    if (!solution) return
+    if (!solveurStore.solution) return
     telechargerCsv(
       'balance_par_salle.csv',
-      csvParSalle(lieu, inscriptions, creneaux, solution.assignations),
+      csvParSalle(lieu, inscriptions, creneaux, solveurStore.solution.assignations),
     )
   }
   function exporterMusiciens() {
-    if (!solution) return
+    if (!solveurStore.solution) return
     telechargerCsv(
       'balance_par_musicien.csv',
-      csvParMusicien(lieu, inscriptions, creneaux, solution.assignations),
+      csvParMusicien(lieu, inscriptions, creneaux, solveurStore.solution.assignations),
     )
   }
   async function exporterXlsx() {
-    if (!solution) return
+    if (!solveurStore.solution) return
     await exporterClasseurExcel(
       'balance.xlsx',
       session,
       lieu,
       inscriptions,
       creneaux,
-      solution.assignations,
+      solveurStore.solution.assignations,
     )
   }
 
@@ -532,7 +466,7 @@
       lieu,
       session,
       inscriptions,
-      contraintesActives,
+      contraintesActives: solveurStore.contraintesActives,
     }
     const blob = new Blob([JSON.stringify(etat, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -557,11 +491,11 @@
       restrictions: [],
       actif: true,
     })
-    solution = null
+    resetSolution()
   }
   function supprimerSalle(i: number) {
     lieu.salles.splice(i, 1)
-    solution = null
+    resetSolution()
   }
   function ajouterRestriction(salleIdx: number) {
     lieu.salles[salleIdx].restrictions.push({
@@ -571,11 +505,11 @@
       contrainte: 'interdit',
       motif: '',
     })
-    solution = null
+    resetSolution()
   }
   function supprimerRestriction(salleIdx: number, resIdx: number) {
     lieu.salles[salleIdx].restrictions.splice(resIdx, 1)
-    solution = null
+    resetSolution()
   }
 
   /* --- Édition Session --------------------------------------------------- */
@@ -589,11 +523,11 @@
       salles: [],
       bloque: false,
     })
-    solution = null
+    resetSolution()
   }
   function supprimerRegle(i: number) {
     session.grille.splice(i, 1)
-    solution = null
+    resetSolution()
   }
 
   /* --- Édition Inscriptions --------------------------------------------- */
@@ -610,12 +544,12 @@
       postes_cherches: [],
       repetitions_deja_faites: 0,
     })
-    solution = null
+    resetSolution()
   }
   function supprimerGroupe(i: number) {
     if (!confirm(`Supprimer « ${inscriptions.groupes[i].titre} » ?`)) return
     inscriptions.groupes.splice(i, 1)
-    solution = null
+    resetSolution()
   }
   /** Affecte un renfort à un groupe : ajoute aux membres, retire du postes_cherches. */
   function affecterRenfort(groupe_id: string, personne_id: string, pupitre: string) {
@@ -624,7 +558,7 @@
     g.membres.push({ personne_id, pupitre })
     const idx = g.postes_cherches.indexOf(pupitre)
     if (idx >= 0) g.postes_cherches.splice(idx, 1)
-    solution = null
+    resetSolution()
   }
   /** Retire un membre d'un groupe. Si le pupitre n'est plus tenu, l'ajoute à `postes_cherches`. */
   function retirerMembre(groupe_id: string, membreIdx: number) {
@@ -641,7 +575,7 @@
     if (!encore && !g.postes_cherches.includes(m.pupitre)) {
       g.postes_cherches.push(m.pupitre)
     }
-    solution = null
+    resetSolution()
   }
 
   /* --- Édition Personnes ------------------------------------------------- */
@@ -655,7 +589,7 @@
       role: 'musicien',
       indispos: [],
     })
-    solution = null
+    resetSolution()
   }
   function supprimerPersonne(pid: string) {
     const p = inscriptions.personnes.find((x) => x.id === pid)
@@ -673,19 +607,19 @@
       }
     }
     inscriptions.personnes = inscriptions.personnes.filter((x) => x.id !== pid)
-    solution = null
+    resetSolution()
   }
   function ajouterInstrument(pid: string) {
     const p = inscriptions.personnes.find((x) => x.id === pid)
     if (!p) return
     p.instruments.push({ pupitre: 'chant', lourd: false })
-    solution = null
+    resetSolution()
   }
   function supprimerInstrument(pid: string, i: number) {
     const p = inscriptions.personnes.find((x) => x.id === pid)
     if (!p) return
     p.instruments.splice(i, 1)
-    solution = null
+    resetSolution()
   }
 
   /* --- Édition Indispos personnes ---------------------------------------- */
@@ -700,13 +634,13 @@
       roles: [],
       motif: '',
     })
-    solution = null
+    resetSolution()
   }
   function supprimerIndispo(pid: string, i: number) {
     const p = inscriptions.personnes.find((x) => x.id === pid)
     if (!p) return
     p.indispos.splice(i, 1)
-    solution = null
+    resetSolution()
   }
   const nbIndispoTotal = $derived(
     inscriptions.personnes.reduce((s, p) => s + p.indispos.length, 0),
@@ -730,12 +664,12 @@
       membres: [],
       seances: [],
     })
-    solution = null
+    resetSolution()
   }
   function supprimerImpose(i: number) {
     if (!confirm(`Supprimer l'imposé « ${inscriptions.imposes[i].morceau} » ?`)) return
     inscriptions.imposes.splice(i, 1)
-    solution = null
+    resetSolution()
   }
   function ajouterSeance(imposeIdx: number) {
     inscriptions.imposes[imposeIdx].seances.push({
@@ -743,11 +677,11 @@
       debut: '14:00',
       fin: '15:30',
     })
-    solution = null
+    resetSolution()
   }
   function supprimerSeance(imposeIdx: number, seanceIdx: number) {
     inscriptions.imposes[imposeIdx].seances.splice(seanceIdx, 1)
-    solution = null
+    resetSolution()
   }
 
   /* --- Ajustement manuel : figer/dégeler une répé ------------------------ */
@@ -756,26 +690,26 @@
     return `${a.groupe_id}|${a.creneau_id}`
   }
   function estFigee(a: Assignation): boolean {
-    return figeesKeys.has(keyFigee(a))
+    return solveurStore.figeesKeys.has(keyFigee(a))
   }
   function toggleFigee(a: Assignation) {
     const k = keyFigee(a)
-    const next = new Set(figeesKeys)
+    const next = new Set(solveurStore.figeesKeys)
     if (next.has(k)) next.delete(k)
     else next.add(k)
-    figeesKeys = next
+    solveurStore.figeesKeys = next
   }
   function toutDegeler() {
-    figeesKeys = new Set()
+    resetFigees()
   }
 
   /* --- Ajustement manuel : déplacer une répé ----------------------------- */
 
   const ciblesDeplacement = $derived.by(() => {
-    if (!deplacementEnCours || !solution) return new Set<string>()
+    if (!deplacementEnCours || !solveurStore.solution) return new Set<string>()
     const g = inscriptions.groupes.find((x) => x.id === deplacementEnCours!.groupe_id)
     if (!g) return new Set<string>()
-    const autres = solution.assignations.filter(
+    const autres = solveurStore.solution.assignations.filter(
       (a) => !(a.groupe_id === deplacementEnCours!.groupe_id && a.creneau_id === deplacementEnCours!.creneau_id),
     )
     const cibles = ciblesValides(
@@ -800,21 +734,21 @@
   }
 
   function appliquerDeplacement(creneauId: string, salleId: string) {
-    if (!deplacementEnCours || !solution) return
+    if (!deplacementEnCours || !solveurStore.solution) return
     if (!estCibleValide(creneauId, salleId)) return
     const orig = deplacementEnCours
     // Réassigne la solution en modifiant l'assignation correspondante
-    solution.assignations = solution.assignations.map((a) =>
+    solveurStore.solution.assignations = solveurStore.solution.assignations.map((a) =>
       a.groupe_id === orig.groupe_id && a.creneau_id === orig.creneau_id
         ? { ...a, creneau_id: creneauId, salle_id: salleId }
         : a,
     )
     // Si l'assignation était figée, met à jour la clé
-    if (figeesKeys.has(keyFigee(orig))) {
-      const next = new Set(figeesKeys)
+    if (solveurStore.figeesKeys.has(keyFigee(orig))) {
+      const next = new Set(solveurStore.figeesKeys)
       next.delete(keyFigee(orig))
       next.add(`${orig.groupe_id}|${creneauId}`)
-      figeesKeys = next
+      solveurStore.figeesKeys = next
     }
     // Recalcule couverture + vérification pour l'affichage post-hoc
     // (même cascade fonctionsActivees que dans `lancer()`).
@@ -823,16 +757,16 @@
       lieu,
       enrichirIndispos(preparerInscriptionsPourSolveur(inscriptions, lieu)),
       creneaux,
-      solution.assignations,
+      solveurStore.solution.assignations,
       registrePersonnalise(
-        (Object.entries(contraintesActives) as [IdContrainte, boolean][])
+        (Object.entries(solveurStore.contraintesActives) as [IdContrainte, boolean][])
           .filter(([, v]) => v)
           .map(([k]) => k),
       ),
     )
-    const cov = couverture(session, inscriptions, solution.assignations)
-    solution.problemes = problemes
-    solution.couverture = cov
+    const cov = couverture(session, inscriptions, solveurStore.solution.assignations)
+    solveurStore.solution.problemes = problemes
+    solveurStore.solution.couverture = cov
     deplacementEnCours = null
   }
 
@@ -844,10 +778,10 @@
 
   /** Pour la case libre inspectée, liste les groupes qui pourraient s'y insérer. */
   const candidatsCase = $derived.by(() => {
-    if (!inspecteCase || !solution) return []
+    if (!inspecteCase || !solveurStore.solution) return []
     const c = creneauxParId.get(inspecteCase.creneauId)
     if (!c) return []
-    const autres = solution.assignations.filter(
+    const autres = solveurStore.solution.assignations.filter(
       (a) => !(a.creneau_id === inspecteCase!.creneauId && a.salle_id === inspecteCase!.salleId),
     )
     const out: Array<{ groupe_id: string; titre: string }> = []
@@ -883,39 +817,39 @@
    * (nouvelle séance = potentiels nouveaux problèmes / couverture élargie).
    */
   function ajouterSeanceDepuisCarte(groupe_id: string, creneau_id: string, salle_id: string) {
-    if (!solution) return
+    if (!solveurStore.solution) return
     // Idempotence : si l'assignation existe déjà (case déjà occupée par ce
     // groupe), on ne l'ajoute pas 2 fois — la fige juste si pas déjà figée.
     const cle = `${groupe_id}|${creneau_id}`
-    const existe = solution.assignations.some(
+    const existe = solveurStore.solution.assignations.some(
       (a) => a.groupe_id === groupe_id && a.creneau_id === creneau_id && a.salle_id === salle_id,
     )
     if (!existe) {
-      solution.assignations = [
-        ...solution.assignations,
+      solveurStore.solution.assignations = [
+        ...solveurStore.solution.assignations,
         { groupe_id, creneau_id, salle_id },
       ]
     }
-    if (!figeesKeys.has(cle)) {
-      const next = new Set(figeesKeys)
+    if (!solveurStore.figeesKeys.has(cle)) {
+      const next = new Set(solveurStore.figeesKeys)
       next.add(cle)
-      figeesKeys = next
+      solveurStore.figeesKeys = next
     }
     const problemes = verifier(
       session,
       lieu,
       enrichirIndispos(preparerInscriptionsPourSolveur(inscriptions, lieu)),
       creneaux,
-      solution.assignations,
+      solveurStore.solution.assignations,
       registrePersonnalise(
-        (Object.entries(contraintesActives) as [IdContrainte, boolean][])
+        (Object.entries(solveurStore.contraintesActives) as [IdContrainte, boolean][])
           .filter(([, v]) => v)
           .map(([k]) => k),
       ),
     )
-    const cov = couverture(session, inscriptions, solution.assignations)
-    solution.problemes = problemes
-    solution.couverture = cov
+    const cov = couverture(session, inscriptions, solveurStore.solution.assignations)
+    solveurStore.solution.problemes = problemes
+    solveurStore.solution.couverture = cov
     inspecteCase = null // ferme le panneau candidats après affectation
   }
 </script>
@@ -973,7 +907,7 @@
     onSupprimerPersonne={supprimerPersonne}
     onAjouterInstrument={ajouterInstrument}
     onSupprimerInstrument={supprimerInstrument}
-    onInvalider={() => (solution = null)}
+    onInvalider={resetSolution}
   />
 
   <InscriptionsEdit
@@ -983,7 +917,7 @@
     onAjouterGroupe={ajouterGroupe}
     onSupprimerGroupe={supprimerGroupe}
     onRetirerMembre={retirerMembre}
-    onInvalider={() => (solution = null)}
+    onInvalider={resetSolution}
   />
 
   <IndisposEdit
@@ -992,7 +926,7 @@
     {nbIndispoTotal}
     onAjouterIndispo={ajouterIndispo}
     onSupprimerIndispo={supprimerIndispo}
-    onInvalider={() => (solution = null)}
+    onInvalider={resetSolution}
   />
 
   <ImposesEdit
@@ -1002,7 +936,7 @@
     onSupprimerImpose={supprimerImpose}
     onAjouterSeance={ajouterSeance}
     onSupprimerSeance={supprimerSeance}
-    onInvalider={() => (solution = null)}
+    onInvalider={resetSolution}
   />
 
   <LieuEdit
@@ -1013,7 +947,7 @@
     onSupprimerSalle={supprimerSalle}
     onAjouterRestriction={ajouterRestriction}
     onSupprimerRestriction={supprimerRestriction}
-    onInvalider={() => (solution = null)}
+    onInvalider={resetSolution}
   />
 
   <SessionEdit
@@ -1021,16 +955,16 @@
     nbCreneaux={creneaux.length}
     onAjouterRegle={ajouterRegle}
     onSupprimerRegle={supprimerRegle}
-    onInvalider={() => (solution = null)}
+    onInvalider={resetSolution}
   />
 
   <Contraintes
-    {contraintesActives}
+    contraintesActives={solveurStore.contraintesActives}
     libelles={LIBELLE_CONTRAINTE}
-    onToggle={(id, actif) => (contraintesActives = { ...contraintesActives, [id]: actif })}
+    onToggle={(id, actif) => (solveurStore.contraintesActives = { ...solveurStore.contraintesActives, [id]: actif })}
     onReplace={(nouv) => {
-      contraintesActives = nouv
-      solution = null
+      solveurStore.contraintesActives = nouv
+      resetSolution()
     }}
   />
 
@@ -1073,28 +1007,28 @@
       <input type="checkbox" bind:checked={filtrerPasse} />
       <span>Ne pas placer de répétitions dans le passé (recalcul en cours de session)</span>
     </label>
-    <button class="big" onclick={lancer} disabled={calculEnCours}>
-      {calculEnCours ? 'Recherche en cours…' : solution ? 'Relancer la répartition' : 'Lancer la répartition'}
+    <button class="big" onclick={lancer} disabled={solveurStore.calculEnCours}>
+      {solveurStore.calculEnCours ? 'Recherche en cours…' : solveurStore.solution ? 'Relancer la répartition' : 'Lancer la répartition'}
     </button>
-    {#if solution}
+    {#if solveurStore.solution}
       <div class="stats">
         <div>
-          <b>{solution.couverture.filter((c) => c.obtenu >= c.cible).length}/{inscriptions.groupes.length}</b>
+          <b>{solveurStore.solution.couverture.filter((c) => c.obtenu >= c.cible).length}/{inscriptions.groupes.length}</b>
           groupes complets
         </div>
-        <div><b>{solution.assignations.length}</b> répétitions posées</div>
+        <div><b>{solveurStore.solution.assignations.length}</b> répétitions posées</div>
         <div>
-          <b>{solution.duree_ms} ms</b> de calcul
-          <span class="ink-soft">({solution.essais_executes} essai{solution.essais_executes > 1 ? 's' : ''})</span>
+          <b>{solveurStore.solution.duree_ms} ms</b> de calcul
+          <span class="ink-soft">({solveurStore.solution.essais_executes} essai{solveurStore.solution.essais_executes > 1 ? 's' : ''})</span>
         </div>
-        <div><b>{solution.problemes.length}</b> problème(s) détecté(s)</div>
+        <div><b>{solveurStore.solution.problemes.length}</b> problème(s) détecté(s)</div>
       </div>
-      {#if solution.arret_precoce !== 'complet'}
-        {@const nComplets = solution.couverture.filter((c) => c.obtenu >= c.cible).length}
+      {#if solveurStore.solution.arret_precoce !== 'complet'}
+        {@const nComplets = solveurStore.solution.couverture.filter((c) => c.obtenu >= c.cible).length}
         {@const nTotal = inscriptions.groupes.length}
         {@const nManquants = nTotal - nComplets}
         <div class="msg warn">
-          {#if solution.arret_precoce === 'heuristique'}
+          {#if solveurStore.solution.arret_precoce === 'heuristique'}
             <!-- Mode deterministic (défaut) — 1 essai heuristique, pas de
                  mention de temps/essais qui n'ont pas de sens ici. -->
             <b>Placement heuristique : {nComplets}/{nTotal} groupes complets.</b>
@@ -1102,21 +1036,21 @@
             Voir « Pourquoi ça bloque » ci-dessous pour identifier ce qui
             empêche d'aller plus loin (surcharge musicien, contraintes,
             groupes structurellement infaisables).
-          {:else if solution.arret_precoce === 'budget'}
-            <b>Calcul interrompu à {Math.round(budgetMsCourant / 1000)} s pour ne pas geler l'écran.</b>
-            {nComplets}/{nTotal} groupes complets après {solution.essais_executes}
-            essai{solution.essais_executes > 1 ? 's' : ''}. Le solveur n'a pas exploré
+          {:else if solveurStore.solution.arret_precoce === 'budget'}
+            <b>Calcul interrompu à {Math.round(solveurStore.budgetMsCourant / 1000)} s pour ne pas geler l'écran.</b>
+            {nComplets}/{nTotal} groupes complets après {solveurStore.solution.essais_executes}
+            essai{solveurStore.solution.essais_executes > 1 ? 's' : ''}. Le solveur n'a pas exploré
             toutes les combinaisons.
             <button
               class="ghost mini-ajout"
-              onclick={() => { budgetMsCourant = Infinity; lancer() }}
-              disabled={calculEnCours}
+              onclick={() => { solveurStore.budgetMsCourant = Infinity; lancer() }}
+              disabled={solveurStore.calculEnCours}
             >
               Relancer sans limite de temps
             </button>
-          {:else if solution.arret_precoce === 'stagnation'}
+          {:else if solveurStore.solution.arret_precoce === 'stagnation'}
             <b>{nManquants > 0 ? `${nManquants} groupe${nManquants > 1 ? 's non placés' : ' non placé'}` : 'Optimum atteint'}
-              après {solution.essais_executes} essais sans progrès.</b>
+              après {solveurStore.solution.essais_executes} essais sans progrès.</b>
             {#if nManquants > 0}
               Le solveur a plafonné à {nComplets}/{nTotal} — probablement un ou
               plusieurs groupes structurellement infaisables (voir « Pourquoi ça
@@ -1124,47 +1058,47 @@
             {:else}
               Solution complète trouvée, essais supplémentaires jugés inutiles.
             {/if}
-          {:else if solution.arret_precoce === 'max-essais'}
+          {:else if solveurStore.solution.arret_precoce === 'max-essais'}
             <b>{nManquants} groupe{nManquants > 1 ? 's non placés' : ' non placé'}
-              après épuisement des {solution.essais_executes} essais.</b>
+              après épuisement des {solveurStore.solution.essais_executes} essais.</b>
             Le solveur a plafonné à {nComplets}/{nTotal} — voir le diagnostic
             « Pourquoi ça bloque » ci-dessous pour identifier ce qui bloque.
           {/if}
         </div>
       {/if}
-      {#if solution.problemes.length > 0}
+      {#if solveurStore.solution.problemes.length > 0}
         <div class="msg err">
           <b>Contrôle indépendant :</b>
           <ul>
-            {#each solution.problemes.slice(0, 8) as pb}<li>{pb.message}</li>{/each}
-            {#if solution.problemes.length > 8}
-              <li>… et {solution.problemes.length - 8} autres</li>
+            {#each solveurStore.solution.problemes.slice(0, 8) as pb}<li>{pb.message}</li>{/each}
+            {#if solveurStore.solution.problemes.length > 8}
+              <li>… et {solveurStore.solution.problemes.length - 8} autres</li>
             {/if}
           </ul>
         </div>
       {:else}
         <div class="msg ok">Aucun conflit détecté par la vérification indépendante.</div>
       {/if}
-      {#if solution.groupesPerdus && solution.groupesPerdus.length > 0}
+      {#if solveurStore.solution.groupesPerdus && solveurStore.solution.groupesPerdus.length > 0}
         <div class="msg warn">
-          <b>Groupes non logés :</b> {solution.groupesPerdus.length} groupe(s) placé(s) horairement
+          <b>Groupes non logés :</b> {solveurStore.solution.groupesPerdus.length} groupe(s) placé(s) horairement
           mais l'attribution des salles n'a pas trouvé de place — jauge ou concurrence.
           <ul>
-            {#each solution.groupesPerdus.slice(0, 8) as gp}<li>{gp.raison}</li>{/each}
-            {#if solution.groupesPerdus.length > 8}
-              <li>… et {solution.groupesPerdus.length - 8} autres</li>
+            {#each solveurStore.solution.groupesPerdus.slice(0, 8) as gp}<li>{gp.raison}</li>{/each}
+            {#if solveurStore.solution.groupesPerdus.length > 8}
+              <li>… et {solveurStore.solution.groupesPerdus.length - 8} autres</li>
             {/if}
           </ul>
         </div>
       {/if}
-      {#if solution.diagnostics.length > 0}
+      {#if solveurStore.solution.diagnostics.length > 0}
         <div class="msg warn">
           <b>Pourquoi ça bloque</b>
           <p class="mini-h">
             Ces groupes n'ont pas atteint la cible ({session.repetitions_visees} répétitions).
             Voici sur quoi agir.
           </p>
-          {#each solution.diagnostics as d}
+          {#each solveurStore.solution.diagnostics as d}
             <div class="diag-bloc">
               <b>{d.titre}</b> — {d.obtenu}/{d.cible} répétitions restantes,
               seulement <b>{d.creneaux_ouverts}</b> créneaux compatibles sur {creneaux.length}.
@@ -1203,7 +1137,7 @@
     {/if}
   </section>
 
-  {#if solution}
+  {#if solveurStore.solution}
     <section class="sheet impression">
       <p class="eyebrow">Étape 4 · Résultats</p>
       <h2>États imprimables</h2>
@@ -1219,8 +1153,8 @@
           <button class:actif={vue === 'quotas'} onclick={() => (vue = 'quotas')}>Quotas</button>
         {/if}
         <span class="grow"></span>
-        {#if figeesKeys.size > 0}
-          <span class="mono ink-soft">{figeesKeys.size} figée{figeesKeys.size > 1 ? 's' : ''}</span>
+        {#if solveurStore.figeesKeys.size > 0}
+          <span class="mono ink-soft">{solveurStore.figeesKeys.size} figée{solveurStore.figeesKeys.size > 1 ? 's' : ''}</span>
           <button class="ghost" onclick={toutDegeler}>Tout dégeler</button>
         {/if}
         <button class="ghost" onclick={exporterGroupes}>CSV groupes</button>
@@ -1230,7 +1164,7 @@
         <button class="ghost" onclick={exporterEtat}>Sauvegarder l'état .json</button>
         <button class="ghost" onclick={() => window.print()}>Imprimer</button>
       </div>
-      {#if figeesKeys.size > 0}
+      {#if solveurStore.figeesKeys.size > 0}
         <p class="hint">
           Une répétition figée (cadenas ochre plein) sera préservée lors des relances —
           le solveur calcule autour. Clique sur le cadenas pour dégeler.
@@ -1250,7 +1184,7 @@
         <ParGroupe
           {inscriptions}
           {creneaux}
-          assignations={solution.assignations}
+          assignations={solveurStore.solution.assignations}
           {sallesParId}
           {creneauxParId}
           {estFigee}
@@ -1264,7 +1198,7 @@
         <ParSalle
           {lieu}
           {creneaux}
-          assignations={solution.assignations}
+          assignations={solveurStore.solution.assignations}
           {groupesParId}
           {personnesParId}
           {estFigee}
@@ -1309,7 +1243,7 @@
           {lieu}
           {inscriptions}
           {creneaux}
-          assignations={solution.assignations}
+          assignations={solveurStore.solution.assignations}
           {groupesParId}
           {sallesParId}
           {creneauxParId}
@@ -1322,7 +1256,7 @@
         <ParMusicien
           {inscriptions}
           {creneaux}
-          assignations={solution.assignations}
+          assignations={solveurStore.solution.assignations}
           {groupesParId}
           {sallesParId}
           {creneauxParId}
