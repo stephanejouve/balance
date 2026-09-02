@@ -63,6 +63,18 @@ export const solveurStore = $state({
   budgetMsCourant: 3000,
   solution: null as Solution | null,
   calculEnCours: false,
+  /**
+   * Vrai quand une modification de saisie (composition groupe, indispos,
+   * imposés) est intervenue depuis le dernier calcul. La solution reste
+   * affichée mais un bandeau invite explicitement à relancer.
+   *
+   * Task #60 PR-1 : découpler la saisie du calcul. Les éditions sur le
+   * *contenu* du placement (personnes, groupes, indispos, imposés)
+   * marquent obsolète sans vider ; celles sur le *cadre* (salles, session)
+   * continuent à appeler `resetSolution()` — un planning référençant une
+   * salle supprimée serait faux, pas juste périmé.
+   */
+  solutionObsolete: false,
   /** Clés `groupe_id|creneau_id` des assignations à préserver lors des recalculs. */
   figeesKeys: new Set<string>(),
   contraintesActives: { ...CONTRAINTES_ACTIVES_DEFAUT } as Record<IdContrainte, boolean>,
@@ -114,11 +126,27 @@ export async function runLancer(inputs: SolveurInputs): Promise<void> {
     contraintesActives: solveurStore.contraintesActives,
     solutionPrecedente: solveurStore.solution,
   })
+  solveurStore.solutionObsolete = false
   solveurStore.calculEnCours = false
 }
 
 export function resetSolution(): void {
   solveurStore.solution = null
+  solveurStore.solutionObsolete = false
+}
+
+/**
+ * Marque le placement comme périmé sans le vider. Utilisé par les éditions
+ * sur le *contenu* (personnes, groupes, indispos, imposés) — l'utilisateur
+ * peut enchaîner plusieurs modifs avant de vouloir relancer. Le bandeau
+ * signale l'obsolescence, le bouton « Lancer » agit.
+ *
+ * No-op si aucune solution n'est affichée (rien à marquer périmé).
+ */
+export function marquerObsolete(): void {
+  if (solveurStore.solution !== null) {
+    solveurStore.solutionObsolete = true
+  }
 }
 
 export function resetFigees(): void {
