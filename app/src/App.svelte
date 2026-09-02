@@ -1042,12 +1042,16 @@
       convoquer deux fois la même personne au même moment ni doubler une salle.
     </p>
     {#if infaisabilites.length > 0}
+      {@const manquantsTotal = infaisabilites.reduce((s, d) => s + Math.max(0, d.demande - d.offre), 0)}
       <div class="msg warn">
         <b>Contrôle en amont : {infaisabilites.length} musicien(s) en surcharge structurelle.</b>
         <p class="mini-h">
-          Chacun ci-dessous demande plus de créneaux qu'il n'en a de disponibles.
-          Le solveur va échouer à les placer tous — il faut réduire leurs engagements
-          ou libérer des créneaux avant.
+          Chacun ci-dessous demande plus de créneaux qu'il n'en a de disponibles
+          ({manquantsTotal} créneau{manquantsTotal > 1 ? 'x' : ''} manquant{manquantsTotal > 1 ? 's' : ''}
+          au total sur l'ensemble des musiciens signalés).
+          <strong>Lancer maintenant produira un placement partiel — c'est prévu, pas un bug.</strong>
+          Réduire leurs engagements ou libérer des créneaux avant permet d'atteindre
+          un placement complet.
         </p>
         <ul>
           {#each infaisabilites.slice(0, 8) as d}
