@@ -83,16 +83,25 @@ export interface RepartirOptions {
   budgetMs?: number
   /**
    * Nombre d'essais consécutifs sans amélioration du meilleur candidat
-   * après lesquels la boucle s'arrête (défaut 50). Le champ
-   * `arret_precoce` vaut alors `'stagnation'`.
+   * après lesquels la boucle s'arrête. Défaut **1** (chantier A —
+   * Stéphane 2026-09-02, PR-A1).
    *
-   * Justification Stéphane 2026-09-02 : mesures sur main @05226c4 avec
-   * 20 groupes / 84 personnes / 40 créneaux → 56 s pour épuiser 100
-   * essais alors qu'un seul groupe reste non plaçable ; le solveur
-   * brûle 99 essais à chasser une solution parfaite qui n'existe pas.
-   * « Un solveur qui a trouvé 19/20 au dixième essai ne trouvera pas
-   * 20/20 au deux-millième si le vingtième groupe est structurellement
-   * infaisable. »
+   * Justification mesures CD 2026-09-02 (fixtures balance-stress-test +
+   * demo_session5_sature + solveur-adversaire adverse conçu pour piéger) :
+   * le mécanisme random-restart (shuffle + tirage `rng() * Math.min(4, N)`
+   * + patience) n'a AUCUN effet observable sur le placement final.
+   * Le scoring des candidats (2ᵉ niveau heuristique) rattrape
+   * systématiquement l'ordre initial même sur fixture adverse.
+   *
+   * Conclusion : dès qu'un essai n'améliore pas le meilleur, aucun essai
+   * suivant ne l'améliorera non plus. Défaut = 1 arrête immédiatement
+   * après le 1ᵉʳ essai non-amélioratif — équivalent en pratique à
+   * « n'exécuter que l'essai 0 » puisque essai 0 pose toujours `best`.
+   *
+   * Historique : ce paramètre valait 50 (PR #49) sur l'hypothèse que
+   * des essais aléatoires pourraient trouver mieux — hypothèse invalidée
+   * par les mesures CD. La refactorisation propre (retrait shuffle +
+   * rng + boucle) arrive en PR-A2/A3.
    *
    * Passer `Infinity` pour désactiver (usage benchmark ou opt-in).
    * `0` équivaut aussi à désactivé.
@@ -335,11 +344,11 @@ export function repartir(
   const budgetMs = options.budgetMs ?? 3000
   const budgetActif = Number.isFinite(budgetMs) && budgetMs > 0
   // Palier de stagnation : nb d'essais consécutifs sans amélioration
-  // avant abandon. Défaut 50 — mesuré empiriquement sur les paliers
-  // volumétriques : les améliorations naturelles arrivent dans les
-  // 5-15 premiers essais, au-delà de 50 sans progrès le meilleur est
-  // fixé. Voir docstring `RepartirOptions.essaisSansAmelioration`.
-  const essaisSansAmelioration = options.essaisSansAmelioration ?? 50
+  // avant abandon. Défaut **1** depuis PR-A1 (chantier A Stéphane
+  // 2026-09-02) : mesures CD ont montré que le random-restart n'améliore
+  // jamais le placement — dès qu'un essai stagne, tous les suivants
+  // stagneront. Voir docstring `RepartirOptions.essaisSansAmelioration`.
+  const essaisSansAmelioration = options.essaisSansAmelioration ?? 1
   const stagnationActive = Number.isFinite(essaisSansAmelioration) && essaisSansAmelioration > 0
   const t0 = typeof performance !== 'undefined' ? performance.now() : Date.now()
   const rng = makeRng(options.seed ?? 1)
