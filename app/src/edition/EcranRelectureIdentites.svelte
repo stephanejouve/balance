@@ -297,6 +297,12 @@
 </div>
 
 <style>
+  /* Charte Balance : ocre sur vert foncé, papier crème sur pages.
+     Variables globales (app.css) : --ink, --ink-soft, --paper,
+     --paper-edge, --ochre, --rouge, --vert.
+     Toutes les couleurs ci-dessous les utilisent — pas de valeur
+     littérale sauf variantes hover et sections d'alerte teintées. */
+
   .ecran-relecture {
     display: flex;
     flex-direction: column;
@@ -304,6 +310,9 @@
     padding: 1rem;
     max-width: 900px;
     margin: 0 auto;
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 4px;
   }
 
   .entete {
@@ -312,19 +321,21 @@
     align-items: baseline;
     flex-wrap: wrap;
     gap: 0.5rem;
-    border-bottom: 1px solid #ccc;
+    border-bottom: 1px solid var(--paper-edge);
     padding-bottom: 0.5rem;
   }
 
   .entete h2 {
     margin: 0;
     font-size: 1.4rem;
+    color: var(--ink);
   }
 
   .compteurs {
     display: flex;
     gap: 1rem;
     font-size: 0.9rem;
+    color: var(--ink-soft);
   }
 
   .compte strong {
@@ -332,52 +343,48 @@
   }
 
   .compte-decisions strong {
-    color: #b91c1c;
+    color: var(--rouge);
   }
   .compte-decisions.zero strong {
-    color: #6b7280;
+    color: var(--ink-soft);
   }
 
   .compte-signalements strong {
-    color: #d97706;
+    color: var(--ochre);
   }
 
+  /* Sections d'alerte : accent teinté (rouge / ambre), texte principal
+     en --ink pour lisibilité maximale sur fond papier. */
   .section-decisions {
-    background: #fef2f2;
-    border-left: 4px solid #b91c1c;
+    background: #fbeceb; /* teinte rouge très pâle harmonisée à --rouge */
+    border-left: 4px solid var(--rouge);
     padding: 0.75rem 1rem;
     border-radius: 4px;
+    color: var(--ink);
   }
 
   .section-decisions h3 {
-    color: #b91c1c;
+    color: var(--rouge);
     margin: 0 0 0.5rem 0;
     font-size: 1.1rem;
   }
 
   .section-signalements {
-    background: #fef3c7;
-    border-left: 4px solid #d97706;
+    background: #fbf1de; /* teinte ambre très pâle harmonisée à --ochre */
+    border-left: 4px solid var(--ochre);
     padding: 0.5rem 1rem;
     border-radius: 4px;
+    color: var(--ink);
   }
 
   .section-signalements h3 {
-    color: #92400e;
+    color: var(--ochre);
     margin: 0;
     font-size: 1rem;
     font-weight: 600;
   }
 
-  .deplier-signalements {
-    background: none;
-    border: none;
-    padding: 0;
-    cursor: pointer;
-    text-align: left;
-    width: 100%;
-  }
-
+  .deplier-signalements,
   .deplier-orphelins {
     background: none;
     border: none;
@@ -387,6 +394,8 @@
     width: 100%;
     font-size: inherit;
     color: inherit;
+    text-transform: none;
+    letter-spacing: normal;
   }
 
   .liste-orphelins {
@@ -395,7 +404,7 @@
     columns: 2;
     column-gap: 1.5rem;
     font-size: 0.85rem;
-    color: #4b5563;
+    color: var(--ink-soft);
   }
 
   .liste-orphelins li {
@@ -413,27 +422,30 @@
   }
 
   .carte-alerte {
-    background: white;
+    background: var(--paper);
     border-radius: 4px;
     padding: 0.5rem 0.75rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--paper-edge);
+    color: var(--ink);
   }
 
   .titre-alerte {
     font-weight: 600;
     margin-bottom: 0.25rem;
+    color: var(--ink);
   }
 
   .detail-alerte {
     font-size: 0.9rem;
-    color: #4b5563;
+    color: var(--ink-soft);
   }
 
   .section-personnes {
-    background: #f9fafb;
+    background: var(--paper);
     padding: 0.75rem 1rem;
     border-radius: 4px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--paper-edge);
+    color: var(--ink);
   }
 
   .entete-personnes {
@@ -449,7 +461,7 @@
     margin: 0;
     font-size: 1rem;
     font-weight: 600;
-    color: #374151;
+    color: var(--ink);
   }
 
   .controles-personnes {
@@ -457,14 +469,18 @@
     gap: 0.75rem;
     align-items: center;
     font-size: 0.9rem;
+    color: var(--ink);
   }
 
   .controles-personnes input,
   .controles-personnes select {
     padding: 0.25rem 0.5rem;
-    border: 1px solid #d1d5db;
+    border: 1px solid var(--paper-edge);
     border-radius: 3px;
     font-size: 0.9rem;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
   }
 
   .liste-personnes {
@@ -473,9 +489,9 @@
     margin: 0;
     max-height: 400px;
     overflow-y: auto;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--paper-edge);
     border-radius: 3px;
-    background: white;
+    background: var(--paper);
   }
 
   .ligne-personne {
@@ -483,38 +499,47 @@
     grid-template-columns: 2fr 2fr 1fr;
     gap: 0.5rem;
     padding: 0.35rem 0.75rem;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid var(--paper-edge);
     font-size: 0.9rem;
+    color: var(--ink);
   }
 
   .ligne-personne:last-child {
     border-bottom: none;
   }
 
+  /* Contenu principal : nom en --ink (haute lisibilité). Feedback
+     Stéphane 2026-09-02 : sur 69 lignes, la colonne des noms
+     s'effaçait car elle héritait de --paper (couleur du body). */
   .ligne-personne .nom {
     font-weight: 500;
+    color: var(--ink);
   }
 
   .ligne-personne .instruments {
-    color: #6b7280;
+    color: var(--ink-soft);
     font-size: 0.85rem;
   }
 
   .ligne-personne .engagements {
     text-align: right;
-    color: #6b7280;
+    color: var(--ink-soft);
     font-variant-numeric: tabular-nums;
   }
 
+  /* « sans engagement » = signalement discret. Le nom passe en
+     --ink-soft (visible mais estompé) pour signaler l'exception —
+     inverse de l'ancien contraste inversé que Stéphane a signalé. */
   .ligne-personne.sans-engagement .nom {
-    color: #6b7280;
+    color: var(--ink-soft);
+    font-style: italic;
   }
 
   .tag-stagiaire {
     display: inline-block;
     font-size: 0.75rem;
-    background: #e5e7eb;
-    color: #6b7280;
+    background: var(--paper-edge);
+    color: var(--ink-soft);
     padding: 0.1rem 0.4rem;
     border-radius: 3px;
     font-style: italic;
@@ -522,7 +547,7 @@
 
   .aucun-resultat {
     padding: 0.75rem;
-    color: #6b7280;
+    color: var(--ink-soft);
     text-align: center;
     font-style: italic;
   }
@@ -532,31 +557,42 @@
     justify-content: space-between;
     gap: 1rem;
     padding-top: 0.5rem;
-    border-top: 1px solid #ccc;
+    border-top: 1px solid var(--paper-edge);
   }
 
+  /* Boutons : reprennent la charte des `<button>` globaux d'App.svelte.
+     .bouton-valider = call-to-action ocre (comme .big).
+     .bouton-annuler = ghost transparent (comme .ghost). */
   .bouton-annuler,
   .bouton-valider {
     padding: 0.5rem 1rem;
-    border-radius: 4px;
-    border: 1px solid #d1d5db;
-    background: white;
+    border-radius: 2px;
     cursor: pointer;
     font-size: 0.95rem;
+    font-family: var(--sans);
+    font-weight: 600;
+    border: 1px solid var(--ink);
+    line-height: 1.2;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .bouton-annuler {
+    background: transparent;
+    color: var(--ink);
   }
 
   .bouton-annuler:hover {
-    background: #f3f4f6;
+    background: var(--paper-edge);
   }
 
   .bouton-valider {
-    background: #3b82f6;
-    color: white;
-    border-color: #3b82f6;
-    font-weight: 600;
+    background: var(--ochre);
+    color: #231703;
+    border-color: var(--ochre);
   }
 
   .bouton-valider:hover {
-    background: #2563eb;
+    background: #b0741a;
   }
 </style>
