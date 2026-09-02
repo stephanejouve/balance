@@ -147,7 +147,7 @@
     diagnostics: ReturnType<typeof diagnostiquer>
     groupesPerdus: GroupeSansSalle[]
     duree_ms: number
-    arret_precoce: 'complet' | 'max-essais' | 'budget' | 'stagnation'
+    arret_precoce: 'complet' | 'heuristique' | 'max-essais' | 'budget' | 'stagnation'
     essais_executes: number
   }
   /**
@@ -1094,7 +1094,15 @@
         {@const nTotal = inscriptions.groupes.length}
         {@const nManquants = nTotal - nComplets}
         <div class="msg warn">
-          {#if solution.arret_precoce === 'budget'}
+          {#if solution.arret_precoce === 'heuristique'}
+            <!-- Mode deterministic (défaut) — 1 essai heuristique, pas de
+                 mention de temps/essais qui n'ont pas de sens ici. -->
+            <b>Placement heuristique : {nComplets}/{nTotal} groupes complets.</b>
+            C'est le maximum atteignable par l'heuristique déterministe.
+            Voir « Pourquoi ça bloque » ci-dessous pour identifier ce qui
+            empêche d'aller plus loin (surcharge musicien, contraintes,
+            groupes structurellement infaisables).
+          {:else if solution.arret_precoce === 'budget'}
             <b>Calcul interrompu à {Math.round(budgetMsCourant / 1000)} s pour ne pas geler l'écran.</b>
             {nComplets}/{nTotal} groupes complets après {solution.essais_executes}
             essai{solution.essais_executes > 1 ? 's' : ''}. Le solveur n'a pas exploré

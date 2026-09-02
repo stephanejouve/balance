@@ -297,12 +297,52 @@ describe('solver — early-stop no-progress (stagnation)', () => {
  * - `random-restart` explicite préserve l'ancien comportement
  */
 describe('solver — strategie deterministic (défaut, PR-A2)', () => {
-  it('mode deterministic (défaut) : 1 essai, arret complet ou max-essais-1', () => {
+  it('mode deterministic (défaut) : 1 essai, arret complet ou heuristique', () => {
     const { lieu, session, inscriptions, creneaux } = fixtureVolume(13, 26)
     const res = repartir(session, lieu, inscriptions, creneaux)
     expect(res.essais_executes).toBe(1)
-    expect(['complet', 'max-essais']).toContain(res.arret_precoce)
+    // Contrat A3 Stéphane 2026-09-02 : deterministic ne peut retourner que
+    // 'complet' ou 'heuristique' — jamais max-essais/budget/stagnation, ces
+    // valeurs n'ont pas de sens quand la boucle ne tourne qu'une fois par
+    // construction.
+    expect(['complet', 'heuristique']).toContain(res.arret_precoce)
     expect(res.placement.length).toBeGreaterThan(0)
+  })
+
+  it('deterministic + input infaisable → arret_precoce = "heuristique" (pas max-essais)', () => {
+    // Cas explicite du défaut UI signalé par Stéphane 2026-09-02 :
+    // « à 20 groupes en mode déterministe, arret_precoce vaut 'max-essais'.
+    // C'est exact au sens strict — un essai exécuté sur un maximum de un —
+    // mais le message affiché dira "après épuisement des essais", ce qui
+    // n'a plus de sens quand il n'y en a qu'un par construction. »
+    const lieu = Lieu.parse({
+      id: 'x', nom: 'X',
+      salles: [{ id: 'A', nom: 'A', jauge: 10 }],
+    })
+    const session = Session.parse({
+      id: 's', nom: 'S', lieu_id: 'x',
+      date_debut: '2026-08-24', date_fin: '2026-08-24',
+      date_butoir: '2026-08-24', butoir_heure: '10:00',
+      grille: [{ debut: '09:00', fin: '10:00', pas_minutes: 60 }],
+      repetitions_visees: 3, repetitions_min: 2,
+    })
+    // 1 créneau × 3 répétitions × 2 groupes = 6 sessions nécessaires, 3
+    // créneaux dispo → infaisable
+    const inscriptions = Inscriptions.parse({
+      session_id: 's',
+      personnes: [
+        { id: 'a', nom: 'A', instruments: [{ pupitre: 'chant' }] },
+        { id: 'b', nom: 'B', instruments: [{ pupitre: 'chant' }] },
+      ],
+      groupes: [
+        { id: 'g1', titre: 'G1', membres: [{ personne_id: 'a', pupitre: 'chant' }] },
+        { id: 'g2', titre: 'G2', membres: [{ personne_id: 'b', pupitre: 'chant' }] },
+      ],
+      imposes: [],
+    })
+    const creneaux = genererCreneaux(session, lieu)
+    const res = repartir(session, lieu, inscriptions, creneaux)
+    expect(res.arret_precoce).toBe('heuristique')
   })
 
   it('déterminisme fort : seeds différents → placement identique en mode deterministic', () => {

@@ -151,16 +151,26 @@ export interface PlacementItem {
 
 /**
  * Cause d'arrêt de la boucle d'essais du solveur.
- * - `complet` : un essai a placé tous les groupes à leur cible (early stop naturel).
- * - `max-essais` : la boucle a atteint `maxEssais` sans trouver de solution complète.
- * - `budget` : le budget wall-clock a été dépassé — solution partielle retournée
- *   pour éviter de geler l'interface (voir `RepartirOptions.budgetMs`).
- * - `stagnation` : N essais consécutifs sans amélioration du meilleur candidat
- *   (voir `RepartirOptions.essaisSansAmelioration`). L'échantillon a plafonné :
- *   il reste probablement un groupe structurellement infaisable, poursuivre
- *   coûterait cher sans rien changer.
+ *
+ * Deux modes distincts par convention (voir `RepartirOptions.strategie`) :
+ *
+ * **Mode `'deterministic'` (défaut)** — 2 valeurs possibles :
+ * - `complet` : l'unique essai a placé tous les groupes à leur cible.
+ * - `heuristique` : l'unique essai n'a pas placé tous les groupes. C'est
+ *   le maximum atteignable par l'heuristique déterministe — pas une
+ *   question de temps ni d'essais épuisés (par construction il n'y en a
+ *   qu'un). Contrat UI simplifié : « placement heuristique, X/Y — voir
+ *   Pourquoi ça bloque ». Chantier A Stéphane 2026-09-02 PR-A3.
+ *
+ * **Mode `'random-restart'`** — 4 valeurs possibles :
+ * - `complet` : un essai a placé tous les groupes à leur cible.
+ * - `max-essais` : la boucle a atteint `maxEssais` sans trouver mieux.
+ * - `budget` : le budget wall-clock a été dépassé — solution partielle
+ *   retournée pour éviter de geler l'interface.
+ * - `stagnation` : N essais consécutifs sans amélioration du meilleur
+ *   candidat. L'échantillon a plafonné.
  */
-export type ArretPrecoce = 'complet' | 'max-essais' | 'budget' | 'stagnation'
+export type ArretPrecoce = 'complet' | 'heuristique' | 'max-essais' | 'budget' | 'stagnation'
 
 export interface RepartirResultat {
   placement: PlacementItem[]
@@ -505,7 +515,12 @@ export function repartir(
   }
   let best: Best | null = null
   let essaisExecutes = 0
-  let arret: ArretPrecoce = 'max-essais'
+  // Défaut d'arrêt selon la stratégie :
+  // - deterministic → 'heuristique' (contrat UI : « c'est le maximum
+  //   atteignable par l'heuristique déterministe, pas une question de
+  //   temps ni d'essais épuisés »).
+  // - random-restart → 'max-essais' (contrat historique).
+  let arret: ArretPrecoce = deterministic ? 'heuristique' : 'max-essais'
   // Compteur d'essais consécutifs sans amélioration du meilleur candidat.
   // Réinitialisé à 0 dès qu'un essai fait progresser `best`. Voir usage
   // plus bas + docstring `RepartirOptions.essaisSansAmelioration`.
