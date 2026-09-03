@@ -3,6 +3,7 @@
   import {
     detecterMiseAJour,
     estDismissee,
+    lireManifestDistant,
     marquerDismissee,
     type EtatMiseAJour,
   } from './mise-a-jour'
@@ -22,12 +23,18 @@
 
   onMount(() => {
     // 1. Path SW (usage web, http(s)://) — le SW détecte push et notifie.
-    enregistrer(() => {
+    //    Le SW ne connaît pas le numéro de version cible (juste qu'une
+    //    nouvelle est prête). On fetch le manifest pour l'afficher —
+    //    sans ça, on tombait sur « vinstallée en tâche de fond » (bug
+    //    smoke Stéphane 2026-09-03) qui n'aide pas l'user à juger.
+    enregistrer(async () => {
+      const manifest = await lireManifestDistant()
       afficher({
         statut: 'nouvelle-version',
         version_locale: __APP_VERSION__,
-        version_distante: 'installée en tâche de fond',
+        version_distante: manifest?.version ?? '',
         url_telechargement: window.location.href,
+        installee_en_tache_de_fond: true,
       })
     })
     // 2. Path fetch fallback (usage file:// ou pour vérification proactive
@@ -56,11 +63,15 @@
     <div class="contenu">
       <strong>Nouvelle version disponible</strong>
       <span class="details">
-        v{etat.version_distante} — tu utilises v{etat.version_locale}
+        {#if etat.version_distante}v{etat.version_distante}{/if}
+        {#if etat.installee_en_tache_de_fond}
+          installée en tâche de fond
+        {/if}
+        — tu utilises v{etat.version_locale}
       </span>
     </div>
     <div class="actions">
-      {#if etat.version_distante === 'installée en tâche de fond'}
+      {#if etat.installee_en_tache_de_fond}
         <button type="button" class="btn-principal" onclick={recharger}>Recharger</button>
       {:else}
         <a class="btn-principal" href={etat.url_telechargement} download>Télécharger</a>
@@ -71,6 +82,9 @@
 {/if}
 
 <style>
+  /* Charte Balance : vert foncé + ocre (var(--board-deep) + var(--ochre)).
+     Anciens bleus sombres/vifs (#1f2937 / #3b82f6) hors charte, remontés
+     au smoke Stéphane 2026-09-03. */
   .bandeau {
     position: fixed;
     bottom: 12px;
@@ -78,8 +92,8 @@
     transform: translateX(-50%);
     max-width: 640px;
     width: calc(100% - 24px);
-    background: #1f2937;
-    color: #f9fafb;
+    background: var(--board-deep);
+    color: var(--paper);
     border-radius: 8px;
     padding: 12px 16px;
     display: flex;
@@ -97,7 +111,7 @@
   }
   .details {
     font-size: 12px;
-    opacity: 0.75;
+    opacity: 0.85;
   }
   .actions {
     display: flex;
@@ -105,8 +119,8 @@
     gap: 6px;
   }
   .btn-principal {
-    background: #3b82f6;
-    color: white;
+    background: var(--ochre);
+    color: #231703;
     text-decoration: none;
     padding: 6px 12px;
     border-radius: 6px;
@@ -116,11 +130,11 @@
     font-size: 13px;
   }
   .btn-principal:hover {
-    background: #2563eb;
+    filter: brightness(1.08);
   }
   .btn-fermer {
     background: transparent;
-    color: #f9fafb;
+    color: var(--paper);
     border: none;
     cursor: pointer;
     font-size: 20px;
