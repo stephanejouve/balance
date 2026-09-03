@@ -69,14 +69,33 @@ describe('extraireProposes', () => {
     expect(imposes[1].seances).toHaveLength(1)
   })
 
-  it('warn membre inconnu et l\'ignore', () => {
+  it('warn membre inconnu et l\'ignore (référentiel non vide → orphan probable)', () => {
     const rows = [
       ['Morceau', 'Membres', 'Date', 'Début', 'Fin'],
       ['Blowin', 'karl, inconnu', '2026-08-28', '09:00', '10:00'],
     ]
     const { imposes, warnings } = extraireProposes(rows, MAPPING_PROPOSES_DEFAUT, personnes(['karl']))
     expect(imposes[0].membres).toEqual(['karl'])
-    expect(warnings.some((w) => w.includes('inconnu'))).toBe(true)
+    // Nouveau message : quand un référentiel est fourni, l'absence signale
+    // une erreur d'orthographe côté saisie (pas une carence d'import).
+    expect(warnings.some((w) => w.includes('non trouvé dans le référentiel'))).toBe(true)
+    // Anti-régression audit Stéphane 2026-09-03 : plus jamais le guidage
+    // trompeur « importe d'abord l'onglet Liste ou Stagiaires ».
+    expect(warnings.some((w) => w.includes("importe d'abord"))).toBe(false)
+  })
+
+  it('warn différencié quand aucun référentiel (classeur Proposés seul)', () => {
+    // Cas produit par l'import PDF de Leader : Stagiaires/Liste vides, seul
+    // Proposés est peuplé. Les membres du PDF sont réellement à créer côté
+    // Stagiaires — le warning doit le dire, pas suggérer une erreur de manip.
+    const rows = [
+      ['Morceau', 'Membres', 'Date', 'Début', 'Fin'],
+      ['Autumn Leaves', 'Denis (A)', '2026-08-28', '09:00', '10:00'],
+    ]
+    const { imposes, warnings } = extraireProposes(rows, MAPPING_PROPOSES_DEFAUT, [])
+    expect(imposes[0].membres).toEqual([]) // le membre est skip
+    expect(warnings.some((w) => w.includes('à créer ou à compléter côté Stagiaires'))).toBe(true)
+    expect(warnings.some((w) => w.includes("importe d'abord"))).toBe(false)
   })
 
   it('renvoie warning si colonne obligatoire manquante', () => {

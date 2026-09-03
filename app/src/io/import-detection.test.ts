@@ -129,6 +129,55 @@ describe('analyserSheetsExcel — verrouille les défauts latents du brief', () 
     const stagOnglet = det.onglets.find((o) => o.nom === 'Stagiaires')!
     expect(stagOnglet.statut).toBe('ok')
   })
+
+  it("réordonne Stagiaires avant Proposés → membres résolus même si Proposés arrive en premier dans le classeur (audit Stéphane 2026-09-03)", () => {
+    // Avant le fix : parcours dans l'ordre du fichier → Proposés lu avec
+    // idsConnus vide → 1 warning « membre inconnu » faux par ligne, 30+
+    // warnings sur balance-stress-test.xlsx. Le tri ORDRE_ANALYSE garantit
+    // que Stagiaires alimente le référentiel avant que Proposés le consulte.
+    const sheets = [
+      {
+        sheet: 'Proposés',
+        data: [
+          ['Morceau', 'Membres', 'Date', 'Début', 'Fin'],
+          ['Autumn Leaves', 'Denis', '2026-08-28', '09:00', '10:00'],
+        ],
+      },
+      {
+        sheet: 'Stagiaires',
+        data: [
+          ['Nom', 'Pupitre'],
+          ['Denis', 'chant'],
+        ],
+      },
+    ]
+    const det = analyserSheetsExcel(sheets, 't.xlsx', 100, MAPPINGS, [])
+    const proposesOnglet = det.onglets.find((o) => o.nom === 'Proposés')!
+    expect(proposesOnglet.statut).toBe('ok')
+    // 0 warning « inconnu » : Denis est résolu grâce à Stagiaires parsé avant.
+    expect(proposesOnglet.warnings.some((w) => w.includes('non trouvé'))).toBe(false)
+    expect(proposesOnglet.warnings.some((w) => w.includes('à créer'))).toBe(false)
+  })
+
+  it("classeur Proposés seul → warning informatif « à créer côté Stagiaires » (pas trompeur)", () => {
+    // Cas produit par l'import PDF de Leader (PR #58) : Stagiaires/Liste
+    // vides, seul Proposés est peuplé. Le référentiel reste vide même après
+    // réordonnancement — le message doit dire la vérité (à compléter côté
+    // Stagiaires), pas suggérer une erreur de manip (« importe d'abord »).
+    const sheets = [
+      {
+        sheet: 'Proposés',
+        data: [
+          ['Morceau', 'Membres', 'Date', 'Début', 'Fin'],
+          ['Autumn Leaves', 'Denis (A)', '2026-08-28', '09:00', '10:00'],
+        ],
+      },
+    ]
+    const det = analyserSheetsExcel(sheets, 't.xlsx', 100, MAPPINGS, [])
+    const proposesOnglet = det.onglets.find((o) => o.nom === 'Proposés')!
+    expect(proposesOnglet.warnings.some((w) => w.includes('à créer ou à compléter'))).toBe(true)
+    expect(proposesOnglet.warnings.some((w) => w.includes("importe d'abord"))).toBe(false)
+  })
 })
 
 describe('construireCandidatExcel — candidat complet, une seule affectation', () => {
