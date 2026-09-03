@@ -1,12 +1,15 @@
 import type { Creneau } from '../domain/grille'
 import type { Inscriptions } from '../domain/model'
 import type { Lieu, Session } from '../domain/model'
+import type { DiffRepartition } from '../domain/repartition-diff'
+import { comparerRepartitions } from '../domain/repartition-diff'
 import { attribuerSalles } from '../engine/allocate-rooms'
 import type { IdContrainte } from '../engine/contraintes'
 import { registrePersonnalise } from '../engine/contraintes'
 import { diagnostiquer } from '../engine/diagnostic'
 import { preparerInscriptionsPourSolveur } from '../engine/fonctions-activees'
 import { enrichirIndispos } from '../engine/imposes'
+import type { PlacementItem } from '../engine/solver'
 import { repartir } from '../engine/solver'
 import type { Assignation, GroupeSansSalle, Probleme } from '../engine/types'
 import { couverture, verifier } from '../engine/verify'
@@ -78,6 +81,32 @@ export const solveurStore = $state({
   /** Clés `groupe_id|creneau_id` des assignations à préserver lors des recalculs. */
   figeesKeys: new Set<string>(),
   contraintesActives: { ...CONTRAINTES_ACTIVES_DEFAUT } as Record<IdContrainte, boolean>,
+  /**
+   * Résumé humain du changement introduit par le dernier `runLancer` par
+   * rapport au placement précédent (via `comparerRepartitions`). `null`
+   * quand il n'y a rien à dire : premier calcul, session complètement
+   * remise à zéro (nouvelle session / import), ou nouveau placement
+   * identique à l'ancien.
+   *
+   * Task #60 PR-2 : après un recalcul, l'utilisateur doit voir en une
+   * ligne ce qui a bougé ("2 groupes réaménagés, aucune séance perdue")
+   * plutôt que de comparer visuellement deux planning affichés.
+   */
+  dernierChangement: null as string | null,
+  /**
+   * Snapshot du dernier placement calculé, indépendant de `solution`.
+   *
+   * Nécessaire parce que `resetSolution()` (modif cadre — salles, session)
+   * met `solution = null` avant que l'utilisateur relance, ce qui priverait
+   * le prochain `runLancer` d'un « avant » à comparer. Cette référence
+   * *survit* à `resetSolution()` et n'est purgée que par
+   * `resetPlacementCapture()` (nouvelle session, import complet — cas où
+   * la comparaison n'aurait aucun sens).
+   *
+   * Bug attrapé au smoke Stéphane 2026-09-03 PR #61 v1 : le résumé
+   * n'apparaissait jamais après une modification cadre + relance.
+   */
+  dernierPlacementCapture: null as PlacementItem[] | null,
 })
 
 export function lancer(inputs: SolveurInputs, options: LancerOptions): Solution {
@@ -117,15 +146,108 @@ export function lancer(inputs: SolveurInputs, options: LancerOptions): Solution 
   }
 }
 
+/**
+ * Formate un `DiffRepartition` en une ligne humaine à afficher sous le
+ * bandeau d'obsolescence. Exemples :
+ *
+ * - `"2 groupes réaménagés, aucune séance perdue"`
+ * - `"1 groupe réaménagé, 3 séances perdues"`
+ * - `"1 séance ajoutée"`  (renfort sans dégradation)
+ *
+ * Renvoie `null` si `diff.identiques` est vrai (rien à dire).
+ *
+ * "Séances perdues" = séances retirées sans compensation par un ajout dans
+ * le même groupe (les déplacements purs ne comptent pas comme perte).
+ */
+export function formatResumeDiff(diff: DiffRepartition): string | null {
+  if (diff.identiques) return null
+  const parts: string[] = []
+
+  const reamenages = diff.groupes_modifies.filter((g) => g.deplacement_pur).length
+  if (reamenages > 0) {
+    parts.push(`${reamenages} groupe${reamenages > 1 ? 's' : ''} réaménagé${reamenages > 1 ? 's' : ''}`)
+  }
+
+  const seancesPerdues = diff.groupes_modifies
+    .filter((g) => !g.deplacement_pur)
+    .reduce((s, g) => s + Math.max(0, g.creneaux_retires.length - g.creneaux_ajoutes.length), 0)
+  const seancesGagnees = diff.groupes_modifies
+    .filter((g) => !g.deplacement_pur)
+    .reduce((s, g) => s + Math.max(0, g.creneaux_ajoutes.length - g.creneaux_retires.length), 0)
+
+  if (seancesPerdues > 0) {
+    parts.push(`${seancesPerdues} séance${seancesPerdues > 1 ? 's' : ''} perdue${seancesPerdues > 1 ? 's' : ''}`)
+  } else if (reamenages > 0) {
+    // Message rassurant quand seuls des réaménagements ont eu lieu.
+    parts.push('aucune séance perdue')
+  }
+  if (seancesGagnees > 0) {
+    parts.push(`${seancesGagnees} séance${seancesGagnees > 1 ? 's' : ''} ajoutée${seancesGagnees > 1 ? 's' : ''}`)
+  }
+
+  return parts.length > 0 ? parts.join(', ') : null
+}
+
+/**
+ * Capture un snapshot **indépendant** des références vivantes de la
+ * solution : chaque `PlacementItem` est reconstruit champ par champ, pas
+ * ré-utilisé. Vigilance Stéphane 2026-09-02 : si on capturait la référence
+ * `solveurStore.solution.assignations` puis qu'un maillon du pipeline
+ * mutait un objet en place (au lieu de réassigner), le "avant" deviendrait
+ * le "après" sans prévenir → `comparerRepartitions` renverrait
+ * `identiques: true` en permanence sans qu'aucun test ne l'attrape.
+ */
+export function snapshotPlacement(sol: Solution | null): PlacementItem[] {
+  if (sol === null) return []
+  return sol.assignations.map((a) => ({ groupe_id: a.groupe_id, creneau_id: a.creneau_id }))
+}
+
+/**
+ * Détermine le placement à comparer au prochain recalcul.
+ *
+ * Priorité : la solution courante si elle existe (cas classique — 2 calculs
+ * consécutifs sans modif entre). Sinon, le `dernierPlacementCapture`
+ * mémorisé, qui survit à `resetSolution()` (cas modif cadre + relance —
+ * bug smoke Stéphane 2026-09-03). Si les deux sont vides → tableau vide
+ * (1er calcul, aucune comparaison possible).
+ */
+export function determinePlacementAvant(): PlacementItem[] {
+  if (solveurStore.solution !== null) return snapshotPlacement(solveurStore.solution)
+  return solveurStore.dernierPlacementCapture ?? []
+}
+
 export async function runLancer(inputs: SolveurInputs): Promise<void> {
   solveurStore.calculEnCours = true
   await new Promise((r) => setTimeout(r, 20))
-  solveurStore.solution = lancer(inputs, {
+  // Snapshot AVANT lancer — priorité solution courante, sinon
+  // dernierPlacementCapture (préservé au travers de resetSolution).
+  const placementAvant = determinePlacementAvant()
+  const nouvelleSolution = lancer(inputs, {
     budgetMs: solveurStore.budgetMsCourant,
     figeesKeys: solveurStore.figeesKeys,
     contraintesActives: solveurStore.contraintesActives,
     solutionPrecedente: solveurStore.solution,
   })
+  solveurStore.solution = nouvelleSolution
+  const placementApres = snapshotPlacement(nouvelleSolution)
+  // Résumé du changement : uniquement si on avait un placement précédent
+  // (pas de comparaison possible sur un premier calcul).
+  //
+  // Cas identiques : on affiche quand même un message explicite —
+  // « aucun changement » distingue « rien n'a bougé » de « la fonction ne
+  // marche pas » (feedback Stéphane 2026-09-03 : sans ce message, chaque
+  // relance sans modif redéclenche le doute et impose un smoke).
+  if (placementAvant.length > 0) {
+    const diff = comparerRepartitions(placementAvant, placementApres)
+    solveurStore.dernierChangement =
+      formatResumeDiff(diff) ?? 'Aucun changement par rapport au calcul précédent'
+  } else {
+    solveurStore.dernierChangement = null
+  }
+  // Mémorise ce placement pour permettre la comparaison au prochain
+  // runLancer, même si resetSolution() est appelé entre temps (modif cadre
+  // nullifie solution mais laisse dernierPlacementCapture intact).
+  solveurStore.dernierPlacementCapture = placementApres
   solveurStore.solutionObsolete = false
   solveurStore.calculEnCours = false
 }
@@ -133,6 +255,20 @@ export async function runLancer(inputs: SolveurInputs): Promise<void> {
 export function resetSolution(): void {
   solveurStore.solution = null
   solveurStore.solutionObsolete = false
+  solveurStore.dernierChangement = null
+  // Volontairement, on NE touche PAS à `dernierPlacementCapture` : cette
+  // référence sert à comparer la prochaine relance avec l'état d'avant la
+  // modification cadre. Purge complète via `resetPlacementCapture()`.
+}
+
+/**
+ * Purge la référence de placement précédente. À appeler quand la session
+ * est complètement remise à zéro (nouvelle session vide, import, fixture
+ * démo) — la comparaison avec l'ancien placement n'a alors aucun sens.
+ */
+export function resetPlacementCapture(): void {
+  solveurStore.dernierPlacementCapture = null
+  solveurStore.dernierChangement = null
 }
 
 /**

@@ -64,7 +64,14 @@
     couleurStyle,
     statsConducteur,
   } from './stores/app-conducteur'
-  import { marquerObsolete, resetFigees, resetSolution, runLancer, solveurStore } from './stores/solveur-store.svelte'
+  import {
+    marquerObsolete,
+    resetFigees,
+    resetPlacementCapture,
+    resetSolution,
+    runLancer,
+    solveurStore,
+  } from './stores/solveur-store.svelte'
   import fixture from './fixtures/apero_mercredi.json'
 
   /* --- Données de démarrage --------------------------------------------- */
@@ -194,6 +201,7 @@
     warningsImport = []
     erreurImport = ''
     resetSolution()
+    resetPlacementCapture()
     modeDemo = true
   }
   function nouvelleSessionVide() {
@@ -236,6 +244,7 @@
     warningsImport = []
     erreurImport = ''
     resetSolution()
+    resetPlacementCapture()
     resetFigees()
     modeDemo = false
   }
@@ -330,6 +339,7 @@
     warningsImport = b.warnings
     sourceLabel = sl
     resetSolution()
+    resetPlacementCapture()
     modeDemo = false
     detection = null
     importEnAttente = null
@@ -370,6 +380,7 @@
       warnings: detection.warningsGlobaux,
     }
     resetSolution()
+    resetPlacementCapture()
     modeDemo = false
     detection = null
   }
@@ -1034,6 +1045,11 @@
         </div>
         <div><b>{solveurStore.solution.problemes.length}</b> problème(s) détecté(s)</div>
       </div>
+      {#if !solveurStore.solutionObsolete && solveurStore.dernierChangement !== null}
+        <div class="msg ok" role="status">
+          {solveurStore.dernierChangement}
+        </div>
+      {/if}
       {#if solveurStore.solution.arret_precoce !== 'complet'}
         {@const nComplets = solveurStore.solution.couverture.filter((c) => c.obtenu >= c.cible).length}
         {@const nTotal = inscriptions.groupes.length}
