@@ -577,6 +577,13 @@ code {
     padding: 0;
   }
 
+  /* En-tête d'impression : masqué à l'écran, révélé sur papier pour
+     identifier la session (smoke Stéphane 2026-09-03 v1739 : « un tirage
+     sans date ne se distingue pas de celui de la veille »). */
+  .header-impression {
+    display: none;
+  }
+
   /* Impression : conserver la seule vue résultat active, sans formulaires.
      Chaque tableau ne se coupe pas en milieu de ligne. */
   @media print {
@@ -594,6 +601,14 @@ code {
       margin: 0;
       border-radius: 0;
     }
+    .sheet.impression .header-impression {
+      display: block;
+      font-size: 13px;
+      color: #333;
+      margin: 0 0 4px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #999;
+    }
     .sheet.impression .eyebrow,
     .sheet.impression h2 {
       color: black;
@@ -601,6 +616,7 @@ code {
     .sheet.impression .toolbar,
     .sheet.impression .stats,
     .sheet.impression .msg,
+    .sheet.impression .hint,
     .sheet.impression button,
     .sheet.impression .fake-btn {
       display: none !important;
@@ -608,9 +624,23 @@ code {
     table {
       page-break-inside: auto;
       border-collapse: collapse;
+      table-layout: fixed;
+      width: 100%;
     }
     thead { display: table-header-group; }
     tr { page-break-inside: avoid; page-break-after: auto; }
+    /* Colonnes Par groupe : Groupe assez large pour ne pas couper les
+       titres longs (« Cantaloupe Island / Herbie Hancock »), Resp étroite,
+       Répétitions prend le reste. Smoke Stéphane 2026-09-03. */
+    .sheet.impression table th:first-child,
+    .sheet.impression table td:first-child {
+      width: 26%;
+      word-wrap: break-word;
+    }
+    .sheet.impression table th:nth-child(2),
+    .sheet.impression table td:nth-child(2) {
+      width: 14%;
+    }
     .chip {
       background: white;
       border: 1px solid #999;

@@ -1194,6 +1194,25 @@
 
   {#if solveurStore.solution}
     <section class="sheet impression">
+      <!-- En-tête d'impression (masqué à l'écran) : sur du papier, l'écran
+           « Étape 4 · Résultats » ne dit pas de quelle session il s'agit
+           ni quand il a été imprimé — un tirage sans identification ne
+           se distingue pas de celui de la veille (smoke Stéphane
+           2026-09-03 v1739). -->
+      <div class="header-impression">
+        <b>{session.nom}</b>
+        {#if lieu.nom} · {lieu.nom}{/if}
+        {#if session.date_debut && session.date_fin}
+          · {session.date_debut} → {session.date_fin}
+        {/if}
+        · imprimé le {new Date().toLocaleString('fr-FR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })}
+      </div>
       <p class="eyebrow">Étape 4 · Résultats</p>
       <h2>États imprimables</h2>
       <div class="toolbar">
