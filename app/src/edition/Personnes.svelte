@@ -13,8 +13,11 @@
     onSupprimerInstrument: (pid: string, i: number) => void
     onInvalider: () => void
   }
+  // `inscriptions` est mutée à travers ses items (personne.nom, ins.pupitre,
+  // ins.precision, ins.lourd, personne.role) via `bind:value`. `$bindable()`
+  // exigé en Svelte 5. `lieu` reste read-only (pas de bind sur ses propriétés).
   let {
-    inscriptions,
+    inscriptions = $bindable(),
     lieu,
     nbPersonnesLibres,
     onAjouterPersonne,

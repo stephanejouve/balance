@@ -11,8 +11,10 @@
     onSupprimerSeance: (imposeIdx: number, seanceIdx: number) => void
     onInvalider: () => void
   }
+  // `inscriptions` est mutée à travers ses items (impose.morceau,
+  // seance.date/debut/fin). `$bindable()` exigé en Svelte 5.
   let {
-    inscriptions,
+    inscriptions = $bindable(),
     personnesParId,
     onAjouterImpose,
     onSupprimerImpose,

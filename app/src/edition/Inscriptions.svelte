@@ -11,8 +11,12 @@
     onRetirerMembre: (groupe_id: string, membreIdx: number) => void
     onInvalider: () => void
   }
+  // `inscriptions` est mutée à travers ses items (groupe.titre, groupe.style,
+  // groupe.tonalite, groupe.responsable_id, groupe.repetitions_deja_faites).
+  // `$bindable()` exigé en Svelte 5. `session` reste read-only (utilisée
+  // uniquement en attribut `max`).
   let {
-    inscriptions,
+    inscriptions = $bindable(),
     session,
     personnesParId,
     onAjouterGroupe,

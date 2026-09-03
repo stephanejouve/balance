@@ -15,8 +15,11 @@
     onSupprimerRestriction: (salleIdx: number, resIdx: number) => void
     onInvalider: () => void
   }
+  // `lieu` est mutée à travers ses items (salle.nom, salle.jauge,
+  // restriction.jours, etc.) et ses toggles `fonctionsActivees`.
+  // `$bindable()` exigé en Svelte 5.
   let {
-    lieu,
+    lieu = $bindable(),
     nbProposesEnMemoire,
     nbPersonnesDeclarees,
     onAjouterSalle,

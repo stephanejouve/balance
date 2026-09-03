@@ -21,6 +21,12 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(APP_VERSION),
   },
   plugins: [svelte(), viteSingleFile()],
+  // Force la condition `browser` pour que `svelte/mount` soit disponible en
+  // test (sinon vitest résout `svelte/index-server.js` qui refuse `mount()`).
+  // Requis pour les tests `.svelte.test.ts` qui montent un composant en jsdom.
+  resolve: {
+    conditions: process.env.VITEST ? ['browser'] : [],
+  },
   build: {
     target: 'es2020',
     assetsInlineLimit: 100_000_000,
@@ -35,7 +41,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.svelte.test.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov', 'html'],
