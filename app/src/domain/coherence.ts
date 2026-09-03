@@ -31,6 +31,7 @@
  * saisie corrigeables. À traiter en priorité côté UI/action.
  */
 
+import { estIndispoInterpretable } from '../engine/indispo'
 import type { Groupe, Impose, Inscriptions, Personne, Pupitre } from './model'
 
 export type AlerteCoherence =
@@ -193,6 +194,14 @@ function _detecterIndispoPercutee(
         const p = parId.get(membre)
         if (!p) continue
         for (const indispo of p.indispos) {
+          // Filtre les indispos non interprétables (« convalescence » : ni jour,
+          // ni horaire, ni rôle). L'import les ignore dans le calcul du solveur
+          // et émet un warning explicite « ignorée dans le calcul » — l'écran de
+          // relecture ne doit pas non plus les signaler comme contradiction, sous
+          // peine de dire deux choses opposées de la même donnée (bug smoke
+          // Stéphane 2026-09-03 v20260903.1511 défaut #1 : coherence.ts exigeait
+          // un arbitrage sur une contrainte que le solveur n'appliquait plus).
+          if (!estIndispoInterpretable(indispo)) continue
           if (!_indispoMatche(indispo.jours, seance.date, jourSemaine)) continue
           if (!_creneauChevauche(seance.debut, seance.fin, indispo.debut, indispo.fin)) continue
           alertes.push({

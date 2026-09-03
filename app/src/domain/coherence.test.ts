@@ -182,6 +182,52 @@ describe('cas M — indisponibilité percutée par séance Proposés (alerte pri
     }
     expect(detecterAlertesCoherence(insc).filter((a) => a.type === 'indispo_percutee')).toHaveLength(1)
   })
+
+  it('indispo non interprétable ("convalescence") → PAS d\'alerte (cohérence avec le solveur)', () => {
+    // Bug smoke Stéphane 2026-09-03 v20260903.1511 défaut #1 :
+    // l'import émet « ignorée dans le calcul » et le solveur ne l'applique
+    // plus. Si coherence.ts en signalait quand même une contradiction, on
+    // aurait deux modules avec deux lectures opposées de la même donnée.
+    // Verrouille l'invariant : les deux modules filtrent par le même
+    // prédicat `estIndispoInterpretable`.
+    const insc: Inscriptions = {
+      ...inscriptionsVides(),
+      personnes: [
+        { id: 'p', nom: 'Olivier', discriminant: '(B)', role: 'musicien', instruments: [],
+          // Ni jour, ni horaire, ni rôle → non interprétable
+          indispos: [{ jours: [], roles: [], motif: 'convalescence' }] },
+      ],
+      groupes: [],
+      imposes: [
+        { id: 'i', morceau: 'Blue Bossa', membres: ['p'],
+          seances: [{ date: '2026-08-24', debut: '14:30', fin: '16:00' }] },
+      ],
+    }
+    expect(
+      detecterAlertesCoherence(insc).filter((a) => a.type === 'indispo_percutee'),
+    ).toEqual([])
+  })
+
+  it('indispo « absent lundi » (jours seuls) → alerte quand séance tombe le lundi', () => {
+    // Nuance critique : les indispos avec jours mais sans horaire restent
+    // interprétables et doivent bien déclencher une alerte si la séance
+    // tombe un jour ciblé. Contre-exemple pour éviter de sur-filtrer.
+    const insc: Inscriptions = {
+      ...inscriptionsVides(),
+      personnes: [
+        { id: 'p', nom: 'X', discriminant: '', role: 'musicien', instruments: [],
+          indispos: [{ jours: ['lundi'], roles: [], motif: 'absent lundi' }] },
+      ],
+      groupes: [],
+      imposes: [
+        { id: 'i', morceau: 'M', membres: ['p'],
+          seances: [{ date: '2026-10-26', debut: '09:00', fin: '10:00' }] },  // 26 oct 2026 = lundi
+      ],
+    }
+    expect(
+      detecterAlertesCoherence(insc).filter((a) => a.type === 'indispo_percutee'),
+    ).toHaveLength(1)
+  })
 })
 
 // ─── I — resp non cité + stagiaire orphelin ───────────────────────────
