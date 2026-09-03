@@ -153,10 +153,19 @@
 {/if}
 
 <style>
+  /*
+   * Vue de rattrapage — chips « groupes compatibles ».
+   * Bug smoke Stéphane 2026-09-03 : les noms des groupes étaient
+   * illisibles (crème sur blanc — le texte héritait `--paper` du body,
+   * cf app.css), seuls les « + » ressortaient (bleu Tailwind hors charte).
+   * Cause identique à `EcranRelectureIdentites.svelte` : un `background`
+   * clair sans forçage `color: var(--ink)` prend l'héritage crème du body.
+   */
   .chip-actionnable {
     cursor: pointer;
-    border: 1px solid var(--rule, #ccc);
-    background: white;
+    border: 1px solid var(--paper-edge);
+    background: var(--paper);
+    color: var(--ink);
     padding: 4px 10px;
     border-radius: 12px;
     font-size: 12.5px;
@@ -166,11 +175,11 @@
     font: inherit;
   }
   .chip-actionnable:hover {
-    background: rgba(59, 130, 246, 0.08);
-    border-color: rgba(59, 130, 246, 0.4);
+    background: #fbf1de; /* teinte ocre très pâle, dérivée de --ochre */
+    border-color: var(--ochre);
   }
   .chip-plus {
-    color: #3b82f6;
+    color: var(--ochre);
     font-weight: 700;
     font-size: 13px;
   }
