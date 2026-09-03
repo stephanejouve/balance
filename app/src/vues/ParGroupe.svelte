@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Creneau } from '../domain/grille'
   import type { Groupe, Inscriptions, Salle } from '../domain/model'
+  import { libellePersonne } from '../domain/model'
   import { suggererRenforts } from '../engine/renforts'
   import type { Assignation } from '../engine/types'
 
@@ -30,6 +31,14 @@
     keyFigee,
     onAffecterRenfort,
   }: Props = $props()
+
+  // Garde-fou sujet C (Stéphane 2026-09-02, rappelé 2026-09-03) : la clé
+  // normalisée sert au rapprochement, jamais à l'affichage. On construit un
+  // index pour retrouver la personne et lui demander son libellé (« Fanny (A) »
+  // au lieu de `fanny-a` dans la colonne Resp. de la feuille de route).
+  const personnesParId = $derived(
+    new Map(inscriptions.personnes.map((p) => [p.id, p])),
+  )
 </script>
 
 <table>
@@ -47,9 +56,10 @@
         .map((a) => ({ a, c: creneauxParId.get(a.creneau_id) }))
         .filter((x) => x.c != null)
         .sort((x, y) => `${x.c!.date}T${x.c!.debut}`.localeCompare(`${y.c!.date}T${y.c!.debut}`))}
+      {@const resp = personnesParId.get(g.responsable_id)}
       <tr>
         <td><b>{g.titre}</b></td>
-        <td>{g.responsable_id}</td>
+        <td>{resp ? libellePersonne(resp) : g.responsable_id}</td>
         <td>
           {#if g.postes_cherches.length > 0}
             {@const suggestions = suggererRenforts(g, inscriptions, creneaux, assignations)}
