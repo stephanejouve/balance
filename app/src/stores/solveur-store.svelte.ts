@@ -105,8 +105,14 @@ export const solveurStore = $state({
    *
    * Bug attrapé au smoke Stéphane 2026-09-03 PR #61 v1 : le résumé
    * n'apparaissait jamais après une modification cadre + relance.
+   *
+   * Type `Assignation[]` (avec `salle_id`) et non `PlacementItem[]` : on
+   * conserve la salle pour permettre au comparateur de détecter les
+   * changements de lieu au prochain recalcul (spec Stéphane 2026-09-03
+   * v20260903.1623 — désactiver une salle occupée déplace des séances
+   * de lieu sans changer aucun horaire).
    */
-  dernierPlacementCapture: null as PlacementItem[] | null,
+  dernierPlacementCapture: null as Assignation[] | null,
 })
 
 export function lancer(inputs: SolveurInputs, options: LancerOptions): Solution {
@@ -164,21 +170,34 @@ export function formatResumeDiff(diff: DiffRepartition): string | null {
   const parts: string[] = []
 
   const reamenages = diff.groupes_modifies.filter((g) => g.deplacement_pur).length
-  if (reamenages > 0) {
-    parts.push(`${reamenages} groupe${reamenages > 1 ? 's' : ''} réaménagé${reamenages > 1 ? 's' : ''}`)
-  }
-
   const seancesPerdues = diff.groupes_modifies
     .filter((g) => !g.deplacement_pur)
     .reduce((s, g) => s + Math.max(0, g.creneaux_retires.length - g.creneaux_ajoutes.length), 0)
   const seancesGagnees = diff.groupes_modifies
     .filter((g) => !g.deplacement_pur)
     .reduce((s, g) => s + Math.max(0, g.creneaux_ajoutes.length - g.creneaux_retires.length), 0)
+  const nbChangementsSalle = diff.nb_changements_salle
+  const aucunHoraireModifie = reamenages === 0 && seancesPerdues === 0 && seancesGagnees === 0
 
+  if (reamenages > 0) {
+    parts.push(`${reamenages} groupe${reamenages > 1 ? 's' : ''} réaménagé${reamenages > 1 ? 's' : ''}`)
+  }
+  if (nbChangementsSalle > 0) {
+    parts.push(
+      `${nbChangementsSalle} changement${nbChangementsSalle > 1 ? 's' : ''} de salle`,
+    )
+  }
+  // Cas spec Stéphane 2026-09-03 : désactivation d'une salle occupée →
+  // uniquement des changements de salle, aucun horaire modifié. Sans cette
+  // mention explicite, l'utilisateur pourrait croire que des horaires ont
+  // bougé (« 4 changements de salle » seul étant ambigu).
+  if (aucunHoraireModifie && nbChangementsSalle > 0) {
+    parts.push('aucun horaire modifié')
+  }
   if (seancesPerdues > 0) {
     parts.push(`${seancesPerdues} séance${seancesPerdues > 1 ? 's' : ''} perdue${seancesPerdues > 1 ? 's' : ''}`)
-  } else if (reamenages > 0) {
-    // Message rassurant quand seuls des réaménagements ont eu lieu.
+  } else if (reamenages > 0 || (aucunHoraireModifie && nbChangementsSalle > 0)) {
+    // Message rassurant quand rien n'est réellement perdu.
     parts.push('aucune séance perdue')
   }
   if (seancesGagnees > 0) {
@@ -190,16 +209,34 @@ export function formatResumeDiff(diff: DiffRepartition): string | null {
 
 /**
  * Capture un snapshot **indépendant** des références vivantes de la
- * solution : chaque `PlacementItem` est reconstruit champ par champ, pas
- * ré-utilisé. Vigilance Stéphane 2026-09-02 : si on capturait la référence
+ * solution : chaque `Assignation` est reconstruit champ par champ, pas
+ * ré-utilisé.
+ *
+ * Vigilance Stéphane 2026-09-02 : si on capturait la référence
  * `solveurStore.solution.assignations` puis qu'un maillon du pipeline
  * mutait un objet en place (au lieu de réassigner), le "avant" deviendrait
  * le "après" sans prévenir → `comparerRepartitions` renverrait
  * `identiques: true` en permanence sans qu'aucun test ne l'attrape.
+ *
+ * Retourne `Assignation[]` complet (avec `salle_id`) — spec 2026-09-03 :
+ * on conserve la salle pour permettre au comparateur de détecter à la
+ * fois les changements d'horaire ET les changements de salle au prochain
+ * recalcul.
  */
-export function snapshotPlacement(sol: Solution | null): PlacementItem[] {
+export function snapshotPlacement(sol: Solution | null): Assignation[] {
   if (sol === null) return []
-  return sol.assignations.map((a) => ({ groupe_id: a.groupe_id, creneau_id: a.creneau_id }))
+  return sol.assignations.map((a) => ({
+    groupe_id: a.groupe_id,
+    creneau_id: a.creneau_id,
+    salle_id: a.salle_id,
+  }))
+}
+
+/** Réduit un `Assignation[]` à `PlacementItem[]` (drop `salle_id`) — utile
+ *  pour passer au comparateur qui prend deux formats en entrée séparés
+ *  (créneaux d'un côté, salles de l'autre). */
+function toPlacementItems(assignations: readonly Assignation[]): PlacementItem[] {
+  return assignations.map((a) => ({ groupe_id: a.groupe_id, creneau_id: a.creneau_id }))
 }
 
 /**
@@ -211,7 +248,7 @@ export function snapshotPlacement(sol: Solution | null): PlacementItem[] {
  * bug smoke Stéphane 2026-09-03). Si les deux sont vides → tableau vide
  * (1er calcul, aucune comparaison possible).
  */
-export function determinePlacementAvant(): PlacementItem[] {
+export function determinePlacementAvant(): Assignation[] {
   if (solveurStore.solution !== null) return snapshotPlacement(solveurStore.solution)
   return solveurStore.dernierPlacementCapture ?? []
 }
@@ -238,7 +275,14 @@ export async function runLancer(inputs: SolveurInputs): Promise<void> {
   // marche pas » (feedback Stéphane 2026-09-03 : sans ce message, chaque
   // relance sans modif redéclenche le doute et impose un smoke).
   if (placementAvant.length > 0) {
-    const diff = comparerRepartitions(placementAvant, placementApres)
+    // On passe les 2 formats : `PlacementItem` pour la logique historique
+    // (créneaux), et `Assignation` pour détecter les changements de salle.
+    const diff = comparerRepartitions(
+      toPlacementItems(placementAvant),
+      toPlacementItems(placementApres),
+      undefined,
+      { avant: placementAvant, apres: placementApres },
+    )
     solveurStore.dernierChangement =
       formatResumeDiff(diff) ?? 'Aucun changement par rapport au calcul précédent'
   } else {

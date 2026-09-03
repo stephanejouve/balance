@@ -200,3 +200,97 @@ describe('comparerRepartitions — déterminisme et stabilité', () => {
     expect(g.creneaux_retires).toEqual([...g.creneaux_retires].sort())
   })
 })
+
+// ─── Changements de salle (extension spec Stéphane 2026-09-03 v20260903.1623)
+//
+// Bug initial : désactiver une salle occupée → relance → « aucun changement »,
+// alors que plusieurs séances migrent ailleurs. Cause : PlacementItem ne porte
+// que (groupe_id, creneau_id) ; les salles étaient exclues du comparateur.
+// Correction : accepter un 4e paramètre optionnel `assignationsAvecSalles`
+// qui porte les triplets complets, et signaler les changements salle sur
+// les créneaux communs. Rétro-compat : sans ce paramètre, comportement
+// inchangé (`nb_changements_salle = 0`).
+
+const A = (groupe_id: string, creneau_id: string, salle_id: string) => ({
+  groupe_id,
+  creneau_id,
+  salle_id,
+})
+
+describe('comparerRepartitions — changements de salle', () => {
+  it('même groupe, même créneau, salle différente → 1 changement salle, pas de déplacement', () => {
+    const a = [P('g1', 'c1')]
+    const b = [P('g1', 'c1')]
+    const assignations = {
+      avant: [A('g1', 'c1', 'salle-A')],
+      apres: [A('g1', 'c1', 'salle-B')],
+    }
+    const diff = comparerRepartitions(a, b, undefined, assignations)
+    expect(diff.nb_changements_salle).toBe(1)
+    expect(diff.identiques).toBe(false)
+    expect(diff.delta_places).toBe(0)
+    const g = diff.groupes_modifies[0]
+    expect(g.deplacement_pur).toBe(false)
+    expect(g.creneaux_ajoutes).toEqual([])
+    expect(g.creneaux_retires).toEqual([])
+    expect(g.changements_salle).toEqual([
+      { creneau_id: 'c1', salle_avant: 'salle-A', salle_apres: 'salle-B' },
+    ])
+  })
+
+  it('même groupe, même créneau, même salle → aucun changement', () => {
+    const a = [P('g1', 'c1')]
+    const b = [P('g1', 'c1')]
+    const assignations = {
+      avant: [A('g1', 'c1', 'salle-A')],
+      apres: [A('g1', 'c1', 'salle-A')],
+    }
+    const diff = comparerRepartitions(a, b, undefined, assignations)
+    expect(diff.identiques).toBe(true)
+    expect(diff.nb_changements_salle).toBe(0)
+    expect(diff.groupes_modifies).toEqual([])
+  })
+
+  it('groupe déplacé ET changé de salle sur créneau commun → compté dans les 2', () => {
+    // g1 : [c1, c2] → [c1, c3]  (c2 → c3 = déplacement, salle c1 change)
+    const a = [P('g1', 'c1'), P('g1', 'c2')]
+    const b = [P('g1', 'c1'), P('g1', 'c3')]
+    const assignations = {
+      avant: [A('g1', 'c1', 'salle-A'), A('g1', 'c2', 'salle-A')],
+      apres: [A('g1', 'c1', 'salle-B'), A('g1', 'c3', 'salle-A')],
+    }
+    const diff = comparerRepartitions(a, b, undefined, assignations)
+    expect(diff.nb_changements_salle).toBe(1)
+    const g = diff.groupes_modifies[0]
+    expect(g.deplacement_pur).toBe(true) // 1 ajout + 1 retrait, cardinalité inchangée
+    expect(g.creneaux_ajoutes).toEqual(['c3'])
+    expect(g.creneaux_retires).toEqual(['c2'])
+    expect(g.changements_salle).toEqual([
+      { creneau_id: 'c1', salle_avant: 'salle-A', salle_apres: 'salle-B' },
+    ])
+  })
+
+  it('meta et assignations absents → mode dégradé, nb_changements_salle=0, aucune erreur', () => {
+    // Contrat rétro-compatible : les 8+ cas historiques n'ont jamais passé
+    // d'assignations. Le comparateur DOIT continuer à fonctionner en mode
+    // dégradé (nb_changements_salle=0) plutôt qu'échouer.
+    const diff = comparerRepartitions([P('g1', 'c1')], [P('g1', 'c1')])
+    expect(diff.identiques).toBe(true)
+    expect(diff.nb_changements_salle).toBe(0)
+    expect(diff.groupes_modifies).toEqual([])
+  })
+
+  it('plusieurs changements salle sur un même groupe → tous listés + tri déterministe', () => {
+    // g1 : c1 c2 c3 gardés, toutes salles changent
+    const a = [P('g1', 'c1'), P('g1', 'c2'), P('g1', 'c3')]
+    const b = [P('g1', 'c1'), P('g1', 'c2'), P('g1', 'c3')]
+    const assignations = {
+      avant: [A('g1', 'c1', 'sa'), A('g1', 'c2', 'sa'), A('g1', 'c3', 'sa')],
+      apres: [A('g1', 'c1', 'sb'), A('g1', 'c2', 'sb'), A('g1', 'c3', 'sb')],
+    }
+    const diff = comparerRepartitions(a, b, undefined, assignations)
+    expect(diff.nb_changements_salle).toBe(3)
+    const g = diff.groupes_modifies[0]
+    expect(g.changements_salle.map((c) => c.creneau_id)).toEqual(['c1', 'c2', 'c3'])
+  })
+})

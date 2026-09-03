@@ -52,6 +52,7 @@ describe('formatResumeDiff', () => {
     nb_groupes_modifies: 0,
     nb_seances_ajoutees: 0,
     nb_seances_retirees: 0,
+    nb_changements_salle: 0,
     groupes_modifies: [],
   }
 
@@ -68,6 +69,7 @@ describe('formatResumeDiff', () => {
           creneaux_ajoutes: ['c3'],
           creneaux_retires: ['c1'],
           deplacement_pur: true,
+          changements_salle: [],
         },
       ],
     }
@@ -78,8 +80,8 @@ describe('formatResumeDiff', () => {
     const diff: DiffRepartition = {
       ...baseDiff,
       groupes_modifies: [
-        { groupe_id: 'g1', creneaux_ajoutes: ['c3'], creneaux_retires: ['c1'], deplacement_pur: true },
-        { groupe_id: 'g2', creneaux_ajoutes: ['c4'], creneaux_retires: ['c2'], deplacement_pur: true },
+        { groupe_id: 'g1', creneaux_ajoutes: ['c3'], creneaux_retires: ['c1'], deplacement_pur: true, changements_salle: [] },
+        { groupe_id: 'g2', creneaux_ajoutes: ['c4'], creneaux_retires: ['c2'], deplacement_pur: true, changements_salle: [] },
       ],
     }
     expect(formatResumeDiff(diff)).toBe('2 groupes réaménagés, aucune séance perdue')
@@ -89,7 +91,7 @@ describe('formatResumeDiff', () => {
     const diff: DiffRepartition = {
       ...baseDiff,
       groupes_modifies: [
-        { groupe_id: 'g1', creneaux_ajoutes: [], creneaux_retires: ['c1', 'c2'], deplacement_pur: false },
+        { groupe_id: 'g1', creneaux_ajoutes: [], creneaux_retires: ['c1', 'c2'], deplacement_pur: false, changements_salle: [] },
       ],
     }
     expect(formatResumeDiff(diff)).toBe('2 séances perdues')
@@ -99,8 +101,8 @@ describe('formatResumeDiff', () => {
     const diff: DiffRepartition = {
       ...baseDiff,
       groupes_modifies: [
-        { groupe_id: 'g1', creneaux_ajoutes: ['c3'], creneaux_retires: ['c1'], deplacement_pur: true },
-        { groupe_id: 'g2', creneaux_ajoutes: [], creneaux_retires: ['c2'], deplacement_pur: false },
+        { groupe_id: 'g1', creneaux_ajoutes: ['c3'], creneaux_retires: ['c1'], deplacement_pur: true, changements_salle: [] },
+        { groupe_id: 'g2', creneaux_ajoutes: [], creneaux_retires: ['c2'], deplacement_pur: false, changements_salle: [] },
       ],
     }
     expect(formatResumeDiff(diff)).toBe('1 groupe réaménagé, 1 séance perdue')
@@ -110,10 +112,90 @@ describe('formatResumeDiff', () => {
     const diff: DiffRepartition = {
       ...baseDiff,
       groupes_modifies: [
-        { groupe_id: 'g1', creneaux_ajoutes: ['c1', 'c2'], creneaux_retires: [], deplacement_pur: false },
+        { groupe_id: 'g1', creneaux_ajoutes: ['c1', 'c2'], creneaux_retires: [], deplacement_pur: false, changements_salle: [] },
       ],
     }
     expect(formatResumeDiff(diff)).toBe('2 séances ajoutées')
+  })
+
+  // ─── Extension changements de salle (spec Stéphane 2026-09-03) ──────────
+
+  it('changements salle seuls (désactivation d\'une salle) → « aucun horaire modifié »', () => {
+    // Cas central du smoke : désactivation d'une salle occupée, tout le
+    // monde garde son créneau, mais N séances migrent ailleurs. Sans le
+    // suffixe « aucun horaire modifié », l'utilisateur pourrait croire
+    // que des horaires ont bougé (« 4 changements de salle » seul).
+    const diff: DiffRepartition = {
+      ...baseDiff,
+      nb_changements_salle: 4,
+      groupes_modifies: [
+        {
+          groupe_id: 'g1',
+          creneaux_ajoutes: [],
+          creneaux_retires: [],
+          deplacement_pur: false,
+          changements_salle: [
+            { creneau_id: 'c1', salle_avant: 'sa', salle_apres: 'sb' },
+            { creneau_id: 'c2', salle_avant: 'sa', salle_apres: 'sb' },
+            { creneau_id: 'c3', salle_avant: 'sa', salle_apres: 'sb' },
+            { creneau_id: 'c4', salle_avant: 'sa', salle_apres: 'sb' },
+          ],
+        },
+      ],
+    }
+    expect(formatResumeDiff(diff)).toBe(
+      '4 changements de salle, aucun horaire modifié, aucune séance perdue',
+    )
+  })
+
+  it('mix réaménagement + changements salle → « N groupes réaménagés, N changements de salle, aucune séance perdue »', () => {
+    // Cas verbatim du brief Stéphane : « 6 groupes réaménagés, 4 changements
+    // de salle, aucune séance perdue ».
+    const diff: DiffRepartition = {
+      ...baseDiff,
+      nb_changements_salle: 4,
+      groupes_modifies: [
+        { groupe_id: 'g1', creneaux_ajoutes: ['c3'], creneaux_retires: ['c1'], deplacement_pur: true, changements_salle: [] },
+        { groupe_id: 'g2', creneaux_ajoutes: ['c4'], creneaux_retires: ['c2'], deplacement_pur: true, changements_salle: [] },
+        { groupe_id: 'g3', creneaux_ajoutes: ['c5'], creneaux_retires: ['c1'], deplacement_pur: true, changements_salle: [] },
+        { groupe_id: 'g4', creneaux_ajoutes: ['c6'], creneaux_retires: ['c2'], deplacement_pur: true, changements_salle: [] },
+        { groupe_id: 'g5', creneaux_ajoutes: ['c7'], creneaux_retires: ['c3'], deplacement_pur: true, changements_salle: [] },
+        {
+          groupe_id: 'g6',
+          creneaux_ajoutes: ['c8'],
+          creneaux_retires: ['c4'],
+          deplacement_pur: true,
+          changements_salle: [
+            { creneau_id: 'c1', salle_avant: 'sa', salle_apres: 'sb' },
+            { creneau_id: 'c2', salle_avant: 'sa', salle_apres: 'sb' },
+            { creneau_id: 'c3', salle_avant: 'sa', salle_apres: 'sb' },
+            { creneau_id: 'c4', salle_avant: 'sa', salle_apres: 'sb' },
+          ],
+        },
+      ],
+    }
+    expect(formatResumeDiff(diff)).toBe(
+      '6 groupes réaménagés, 4 changements de salle, aucune séance perdue',
+    )
+  })
+
+  it('1 changement salle → singulier « changement »', () => {
+    const diff: DiffRepartition = {
+      ...baseDiff,
+      nb_changements_salle: 1,
+      groupes_modifies: [
+        {
+          groupe_id: 'g1',
+          creneaux_ajoutes: [],
+          creneaux_retires: [],
+          deplacement_pur: false,
+          changements_salle: [{ creneau_id: 'c1', salle_avant: 'sa', salle_apres: 'sb' }],
+        },
+      ],
+    }
+    expect(formatResumeDiff(diff)).toBe(
+      '1 changement de salle, aucun horaire modifié, aucune séance perdue',
+    )
   })
 })
 
@@ -207,8 +289,8 @@ describe('determinePlacementAvant (fallback dernierPlacementCapture)', () => {
     // puis resetSolution() a mis solution=null, mais capture survit.
     solveurStore.solution = null
     solveurStore.dernierPlacementCapture = [
-      { groupe_id: 'g1', creneau_id: 'c1' },
-      { groupe_id: 'g2', creneau_id: 'c2' },
+      { groupe_id: 'g1', creneau_id: 'c1', salle_id: 'S' },
+      { groupe_id: 'g2', creneau_id: 'c2', salle_id: 'S' },
     ]
     const avant = determinePlacementAvant()
     expect(avant).toHaveLength(2)
@@ -225,11 +307,11 @@ describe('determinePlacementAvant (fallback dernierPlacementCapture)', () => {
 describe('dernierPlacementCapture survit à resetSolution (bug smoke Stéphane)', () => {
   it('resetSolution() NE nullifie PAS dernierPlacementCapture', () => {
     solveurStore.solution = fauxSolution([{ groupe_id: 'g1', creneau_id: 'c1', salle_id: 'S' }])
-    solveurStore.dernierPlacementCapture = [{ groupe_id: 'g1', creneau_id: 'c1' }]
+    solveurStore.dernierPlacementCapture = [{ groupe_id: 'g1', creneau_id: 'c1', salle_id: 'S' }]
     resetSolution()
     expect(solveurStore.solution).toBeNull()
     expect(solveurStore.dernierPlacementCapture).toEqual([
-      { groupe_id: 'g1', creneau_id: 'c1' },
+      { groupe_id: 'g1', creneau_id: 'c1', salle_id: 'S' },
     ])
     // Corollaire : le prochain runLancer peut comparer via
     // determinePlacementAvant, même si l'utilisateur a ajouté une règle
@@ -238,7 +320,7 @@ describe('dernierPlacementCapture survit à resetSolution (bug smoke Stéphane)'
   })
 
   it('resetPlacementCapture() nullifie explicitement (purge session)', () => {
-    solveurStore.dernierPlacementCapture = [{ groupe_id: 'g1', creneau_id: 'c1' }]
+    solveurStore.dernierPlacementCapture = [{ groupe_id: 'g1', creneau_id: 'c1', salle_id: 'S' }]
     solveurStore.dernierChangement = '1 groupe réaménagé, aucune séance perdue'
     resetPlacementCapture()
     expect(solveurStore.dernierPlacementCapture).toBeNull()
