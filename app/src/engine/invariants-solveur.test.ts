@@ -7,30 +7,40 @@ import type { Assignation } from './types'
 import { verifier } from './verify'
 
 /**
- * Non-régression défaut #1 solveur — smoke Stéphane 2026-09-03 16h sur
- * balance-stress-test.xlsx : le solveur a produit
- *   - une violation de jauge (groupes Caravan/Duke posés dans une salle
- *     plus petite que leur effectif),
- *   - trois violations de non-consécutivité (pattern régulier
- *     `16:30-17:30 → 17:30-18:30`, même groupe sur deux créneaux
- *     back-to-back).
+ * Invariants du pipeline solveur — jauge et non-consécutivité.
  *
- * Le défaut n'est plus reproductible à partir de la v20260903.1817 : les
- * quatre lancers successifs du smoke PR #70 ont tous rendu « aucun conflit
- * détecté par la vérification indépendante ». Correction probable en effet
- * de bord des PR #67 (cohérence), #68 (libellés) ou #70 (comparateur
- * salles). Aucune PR ne s'attribue explicitement le fix.
+ * ⚠️ Ces tests protègent contre le retour d'un défaut qu'on n'a jamais
+ * expliqué. Ne pas les supprimer en croyant qu'ils font double emploi avec
+ * `solver.test.ts` / `allocate-rooms.test.ts` / `verify.test.ts` : ceux-ci
+ * vérifient des comportements de modules isolés, ceux-là verrouillent une
+ * décision issue d'une observation empirique.
+ *
+ * Contexte — smoke Stéphane 2026-09-03 16h sur balance-stress-test.xlsx :
+ * le solveur a produit une violation de jauge (Caravan/Duke posés dans une
+ * salle plus petite que leur effectif) et trois violations de non-consécutivité
+ * (pattern régulier `16:30-17:30 → 17:30-18:30`, même groupe sur deux
+ * créneaux back-to-back).
+ *
+ * Dès la v20260903.1817 (~1 h plus tard), le défaut n'est plus reproductible :
+ * quatre relances du smoke PR #70 et une relance sur PR #72 ont toutes
+ * rendu « aucun conflit détecté par la vérification indépendante ».
+ * Correction probable en effet de bord des PR #67 (cohérence), #68
+ * (libellés) ou #70 (comparateur salles) mergées entre 16h et 17h, mais
+ * **aucune PR ne s'attribue explicitement le fix. La cause n'a jamais été
+ * identifiée.**
  *
  * Consigne Stéphane 2026-09-03 21:08 : « plutôt que de chercher un bug
- * disparu, écris le test de non-régression. […] Si le test passe du premier
+ * disparu, écris le test de non-régression. Si le test passe du premier
  * coup, tant mieux : il empêchera le retour du défaut sans qu'on ait à
- * comprendre sa disparition. »
+ * comprendre sa disparition. » Même principe que la fixture adverse du
+ * solveur : un test qui justifie une décision plutôt qu'il ne vérifie un
+ * comportement.
  *
- * Les deux tests ci-dessous verrouillent les deux invariants violés par le
+ * Les tests ci-dessous verrouillent les deux invariants violés par le
  * défaut, à leur point d'observation le plus proche du symptôme : la
  * vérification indépendante (`verifier`) pour la consécutivité, l'attribution
  * de salle (`attribuerSalles`) pour la jauge. Ces deux modules sont les
- * derniers filets avant l'utilisateur ; s'ils tiennent, le défaut ne peut
+ * derniers filets avant l'utilisateur — s'ils tiennent, le défaut ne peut
  * pas ressortir même si un chemin amont régresse (solveur, figées, imposés).
  */
 
