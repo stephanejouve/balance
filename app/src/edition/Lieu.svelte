@@ -146,7 +146,7 @@
             onchange={(e) => toggleProposes((e.currentTarget as HTMLInputElement).checked)} />
           <span>
             <strong>Concert du vendredi</strong>
-            <span class="ink-soft">— morceaux proposés par l'intervenant (Étape 1c). Décoché : le solveur ignore les séances imposées.</span>
+            <span class="ink-soft">— morceaux proposés par l'équipe (Étape 1c). Décoché : le solveur ignore les séances imposées.</span>
           </span>
         </label>
         {#if !lieu.fonctionsActivees.proposes && nbProposesEnMemoire > 0}

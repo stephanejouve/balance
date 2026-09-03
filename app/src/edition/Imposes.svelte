@@ -27,9 +27,9 @@
 <details class="sheet">
   <summary>
     <p class="eyebrow">Étape 1c · Concert du vendredi</p>
-    <h2>{inscriptions.imposes.length} morceau(x) proposé(s) par l'intervenant</h2>
+    <h2>{inscriptions.imposes.length} morceau(x) proposé(s) par l'équipe</h2>
     <p class="hint">
-      Morceaux proposés par l'intervenant pour le concert du vendredi, avec leurs séances
+      Morceaux proposés par l'équipe pour le concert du vendredi, avec leurs séances
       de répétition déjà planifiées. Les membres listés seront bloqués sur ces créneaux —
       le solveur en tient compte pour les groupes volontaires qui les partagent.
     </p>
