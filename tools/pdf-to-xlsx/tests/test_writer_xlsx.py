@@ -39,26 +39,14 @@ def test_quatre_onglets_attendus(xlsx_genere):
     assert wb.sheetnames == ["Liste", "Stagiaires", "Proposés", "Mode d'emploi"]
 
 
-def test_onglet_liste_entete(xlsx_genere):
+def test_onglet_liste_header_seul(xlsx_genere):
+    """Liste = onglet des stagiaires (saisi par l'utilisateur). Le writer
+    ne doit PAS peupler avec les morceaux du PDF (qui sont des morceaux
+    d'intervenants) — ils vivent uniquement dans Proposés."""
     wb = load_workbook(xlsx_genere)
     ws = wb["Liste"]
     assert [c.value for c in ws[1]] == COLONNES_LISTE
-
-
-def test_onglet_liste_huit_morceaux(xlsx_genere):
-    wb = load_workbook(xlsx_genere)
-    ws = wb["Liste"]
-    assert ws.max_row == 9  # header + 8 morceaux
-
-
-def test_onglet_liste_resp_renseigne(xlsx_genere):
-    wb = load_workbook(xlsx_genere)
-    ws = wb["Liste"]
-    for r in range(2, ws.max_row + 1):
-        morceau = ws.cell(row=r, column=1).value
-        resp = ws.cell(row=r, column=5).value
-        assert morceau, f"ligne {r} : morceau vide"
-        assert resp, f"ligne {r} ({morceau}) : responsable vide"
+    assert ws.max_row == 1
 
 
 def test_onglet_stagiaires_header_seul(xlsx_genere):

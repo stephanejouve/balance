@@ -104,6 +104,14 @@ function ongletModeEmploi(): SheetCell[][] {
       v('Texte libre conservé sans horaire spécifique (motif pour relecture humaine)'),
     ],
     [v(null), v(null)],
+    [g('— Onglet Stagiaires : intervenants inclus —'), v(null)],
+    [
+      v("Bertrand au piano d'un morceau de stagiaires"),
+      v(
+        "L'onglet Stagiaires accueille toutes les personnes du stage, intervenants compris. Un intervenant qui vient jouer dans un morceau se déclare ici comme les autres, avec son pupitre.",
+      ),
+    ],
+    [v(null), v(null)],
     [g('— Onglet Proposés : concert du vendredi —'), v(null)],
     [
       v('1 ligne = 1 séance'),

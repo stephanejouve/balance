@@ -37,6 +37,7 @@ function groupe(id: string, membres: string[]): Inscriptions['groupes'][number] 
     membres: membres.map((pid) => ({ personne_id: pid, pupitre: 'piano' })),
     postes_cherches: [],
     repetitions_deja_faites: 0,
+    echeance: 'apero_mercredi',
   }
 }
 

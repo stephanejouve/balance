@@ -29,7 +29,7 @@ def test_cli_end_to_end_produit_xlsx_et_audit(tmp_path):
 
     wb = load_workbook(out_xlsx)
     assert wb["Proposés"].max_row == 25  # header + 24 séances
-    assert wb["Liste"].max_row == 9      # header + 8 morceaux
+    assert wb["Liste"].max_row == 1      # header seul (Liste = onglet stagiaires, non peuplé par le PDF)
 
     audit_txt = out_audit.read_text()
     assert "RAPPORT D'AUDIT" in audit_txt

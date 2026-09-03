@@ -97,6 +97,28 @@ describe('Groupe', () => {
     expect(g.membres).toEqual([])
     expect(g.postes_cherches).toEqual([])
   })
+
+  it("hérite du défaut echeance = 'apero_mercredi' pour les groupes persistés avant le champ", () => {
+    // Cas migration : les inscriptions déjà enregistrées côté LocalStorage
+    // n'ont pas de champ `echeance`. Zod .default() garantit le retour propre.
+    const g = Groupe.parse({ id: 'g1', titre: 'Persisté avant échéance' })
+    expect(g.echeance).toBe('apero_mercredi')
+  })
+
+  it("accepte echeance = 'restitution_vendredi' (mouvement apéro → vendredi)", () => {
+    const g = Groupe.parse({
+      id: 'g1',
+      titre: 'Assez au point pour vendredi',
+      echeance: 'restitution_vendredi',
+    })
+    expect(g.echeance).toBe('restitution_vendredi')
+  })
+
+  it("rejette une echeance inconnue", () => {
+    expect(() =>
+      Groupe.parse({ id: 'g1', titre: 'X', echeance: 'concert_samedi' as never }),
+    ).toThrow()
+  })
 })
 
 describe('Inscriptions', () => {

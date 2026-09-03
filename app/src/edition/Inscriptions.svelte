@@ -45,6 +45,7 @@
           <th style="width:90px">Style</th>
           <th style="width:55px">Tona</th>
           <th>Membres</th>
+          <th style="width:75px" title="Concert visé — apéro mercredi (défaut) ou restitution vendredi">Concert</th>
           <th style="width:65px" title="Répétitions déjà effectuées">Déjà fait</th>
           <th style="width:40px"></th>
         </tr>
@@ -86,6 +87,12 @@
                   {/if}
                 </div>
               </details>
+            </td>
+            <td class="center">
+              <select bind:value={g.echeance} onchange={onInvalider} class="echeance" class:vendredi={g.echeance === 'restitution_vendredi'}>
+                <option value="apero_mercredi">mer.</option>
+                <option value="restitution_vendredi">ven.</option>
+              </select>
             </td>
             <td class="center">
               <input type="number" min="0" max={session.repetitions_visees} bind:value={g.repetitions_deja_faites} onchange={onInvalider} style="width:60px" />
@@ -135,5 +142,17 @@
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
+  }
+  select.echeance {
+    font-size: 12px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    border: 1px solid var(--ink-soft, #ccc);
+    background: transparent;
+  }
+  select.echeance.vendredi {
+    background: #f4e4a1;
+    font-weight: 600;
+    border-color: #c9a24a;
   }
 </style>

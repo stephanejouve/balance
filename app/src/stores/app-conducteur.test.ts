@@ -19,6 +19,7 @@ const groupe = (id: string, membres: Groupe['membres'], style = ''): Groupe => (
   membres,
   postes_cherches: [],
   repetitions_deja_faites: 0,
+  echeance: 'apero_mercredi',
 })
 
 const personne = (id: string, lateralite?: 'droitier' | 'gaucher'): Personne => ({
