@@ -867,8 +867,13 @@
     <h1>Qui répète <em>où</em>, et <em>quand</em></h1>
     <p class="hint">
       Répartition automatique des répétitions d'un stage de musique — équilibre entre
-      musiciens, groupes et salles. {inscriptions.groupes.length} groupes,
-      {inscriptions.personnes.length} musiciens, {creneaux.length} créneaux avant butoir du {session.date_butoir}.
+      musiciens, groupes et salles.
+      {#if inscriptions.groupes.length > 0 || inscriptions.personnes.length > 0}
+        {inscriptions.groupes.length} groupes,
+        {inscriptions.personnes.length} musiciens, {creneaux.length} créneaux avant butoir du {session.date_butoir}.
+      {:else}
+        Aucune session chargée — importez un fichier pour commencer.
+      {/if}
     </p>
   </header>
 
