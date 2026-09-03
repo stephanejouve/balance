@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Creneau } from '../domain/grille'
 import type { Personne } from '../domain/model'
-import { indispoBloque } from './indispo'
+import { estIndispoInterpretable, indispoBloque } from './indispo'
 
 const personne = (indispos: Personne['indispos']): Personne => ({
   id: 'p',
@@ -100,5 +100,58 @@ describe('indispoBloque — filtrage par jour', () => {
   it('bloque uniquement le jour ciblé', () => {
     expect(indispoBloque(p, creneau('09:00', '10:00', '2026-08-28'), [])).toBe(true)
     expect(indispoBloque(p, creneau('09:00', '10:00', '2026-08-29'), [])).toBe(false)
+  })
+})
+
+// ─── estIndispoInterpretable + garde-fou "convalescence" ──────────────────
+// Bug smoke Stéphane 2026-09-03 #1 : Olivier (B) avait `motif = "convalescence"`
+// (texte libre sans horaire, sans jour, sans rôle) → indispoBloque retournait
+// true sur TOUS les créneaux → 0 offre → placement impossible. Arbitrage
+// Stéphane 2026-09-02 : une indispo non interprétable ne contraint rien.
+
+describe('estIndispoInterpretable', () => {
+  it('non interprétable : ni jour ni horaire ni rôle (« convalescence »)', () => {
+    expect(estIndispoInterpretable({ jours: [], roles: [], motif: 'convalescence' })).toBe(false)
+    expect(estIndispoInterpretable({ jours: [], roles: [], motif: 'en arrêt maladie' })).toBe(false)
+  })
+
+  it('interprétable : jours seuls (« absent lundi »)', () => {
+    // Nuance critique Stéphane 2026-09-02 : sans horaire mais avec jours → OK
+    expect(
+      estIndispoInterpretable({ jours: ['lundi'], roles: [], motif: 'absent lundi' }),
+    ).toBe(true)
+    expect(
+      estIndispoInterpretable({ jours: ['2026-08-25'], roles: [], motif: '' }),
+    ).toBe(true)
+  })
+
+  it('interprétable : horaire seul (« 9h-10h »)', () => {
+    expect(
+      estIndispoInterpretable({ jours: [], debut: '09:00', fin: '10:00', roles: [], motif: '' }),
+    ).toBe(true)
+    expect(estIndispoInterpretable({ jours: [], debut: '09:00', roles: [], motif: '' })).toBe(true)
+  })
+
+  it('interprétable : rôle seul', () => {
+    expect(estIndispoInterpretable({ jours: [], roles: ['batterie'], motif: '' })).toBe(true)
+  })
+})
+
+describe('indispoBloque — garde-fou "convalescence" (bug smoke #1)', () => {
+  it('indispo non interprétable → ne bloque aucun créneau', () => {
+    const p = personne([{ jours: [], roles: [], motif: 'convalescence' }])
+    expect(indispoBloque(p, creneau('09:00', '10:00'), [])).toBe(false)
+    expect(indispoBloque(p, creneau('16:00', '17:00', '2026-08-29'), [])).toBe(false)
+  })
+
+  it('« absent lundi » (jours seuls, sans horaire) → bloque bien tous les créneaux du lundi', () => {
+    // Nuance critique Stéphane : le vrai critère de rejet est absence
+    // d'horaire ET absence de jour. Un jour précisé sans horaire reste
+    // valide et doit bloquer.
+    const p = personne([{ jours: ['2026-08-25'], roles: [], motif: 'absent lundi' }])
+    expect(indispoBloque(p, creneau('09:00', '10:00', '2026-08-25'), [])).toBe(true)
+    expect(indispoBloque(p, creneau('14:00', '15:00', '2026-08-25'), [])).toBe(true)
+    // Autre jour → OK
+    expect(indispoBloque(p, creneau('09:00', '10:00', '2026-08-26'), [])).toBe(false)
   })
 })

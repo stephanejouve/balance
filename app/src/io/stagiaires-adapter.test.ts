@@ -210,3 +210,35 @@ describe('parserIndispoLibre', () => {
     expect(parserIndispoLibre('   ')).toBeNull()
   })
 })
+
+// ─── Warning « indisponibilité non interprétable » (bug smoke #1) ─────────
+
+describe('extraireStagiaires — warning indispo non interprétable', () => {
+  it('émet un warning explicite quand une indispo n\'a ni jour ni horaire ni rôle', () => {
+    const rows = [
+      ['Nom', 'Pupitre', 'Latéralité', 'Indispos'],
+      ['Olivier (B)', 'basse', '', 'convalescence'],
+    ]
+    const { personnes, warnings } = extraireStagiaires(rows, MAPPING)
+    // La personne est bien créée avec son indispo (conservée pour affichage)
+    expect(personnes[0].indispos).toHaveLength(1)
+    expect(personnes[0].indispos[0].motif).toBe('convalescence')
+    // Warning explicite « ignorée dans le calcul » (arbitrage Stéphane
+    // 2026-09-02 : dire ce qui a été fait, pas seulement ce qui manque).
+    const w = warnings.find((x) => x.includes('non interprétable'))
+    expect(w).toBeDefined()
+    expect(w).toContain('ignorée dans le calcul')
+    expect(w).toContain('convalescence')
+    expect(w).toContain('à vérifier manuellement')
+  })
+
+  it('n\'émet PAS de warning quand l\'indispo est interprétable (« absent lundi »)', () => {
+    // Nuance critique Stéphane : jours seuls, sans horaire = interprétable.
+    const rows = [
+      ['Nom', 'Pupitre', 'Latéralité', 'Indispos'],
+      ['Alice', 'chant', '', 'lundi'],
+    ]
+    const { warnings } = extraireStagiaires(rows, MAPPING)
+    expect(warnings.some((w) => w.includes('non interprétable'))).toBe(false)
+  })
+})

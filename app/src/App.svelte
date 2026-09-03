@@ -993,32 +993,60 @@
       convoquer deux fois la même personne au même moment ni doubler une salle.
     </p>
     {#if infaisabilites.length > 0}
-      {@const manquantsTotal = infaisabilites.reduce((s, d) => s + Math.max(0, d.demande - d.offre), 0)}
-      <div class="msg warn">
-        <b>Contrôle en amont : {infaisabilites.length} musicien(s) en surcharge structurelle.</b>
-        <p class="mini-h">
-          Chacun ci-dessous demande plus de créneaux qu'il n'en a de disponibles
-          ({manquantsTotal} créneau{manquantsTotal > 1 ? 'x' : ''} manquant{manquantsTotal > 1 ? 's' : ''}
-          au total sur l'ensemble des musiciens signalés).
-          <strong>Lancer maintenant produira un placement partiel — c'est prévu, pas un bug.</strong>
-          Réduire leurs engagements ou libérer des créneaux avant permet d'atteindre
-          un placement complet.
-        </p>
-        <ul>
-          {#each infaisabilites.slice(0, 8) as d}
-            <li>
-              <b>{d.nom}</b> — demande <b>{d.demande}</b> créneaux
-              ({d.detail.groupes} groupes × {d.detail.repetitions_visees}
-              {#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} imposés{/if})
-              mais seulement <b>{d.offre}</b> lui sont ouverts
-              (sur {d.detail.creneaux_total} au total).
-            </li>
-          {/each}
-          {#if infaisabilites.length > 8}
-            <li>… et {infaisabilites.length - 8} autres</li>
-          {/if}
-        </ul>
-      </div>
+      {@const surcharges = infaisabilites.filter((d) => d.type === 'surcharge')}
+      {@const exclusions = infaisabilites.filter((d) => d.type === 'exclusion')}
+      {#if surcharges.length > 0}
+        {@const manquantsTotal = surcharges.reduce((s, d) => s + Math.max(0, d.demande - d.offre), 0)}
+        <div class="msg warn">
+          <b>Contrôle en amont : {surcharges.length} musicien(s) en surcharge structurelle.</b>
+          <p class="mini-h">
+            Chacun ci-dessous demande plus de créneaux qu'il n'en a de disponibles
+            ({manquantsTotal} créneau{manquantsTotal > 1 ? 'x' : ''} manquant{manquantsTotal > 1 ? 's' : ''}
+            au total sur l'ensemble des musiciens signalés).
+            <strong>Lancer maintenant produira un placement partiel — c'est prévu, pas un bug.</strong>
+            Réduire leurs engagements ou libérer des créneaux avant permet d'atteindre
+            un placement complet.
+          </p>
+          <ul>
+            {#each surcharges.slice(0, 8) as d}
+              <li>
+                <b>{d.nom}</b> — demande <b>{d.demande}</b> créneaux
+                ({d.detail.groupes} groupes × {d.detail.repetitions_visees}
+                {#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} imposés{/if})
+                mais seulement <b>{d.offre}</b> lui sont ouverts
+                (sur {d.detail.creneaux_total} au total).
+              </li>
+            {/each}
+            {#if surcharges.length > 8}
+              <li>… et {surcharges.length - 8} autres</li>
+            {/if}
+          </ul>
+        </div>
+      {/if}
+      {#if exclusions.length > 0}
+        <div class="msg warn">
+          <b>Contrôle en amont : {exclusions.length} musicien(s) sans aucun créneau disponible.</b>
+          <p class="mini-h">
+            Chacun ci-dessous n'a accès à aucun créneau — souvent parce que ses
+            indisponibilités couvrent toute la semaine, ou parce que les séances
+            imposées lui bloquent tout. À vérifier avant de lancer : le solveur
+            ne pourra pas les placer.
+          </p>
+          <ul>
+            {#each exclusions.slice(0, 8) as d}
+              <li>
+                <b>{d.nom}</b> — n'a accès à aucun créneau sur
+                {d.detail.creneaux_total} (demande <b>{d.demande}</b> :
+                {d.detail.groupes} groupes × {d.detail.repetitions_visees}
+                {#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} imposés{/if}).
+              </li>
+            {/each}
+            {#if exclusions.length > 8}
+              <li>… et {exclusions.length - 8} autres</li>
+            {/if}
+          </ul>
+        </div>
+      {/if}
     {/if}
     <label class="check" style="max-width:none;border:none;margin:8px 0 12px">
       <input type="checkbox" bind:checked={filtrerPasse} />

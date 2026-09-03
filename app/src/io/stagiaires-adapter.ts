@@ -1,4 +1,5 @@
 import { pupitreDe } from '../domain/migrate'
+import { estIndispoInterpretable } from '../engine/indispo'
 import type { Indispo, Personne, Pupitre } from '../domain/model'
 import { PUPITRES_DEFAULTS, slug } from '../domain/model'
 
@@ -272,7 +273,20 @@ export function extraireStagiaires(
         // Plusieurs indispos séparées par ; ou saut de ligne
         for (const chunk of brutInd.split(/[;\n]+/).map((s) => s.trim()).filter(Boolean)) {
           const ind = parserIndispoLibre(chunk)
-          if (ind) indispos.push(ind)
+          if (ind) {
+            indispos.push(ind)
+            // Signalement d'import (arbitrage Stéphane 2026-09-02, smoke #1 2026-09-03) :
+            // les textes libres qui n'ont ni jour, ni horaire, ni rôle reconnaissables
+            // (« convalescence », « en arrêt maladie »…) sont conservés dans le motif
+            // pour relecture humaine, mais ne bloquent aucun créneau. On le dit à
+            // l'utilisateur ici (pas côté écran de relecture des identités qui gère
+            // les personnes, pas les contraintes horaires).
+            if (!estIndispoInterpretable(ind)) {
+              warnings.push(
+                `ligne ${r + 1} (${brut}) : indisponibilité non interprétable, ignorée dans le calcul : ${chunk} — à vérifier manuellement`,
+              )
+            }
+          }
         }
       }
     }
