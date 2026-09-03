@@ -137,6 +137,95 @@ describe('estIndispoInterpretable', () => {
   })
 })
 
+// ─── Critère de forme : résidu non reconnu (défaut #2 Stéphane 2026-09-03) ─
+// « estIndispoInterpretable est trop laxiste : il retient "arrive mardi midi"
+// comme interprétable à cause du mot "mardi", alors que "arrive" et "midi"
+// signalent un texte libre qui décrit autre chose. » Feedback 21:28 : passer
+// d'un critère de sens à un critère de forme — la chaîne est interprétable
+// si, après retrait des jours, plages, rôles et mots vides, il ne reste rien.
+
+describe('estIndispoInterpretable — critère de forme (résidu du motif)', () => {
+  it('non interprétable : « arrive mardi midi » (jour mordu par parser, mais résidu "arrive midi")', () => {
+    expect(
+      estIndispoInterpretable({ jours: ['mardi'], roles: [], motif: 'arrive mardi midi' }),
+    ).toBe(false)
+  })
+
+  it('non interprétable : « repart jeudi soir » (résidu "repart soir")', () => {
+    expect(
+      estIndispoInterpretable({ jours: ['jeudi'], roles: [], motif: 'repart jeudi soir' }),
+    ).toBe(false)
+  })
+
+  it('non interprétable : « mercredi après-midi » (résidu "apres midi", plage partielle non-horaire)', () => {
+    // Le parser mord sur "mercredi" mais laisse "après-midi" — trop flou
+    // pour bloquer toute la journée. L'utilisateur peut préciser via 14h-18h.
+    expect(
+      estIndispoInterpretable({ jours: ['mercredi'], roles: [], motif: 'mercredi après-midi' }),
+    ).toBe(false)
+  })
+
+  it('interprétable : « absent lundi » (résidu "absent" = mot vide)', () => {
+    // Verrouille la nuance Stéphane 2026-09-02 : « absent » n'ajoute pas
+    // d'info horaire, c'est une description redondante avec le fait d'être
+    // dans la colonne indispos.
+    expect(
+      estIndispoInterpretable({ jours: ['lundi'], roles: [], motif: 'absent lundi' }),
+    ).toBe(true)
+  })
+
+  it('interprétable : « toute la journée » (quantificateur + unité jour = mots vides)', () => {
+    // Cas real-world coherence.test.ts : ind = { jours: ['lundi'], motif: 'toute la journée' }.
+    // « toute » + « la » + « journée » sont tous des mots vides.
+    expect(
+      estIndispoInterpretable({ jours: ['lundi'], roles: [], motif: 'toute la journée' }),
+    ).toBe(true)
+  })
+
+  it('interprétable : « mardi 09:00 - 10:00 » (plage horaire complète = garde imposé)', () => {
+    // debut ET fin posés → garde imposé/parser-complet court-circuite le
+    // check résiduel, quel que soit le motif.
+    expect(
+      estIndispoInterpretable({
+        jours: ['mardi'],
+        debut: '09:00',
+        fin: '10:00',
+        roles: [],
+        motif: 'mardi 09:00 - 10:00',
+      }),
+    ).toBe(true)
+  })
+
+  it('interprétable : imposé structuré (« Imposé : Blue Bossa », garde debut/fin)', () => {
+    // Les imposés (engine/imposes.ts::enrichirIndispos) posent jours ISO +
+    // debut + fin programmatiquement, avec motif = label d'affichage. La
+    // garde `debut && fin` doit court-circuiter le check résiduel — sinon
+    // "impose : blue bossa" serait vu comme résidu inconnu → bloque le solveur.
+    expect(
+      estIndispoInterpretable({
+        jours: ['2026-08-24'],
+        debut: '14:00',
+        fin: '15:00',
+        roles: [],
+        motif: 'Imposé : Blue Bossa',
+      }),
+    ).toBe(true)
+  })
+
+  it("interprétable : jours ISO + motif descriptif (« RDV médical » sans nom de jour parsé)", () => {
+    // Autre pattern légitime : UI/import structuré pose jours ISO, motif
+    // descriptif. Le résidu contient "rdv medical" mais joursParTexte=false
+    // (pas de nom de jour dans ind.jours) → check résiduel court-circuité.
+    expect(
+      estIndispoInterpretable({
+        jours: ['2026-08-28'],
+        roles: [],
+        motif: 'RDV médical',
+      }),
+    ).toBe(true)
+  })
+})
+
 describe('indispoBloque — garde-fou "convalescence" (bug smoke #1)', () => {
   it('indispo non interprétable → ne bloque aucun créneau', () => {
     const p = personne([{ jours: [], roles: [], motif: 'convalescence' }])
