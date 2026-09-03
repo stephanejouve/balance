@@ -24,7 +24,20 @@ export interface Manifest {
 
 export type EtatMiseAJour =
   | { statut: 'a-jour'; version_locale: string }
-  | { statut: 'nouvelle-version'; version_locale: string; version_distante: string; url_telechargement: string }
+  | {
+      statut: 'nouvelle-version'
+      version_locale: string
+      version_distante: string
+      url_telechargement: string
+      /**
+       * Vrai quand la nouvelle version a été installée en tâche de fond
+       * par le service worker (elle est prête, il faut recharger pour
+       * l'activer). Faux quand on l'a juste détectée en fetchant le
+       * manifest distant (elle est disponible en ligne mais pas encore
+       * téléchargée). Optionnel : par défaut `false` (fallback fetch).
+       */
+      installee_en_tache_de_fond?: boolean
+    }
   | { statut: 'offline' }
   | { statut: 'erreur'; motif: string }
 
