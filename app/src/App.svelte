@@ -875,7 +875,7 @@
     </div>
   {/if}
   <header>
-    <p class="eyebrow">Balance · V1</p>
+    <p class="eyebrow">Balance</p>
     <h1>Qui répète <em>où</em>, et <em>quand</em></h1>
     <p class="hint">
       Répartition automatique des répétitions d'un stage de musique — équilibre entre
