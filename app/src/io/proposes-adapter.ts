@@ -188,9 +188,17 @@ export function extraireProposes(
         const { nom: n, discriminant } = extraireDiscriminant(nom)
         const id = idPersonne(n, discriminant)
         if (!idsConnus.has(id)) {
-          warnings.push(
-            `ligne ${r + 1} (${titre}) : membre « ${nom} » inconnu — importe d'abord l'onglet Liste ou Stagiaires`,
-          )
+          // Cas 1 : aucun référentiel disponible (session vide + pas d'onglet
+          // Liste/Stagiaires dans le classeur — typiquement l'import PDF de
+          // Leader qui produit Proposés seul). Warning informatif : la personne
+          // n'est pas une erreur de manip, elle est à créer/compléter côté
+          // Stagiaires. Cas 2 : référentiel présent mais ce membre spécifique
+          // manque — probable erreur d'orthographe côté saisie utilisateur.
+          const message =
+            idsConnus.size === 0
+              ? `ligne ${r + 1} (${titre}) : membre « ${nom} » ne figure pas dans le fichier — à créer ou à compléter côté Stagiaires`
+              : `ligne ${r + 1} (${titre}) : membre « ${nom} » non trouvé dans le référentiel de personnes chargées`
+          warnings.push(message)
           continue
         }
         membres.push(id)

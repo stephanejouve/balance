@@ -173,6 +173,22 @@ export async function preparerImportExcel(
  * on peut simuler un classeur (Liste avec colonnes non conformes,
  * Stagiaires vide, mix reconnus / non reconnus…) sans binaire réel.
  */
+/**
+ * Ordre canonique d'analyse des onglets (indépendant de l'ordre dans le
+ * classeur) : Stagiaires + Liste doivent être parsés AVANT Proposés, sinon
+ * `extraireProposes` ne peut résoudre les membres et produit des warnings
+ * « membre inconnu » entièrement faux (les personnes existent mais dans un
+ * onglet pas encore parsé). Audit Stéphane 2026-09-03 sur balance-stress-test.xlsx.
+ *
+ * Les onglets non reconnus (`destination === null`) sont traités en dernier
+ * — leur ordre est indifférent puisqu'ils ne participent pas au pipeline.
+ */
+const ORDRE_ANALYSE: Record<DestinationOnglet, number> = {
+  liste: 0,
+  stagiaires: 1,
+  proposes: 2,
+}
+
 export function analyserSheetsExcel(
   sheets: Array<{ sheet: string; data: unknown[][] }>,
   nomFichier: string,
@@ -184,7 +200,21 @@ export function analyserSheetsExcel(
   const warningsGlobaux: string[] = []
   const payloads: DetectionExcel['_payloads'] = new Map()
 
-  for (const s of sheets) {
+  // Référentiel de personnes évoluant au fil du parse : commence avec ce que
+  // la session App connaît déjà, puis grossit à chaque onglet Stagiaires
+  // parsé avec succès. Passé à extraireProposes pour résoudre les membres.
+  let personnesConnuesRunning: readonly Personne[] = personnesConnues
+
+  const sheetsOrdonnees = [...sheets].sort((a, b) => {
+    const dA = reconnaitreDestination(a.sheet)
+    const dB = reconnaitreDestination(b.sheet)
+    if (dA === null && dB === null) return 0
+    if (dA === null) return 1
+    if (dB === null) return -1
+    return ORDRE_ANALYSE[dA] - ORDRE_ANALYSE[dB]
+  })
+
+  for (const s of sheetsOrdonnees) {
     const destination = reconnaitreDestination(s.sheet)
     if (destination === null) {
       onglets.push({
@@ -254,10 +284,14 @@ export function analyserSheetsExcel(
         })
         if (statut === 'ok') {
           payloads.set(s.sheet, { destination: 'stagiaires', personnes })
+          // Enrichit le référentiel courant pour les onglets Proposés qui suivent
+          // (grâce au tri ORDRE_ANALYSE, Proposés est toujours parsé après Stagiaires).
+          personnesConnuesRunning = [...personnesConnuesRunning, ...personnes]
         }
       } else {
-        // proposes
-        const { imposes, warnings } = extraireProposes(data, mappings.proposes, personnesConnues)
+        // proposes — utilise le référentiel *courant* (qui inclut les personnes
+        // du/des onglet(s) Stagiaires déjà parsé(s) grâce au tri ORDRE_ANALYSE).
+        const { imposes, warnings } = extraireProposes(data, mappings.proposes, personnesConnuesRunning)
         const nSeances = imposes.reduce((n, i) => n + i.seances.length, 0)
         const statut: StatutOnglet = imposes.length === 0 ? 'echec' : 'ok'
         onglets.push({
