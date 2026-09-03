@@ -17,11 +17,27 @@ import type { PlacementItem } from './solver'
  * Si demande > offre : personne physiquement impossible à satisfaire.
  */
 
+/**
+ * Type d'infaisabilité — distingue les deux cas qui appellent des actions
+ * utilisateur différentes (audit Stéphane smoke 2026-09-03 défaut #2) :
+ *
+ * - `surcharge` : `offre > 0 && demande > offre`. La personne a des créneaux
+ *   ouverts mais pas assez pour satisfaire la demande. Action attendue :
+ *   réduire les engagements ou libérer des créneaux.
+ * - `exclusion` : `offre === 0`. La personne n'a **aucun** créneau ouvert
+ *   (souvent : indisponibilités trop larges ou séances imposées qui
+ *   couvrent tout). Action attendue : vérifier ses indisponibilités.
+ *   Zéro créneau n'est pas une surcharge — c'est une exclusion, et le
+ *   message doit orienter vers la bonne cause.
+ */
+export type TypeInfaisabilite = 'surcharge' | 'exclusion'
+
 export interface DiagCharge {
   personne_id: string
   nom: string
   demande: number
   offre: number
+  type: TypeInfaisabilite
   detail: {
     groupes: number
     seances_imposees: number
@@ -77,6 +93,7 @@ export function analyserInfaisabilite(
         nom: libellePersonne(p),
         demande,
         offre,
+        type: offre === 0 ? 'exclusion' : 'surcharge',
         detail: {
           groupes: nbGroupes,
           seances_imposees: nbImposes,

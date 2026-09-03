@@ -1,5 +1,5 @@
 import type { Creneau } from '../domain/grille'
-import type { Personne, Pupitre } from '../domain/model'
+import type { Indispo, Personne, Pupitre } from '../domain/model'
 
 /**
  * Prédicat unifié : est-ce qu'une indisponibilité de la personne bloque
@@ -21,13 +21,32 @@ import type { Personne, Pupitre } from '../domain/model'
  *                                    avec [c.debut, c.fin[ est non vide (fix
  *                                    du bug d'intersection partielle : 08:30-09:30
  *                                    vs indispo 09:00-11:00 doit bloquer)
+ *
+ * **Indispos non interprétables** (aucun horaire, aucun jour, aucun rôle —
+ * typiquement `motif = 'convalescence'` en texte libre) : **ignorées** dans
+ * le calcul. Arbitrage Stéphane 2026-09-02 : « une indisponibilité que le
+ * solveur ne comprend pas ne contraint rien — conservée, affichée, mais
+ * ignorée dans le calcul ». Sinon un texte libre à sémantique inconnue
+ * bloquait toute la semaine (bug smoke #1 2026-09-03 : Olivier avec
+ * `convalescence` → 0 créneau ouvert sur 28).
+ *
+ * Nuance critique : « absent lundi » (`jours=['lundi']`, sans horaire) est
+ * une donnée valide qui bloque bien tous les créneaux du lundi.
  */
+export function estIndispoInterpretable(ind: Indispo): boolean {
+  const aHoraire = Boolean(ind.debut || ind.fin)
+  const aJours = ind.jours.length > 0
+  const aRoles = ind.roles.length > 0
+  return aHoraire || aJours || aRoles
+}
+
 export function indispoBloque(
   personne: Personne,
   creneau: Creneau,
   pupitres: Pupitre[],
 ): boolean {
   return personne.indispos.some((ind) => {
+    if (!estIndispoInterpretable(ind)) return false
     if (ind.jours.length > 0 && !ind.jours.includes(creneau.date)) return false
     if (ind.roles.length > 0 && !pupitres.some((r) => ind.roles.includes(r))) return false
     if (!ind.debut && !ind.fin) return true
