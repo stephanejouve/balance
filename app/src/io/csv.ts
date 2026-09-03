@@ -39,6 +39,10 @@ export function tableauParGroupe(
   const cible = session.repetitions_visees
   const creneauxParId = new Map(creneaux.map((c) => [c.id, c]))
   const sallesParId = new Map(lieu.salles.map((s) => [s.id, s]))
+  // Garde-fou sujet C : afficher le libellé de la personne, pas l'id
+  // normalisé (« Fanny (A) » plutôt que `fanny-a` dans la colonne
+  // Responsable du CSV — smoke Stéphane 2026-09-03).
+  const personnesParId = new Map(inscriptions.personnes.map((p) => [p.id, p]))
   const parGroupe = new Map<string, Assignation[]>()
   for (const a of assignations) {
     if (!parGroupe.has(a.groupe_id)) parGroupe.set(a.groupe_id, [])
@@ -58,10 +62,12 @@ export function tableauParGroupe(
       .filter((x) => x.c != null)
       .sort((x, y) => `${x.c.date}T${x.c.debut}`.localeCompare(`${y.c.date}T${y.c.debut}`))
     const effectif = new Set(g.membres.map((m) => m.personne_id)).size
+    const respPersonne = personnesParId.get(g.responsable_id)
+    const respLibelle = respPersonne ? libellePersonne(respPersonne) : g.responsable_id
     const row: unknown[] = [
       idx + 1,
       g.titre,
-      g.responsable_id,
+      respLibelle,
       g.style,
       g.tonalite,
       effectif,

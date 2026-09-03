@@ -72,6 +72,54 @@ describe('csvParGroupe', () => {
     // Cible = 2 : la 2ᵉ répé absente laisse 3 champs vides consécutifs
     expect(csv).toContain(';;;')
   })
+
+  it('affiche le libellé de la personne dans la colonne Responsable, pas l\'id normalisé', () => {
+    // Garde-fou sujet C rappelé par Stéphane 2026-09-03 : la clé
+    // normalisée sert au rapprochement, jamais à l'affichage. Un
+    // responsable qui lit `fanny-a` sur la feuille imprimée ne se
+    // reconnaît pas.
+    const session = Session.parse({
+      id: 's',
+      nom: 'S',
+      lieu_id: 'l',
+      date_debut: '2026-08-24',
+      date_fin: '2026-08-24',
+      date_butoir: '2026-08-25',
+      grille: [{ debut: '09:00', fin: '10:00', pas_minutes: 60 }],
+      repetitions_visees: 1,
+    })
+    const lieu = Lieu.parse({
+      id: 'l',
+      nom: 'L',
+      salles: [{ id: 'A', nom: 'Salle A', jauge: 8 }],
+    })
+    const inscriptions = Inscriptions.parse({
+      session_id: 's',
+      personnes: [
+        {
+          id: 'fanny-a',
+          nom: 'Fanny',
+          discriminant: '(A)',
+          instruments: [{ pupitre: 'chant' }],
+        },
+      ],
+      groupes: [
+        {
+          id: 'g1',
+          titre: 'Duo',
+          style: '',
+          tonalite: '',
+          responsable_id: 'fanny-a',
+          membres: [{ personne_id: 'fanny-a', pupitre: 'chant' }],
+        },
+      ],
+    })
+    const creneaux = genererCreneaux(session, lieu)
+    const csv = csvParGroupe(session, lieu, inscriptions, creneaux, [])
+    // Doit contenir « Fanny (A) », pas « fanny-a »
+    expect(csv).toContain('Fanny (A)')
+    expect(csv).not.toContain(';fanny-a;')
+  })
 })
 
 describe('csvParSalle', () => {
