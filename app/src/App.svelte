@@ -69,7 +69,7 @@
 
   /* --- Données de démarrage --------------------------------------------- */
 
-  const lieu = $state(
+  let lieu = $state(
     Lieu.parse({
       id: 'musiques-festives',
       nom: 'Musiques Festives — Domaine de Meilhac',
@@ -82,7 +82,7 @@
       ],
     }),
   )
-  const session = $state(
+  let session = $state(
     Session.parse({
       id: 'session-5',
       nom: 'Session 5 — Musiques Festives',
@@ -905,7 +905,7 @@
   {/if}
 
   <PersonnesEdit
-    {inscriptions}
+    bind:inscriptions
     {lieu}
     {nbPersonnesLibres}
     onAjouterPersonne={ajouterPersonne}
@@ -916,7 +916,7 @@
   />
 
   <InscriptionsEdit
-    {inscriptions}
+    bind:inscriptions
     {session}
     {personnesParId}
     onAjouterGroupe={ajouterGroupe}
@@ -935,7 +935,7 @@
   />
 
   <ImposesEdit
-    {inscriptions}
+    bind:inscriptions
     {personnesParId}
     onAjouterImpose={ajouterImpose}
     onSupprimerImpose={supprimerImpose}
@@ -945,7 +945,7 @@
   />
 
   <LieuEdit
-    {lieu}
+    bind:lieu
     nbProposesEnMemoire={inscriptions.imposes.length}
     nbPersonnesDeclarees={inscriptions.personnes.length}
     onAjouterSalle={ajouterSalle}
@@ -956,7 +956,7 @@
   />
 
   <SessionEdit
-    {session}
+    bind:session
     nbCreneaux={creneaux.length}
     onAjouterRegle={ajouterRegle}
     onSupprimerRegle={supprimerRegle}

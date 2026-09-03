@@ -8,7 +8,14 @@
     onSupprimerRegle: (i: number) => void
     onInvalider: () => void
   }
-  let { session, nbCreneaux, onAjouterRegle, onSupprimerRegle, onInvalider }: Props = $props()
+  // `session` est mutée par les inputs (`bind:value={session.X}` sur nom,
+  // dates, marge, grille, etc.). Svelte 5 exige `$bindable()` sur toute prop
+  // mutée depuis l'enfant, faute de quoi on récolte des warnings
+  // `ownership_invalid_mutation` (156 occurrences smoke Stéphane 2026-09-03)
+  // et des comportements de bind imprévisibles. Le parent passe la prop en
+  // `bind:session={session}`.
+  let { session = $bindable(), nbCreneaux, onAjouterRegle, onSupprimerRegle, onInvalider }: Props =
+    $props()
 </script>
 
 <details class="sheet" open>
