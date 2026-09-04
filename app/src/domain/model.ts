@@ -281,10 +281,41 @@ export type Session = z.infer<typeof Session>
 
 /* -------------------------------------------------------------- Groupes ---*/
 
+/**
+ * Rôle vocal pour le pupitre chant — distingue les membres qui portent
+ * le morceau (`lead`) de ceux qui accompagnent (`choeurs`). Non
+ * interchangeables : un membre affecté « chœurs » n'est pas candidat pour
+ * porter le lead, et inversement.
+ *
+ * Facultatif : `Marie (A)` sur une case chant sans précision reste
+ * correct — le rôle est indéterminé, l'ambiguïté est portée à l'écran.
+ * Rendre la précision obligatoire produirait une fausse précision
+ * (feedback Stéphane 2026-09-04, brief CHERCHE quantifié).
+ */
+export const RoleChant = z.enum(['lead', 'choeurs'])
+export type RoleChant = z.infer<typeof RoleChant>
+
 export const MembreGroupe = z.object({
   personne_id: z.string().min(1),
   pupitre: Pupitre,
+  /**
+   * Précision d'INSTRUMENT (« clarinette basse », « contrebasse »,
+   * « batterie sans caisse claire »…) — voir aussi `Instrument.precision`.
+   *
+   * NE JAMAIS Y METTRE UN RÔLE VOCAL — c'est le champ `role` ci-dessous
+   * qui porte lead/chœurs. Le détournement de `precision` pour rôle vocal
+   * (envisagé task #59) a été rejeté 2026-09-04 : le champ est déjà affiché
+   * comme précision d'instrument dans `edition/Inscriptions.svelte` et
+   * peuplé par `pupitreDe(instrument)` dans `migrate.ts`. Mélanger les
+   * deux notions sous un même nom générique = anti-motif faux ami.
+   */
   precision: z.string().optional(),
+  /**
+   * Rôle vocal pour le pupitre chant (facultatif). Absent sur les autres
+   * pupitres, absent aussi sur chant si l'organisateur n'a pas encore
+   * décidé. Voir `RoleChant`.
+   */
+  role: RoleChant.optional(),
 })
 export type MembreGroupe = z.infer<typeof MembreGroupe>
 
@@ -301,6 +332,95 @@ export type MembreGroupe = z.infer<typeof MembreGroupe>
 export const Echeance = z.enum(['apero_mercredi', 'restitution_vendredi'])
 export type Echeance = z.infer<typeof Echeance>
 
+/**
+ * Poste à pourvoir dans un groupe — remplace le comptage naïf par
+ * répétition du pupitre (`['vents', 'vents', 'vents']` = 3 vents).
+ *
+ * `nb` : nombre de postes ouverts pour ce pupitre (≥ 1). Feedback Stéphane
+ * 2026-09-04 : quand un poste est pourvu, `nb` décroît de 1. Quand `nb`
+ * atteindrait 0, l'entrée est SUPPRIMÉE de la liste (pas conservée à zéro).
+ *
+ * **Décision UX assumée** : le badge « cherche X pupitres » disparaît d'un
+ * coup au moment du dernier pourvoi. `CHERCHE 3 → 2 → 1 → rien`. Trois
+ * étapes racontent une progression, la dernière efface l'histoire.
+ * Trade-off : un badge à zéro qui persisterait encombrerait ; un badge
+ * qui s'évanouit au moment de l'action peut désorienter — choix assumé
+ * plutôt que conséquence technique.
+ *
+ * `role` : rôle vocal (`lead` ou `choeurs`) — pertinent uniquement pour
+ * `pupitre === 'chant'`. Sur les autres pupitres, laissé absent. Non
+ * validé par refinement Zod : un jour un « lead » sur guitare (solo
+ * porteur du morceau) pourrait avoir du sens — on ne bloque pas.
+ */
+export const PosteCherche = z.object({
+  pupitre: Pupitre,
+  nb: z.number().int().min(1),
+  role: RoleChant.optional(),
+})
+export type PosteCherche = z.infer<typeof PosteCherche>
+
+/**
+ * Formate un `PosteCherche` pour affichage à l'utilisateur — porte la
+ * quantité et le rôle vocal quand ils sont significatifs. Feedback
+ * Stéphane 2026-09-04 : le badge « cherche X » sans quantité est un
+ * signal amputé — l'utilisateur ne peut pas détecter l'écart depuis
+ * l'écran. Ce chantier est un correctif de VISIBILITÉ dont le comptage
+ * est le moyen ; le badge doit refléter les deux.
+ *
+ * Exemples :
+ *   { pupitre:'vents', nb:3 }                       → "3 vents"
+ *   { pupitre:'vents', nb:1 }                       → "vents"
+ *   { pupitre:'chant', nb:1, role:'lead' }          → "lead"
+ *   { pupitre:'chant', nb:2, role:'choeurs' }       → "2 chœurs"
+ *   { pupitre:'chant', nb:1 }                       → "chant"
+ *
+ * Le rôle vocal prime sur le pupitre dans le libellé (l'organisateur
+ * cherche « un lead », pas « un chant »). Quantité omise quand nb=1
+ * pour économiser l'espace visuel.
+ */
+export function formatPosteCherche(poste: PosteCherche): string {
+  const role = poste.role
+  const libelleRole = role === 'choeurs' ? 'chœurs' : role // 'lead' inchangé
+  const libelle = libelleRole ?? poste.pupitre
+  return poste.nb > 1 ? `${poste.nb} ${libelle}` : libelle
+}
+
+/**
+ * Formate un tableau de `PosteCherche` en libellé lisible pour badge UI.
+ * Concatène avec virgule. Vide si aucun poste (le composant appelant
+ * masque le badge sur array vide, cf. décision UX badge disparaît d'un
+ * coup au dernier pourvoi — docstring PosteCherche).
+ */
+export function formatPostesCherches(postes: readonly PosteCherche[]): string {
+  return postes.map(formatPosteCherche).join(', ')
+}
+
+/**
+ * Preprocess de rétro-compatibilité pour `Groupe.postes_cherches`.
+ *
+ * Ancien format (jusqu'à 2026-09-04) : `Pupitre[]` avec 1 entrée = 1 poste,
+ * répétition pour compter (`['vents', 'vents', 'vents']` = 3 vents).
+ *
+ * Nouveau format : `PosteCherche[]` avec `nb` explicite. Les JSONs
+ * persistés avant le changement sont convertis à la volée : dédup par
+ * pupitre + comptage des occurrences → `{ pupitre, nb }`. Aucune notion
+ * de rôle dans l'ancien format, donc `role` absent après migration.
+ */
+function migrerPostesCherchesAncienFormat(input: unknown): unknown {
+  if (!Array.isArray(input)) return input
+  // Nouveau format déjà : premier élément est un objet
+  if (input.length === 0) return input
+  if (typeof input[0] === 'object' && input[0] !== null && 'pupitre' in input[0]) return input
+  // Ancien format : Pupitre[] → PosteCherche[]
+  const compteur = new Map<string, number>()
+  for (const p of input) {
+    if (typeof p === 'string') {
+      compteur.set(p, (compteur.get(p) ?? 0) + 1)
+    }
+  }
+  return [...compteur.entries()].map(([pupitre, nb]) => ({ pupitre, nb }))
+}
+
 export const Groupe = z.object({
   id: z.string().min(1),
   titre: z.string().min(1),
@@ -309,7 +429,7 @@ export const Groupe = z.object({
   tonalite: z.string().default(''),
   responsable_id: z.string().default(''),
   membres: z.array(MembreGroupe).default([]),
-  postes_cherches: z.array(Pupitre).default([]),
+  postes_cherches: z.preprocess(migrerPostesCherchesAncienFormat, z.array(PosteCherche).default([])),
   /**
    * Répétitions déjà effectuées (ex : recalcul en milieu de session).
    * Le solveur ne cherche que `session.repetitions_visees - repetitions_deja_faites`

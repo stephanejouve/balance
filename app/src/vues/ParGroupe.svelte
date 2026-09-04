@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Creneau } from '../domain/grille'
   import type { Groupe, Inscriptions, Salle } from '../domain/model'
-  import { libellePersonne } from '../domain/model'
+  import { formatPostesCherches, libellePersonne } from '../domain/model'
   import { suggererRenforts } from '../engine/renforts'
   import type { Assignation } from '../engine/types'
 
@@ -65,7 +65,7 @@
             {@const suggestions = suggererRenforts(g, inscriptions, creneaux, assignations)}
             <details class="renforts">
               <summary>
-                <span class="badge">cherche {g.postes_cherches.join(', ')}</span>
+                <span class="badge">cherche {formatPostesCherches(g.postes_cherches)}</span>
                 <span class="mono ink-soft">{suggestions.length} candidat(s)</span>
               </summary>
               {#if suggestions.length > 0}
