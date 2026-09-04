@@ -1085,12 +1085,16 @@
         <div class="msg warn">
           {#if solveurStore.solution.arret_precoce === 'heuristique'}
             <!-- Mode deterministic (défaut) — 1 essai heuristique, pas de
-                 mention de temps/essais qui n'ont pas de sens ici. -->
+                 mention de temps/essais qui n'ont pas de sens ici.
+                 Feedback Stéphane 2026-09-04 : ne PAS énumérer les pistes
+                 (surcharge musicien / contraintes / infaisabilité) — le
+                 bloc « Pourquoi ça bloque » ci-dessous calcule la cause
+                 par groupe, chaque énumération à côté crée une dette de
+                 synchronisation (le cas B « saturation capacité » manquait).
+                 Ne PAS affirmer l'optimalité (« maximum atteignable ») —
+                 le solveur s'arrête, pas nécessairement à l'optimum. -->
             <b>Placement heuristique : {nComplets}/{nTotal} groupes complets.</b>
-            C'est le maximum atteignable par l'heuristique déterministe.
-            Voir « Pourquoi ça bloque » ci-dessous pour identifier ce qui
-            empêche d'aller plus loin (surcharge musicien, contraintes,
-            groupes structurellement infaisables).
+            Voir « Pourquoi ça bloque » ci-dessous pour la cause identifiée par groupe.
           {:else if solveurStore.solution.arret_precoce === 'budget'}
             <b>Calcul interrompu à {Math.round(solveurStore.budgetMsCourant / 1000)} s pour ne pas geler l'écran.</b>
             {nComplets}/{nTotal} groupes complets après {solveurStore.solution.essais_executes}
@@ -1107,9 +1111,10 @@
             <b>{nManquants > 0 ? `${nManquants} groupe${nManquants > 1 ? 's non placés' : ' non placé'}` : 'Optimum atteint'}
               après {solveurStore.solution.essais_executes} essais sans progrès.</b>
             {#if nManquants > 0}
-              Le solveur a plafonné à {nComplets}/{nTotal} — probablement un ou
-              plusieurs groupes structurellement infaisables (voir « Pourquoi ça
-              bloque » ci-dessous et le contrôle en amont).
+              <!-- Idem heuristique : renvoi neutre vers « Pourquoi ça bloque »,
+                   pas d'énumération de causes potentielles à côté du canal
+                   qui les calcule (feedback Stéphane 2026-09-04). -->
+              Le solveur a plafonné à {nComplets}/{nTotal}. Voir « Pourquoi ça bloque » ci-dessous pour la cause identifiée par groupe.
             {:else}
               Solution complète trouvée, essais supplémentaires jugés inutiles.
             {/if}
@@ -1154,8 +1159,18 @@
             Voici sur quoi agir.
           </p>
           {#each solveurStore.solution.diagnostics as d}
+            {@const restantes = d.cible - d.obtenu}
             <div class="diag-bloc">
-              <b>{d.titre}</b> — {d.obtenu}/{d.cible} répétitions restantes.
+              <!--
+                Ratio restantes/visées (pas obtenu/cible) : le bloc s'intitule
+                « Voici sur quoi agir », le nombre utile est ce qu'il reste
+                à placer. Smoke Stéphane 2026-09-04 sur fixture-saturation :
+                « Echo 0/3 répétitions restantes » se lisait « rien à faire
+                pour Echo » alors qu'Echo n'avait AUCUNE répétition —
+                lecture contraire à la réalité, la plus grave sur le groupe
+                le plus bloqué.
+              -->
+              <b>{d.titre}</b> — {restantes} répétition{restantes > 1 ? 's' : ''} restante{restantes > 1 ? 's' : ''} sur {d.cible} visée{d.cible > 1 ? 's' : ''}.
               {#if d.repetitions_deja_faites > 0}
                 <span class="badge" style="margin-left:6px">{d.repetitions_deja_faites} déjà fait(es)</span>
               {/if}
@@ -1174,10 +1189,13 @@
                      suggérerait faussement deux constats indépendants. -->
                 <br /><span class="ink-soft">Aucun créneau ouvert.</span>
               {:else if d.creneaux_exploitables === 0}
-                <!-- Cas B : créneaux ouverts pour les musiciens, mais capacité
-                     salle saturée par d'autres groupes. -->
+                <!-- Cas B : créneaux ouverts pour les musiciens, capacité
+                     saturée sur ces créneaux. Formulation neutre : ne préjuge
+                     pas de qui occupe. Smoke Stéphane : « tous saturés par
+                     d'autres groupes » était faux pour les groupes
+                     partiellement servis qui occupent aussi un des slots. -->
                 <br /><span class="ink-soft">
-                  {d.creneaux_ouverts} créneaux ouverts, aucun exploitable — tous saturés par d'autres groupes, la capacité totale est atteinte.
+                  {d.creneaux_ouverts} créneaux ouverts, aucun exploitable — la capacité est atteinte sur ces créneaux.
                 </span>
               {:else if d.partages.length > 0}
                 <!-- Cas C1 : capacité libre, musiciens partagés avec d'autres groupes.
