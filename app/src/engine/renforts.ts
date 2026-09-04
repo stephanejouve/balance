@@ -38,7 +38,12 @@ export function suggererRenforts(
   const enrichies = enrichirIndispos(inscriptions)
   const parId = new Map(enrichies.personnes.map((p) => [p.id, p]))
   const membresActuels = new Set(groupe.membres.map((m) => m.personne_id))
-  const pupitresCherches = new Set<Pupitre>(groupe.postes_cherches)
+  // Extraction des pupitres cherchés depuis la structure typée
+  // `PosteCherche[]`. Le `nb` par pupitre et le `role` éventuel ne sont pas
+  // consommés ici — `suggererRenforts` propose des candidats par pupitre,
+  // le raffinement quantitatif est côté UI (bouton d'affectation qui
+  // décrémente `nb`).
+  const pupitresCherches = new Set<Pupitre>(groupe.postes_cherches.map((pc) => pc.pupitre))
 
   // Créneaux où le groupe est déjà placé (là où on veut caser le renfort)
   const creneauxDuGroupe = assignations

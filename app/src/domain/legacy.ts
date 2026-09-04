@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { PosteCherche } from './model'
 
 /**
  * Format historique produit par le prototype `repartiteur_repetitions.html`.
@@ -17,8 +18,20 @@ export const LegacyGroupe = z.object({
   m2: z.string().default(''),
   membres: z.array(z.string()).default([]),
   cherche: z.string().default(''),
+  /**
+   * Nouveau champ (2026-09-04, brief CHERCHE quantifié) : postes à
+   * pourvoir avec quantité + rôle vocal facultatif. Rempli par le parseur
+   * Excel (liste-adapter). Absent = producteur ancien qui n'a que
+   * `cherche` string ; migrate.ts fait alors le fallback via parsing de
+   * la string. Non parsé par Zod parse (utilisé via `z.unknown()` pour
+   * éviter la dépendance forte entre schemas Legacy et canonique) — les
+   * consommateurs le type-narrow via l'export type ci-dessous.
+   */
+  postes_cherches: z.array(z.unknown()).optional(),
 })
-export type LegacyGroupe = z.infer<typeof LegacyGroupe>
+export type LegacyGroupe = Omit<z.infer<typeof LegacyGroupe>, 'postes_cherches'> & {
+  postes_cherches?: PosteCherche[]
+}
 
 export const LegacyIndispo = z.object({
   noms: z.array(z.string()),
@@ -34,10 +47,16 @@ export const LegacyInscriptions = z.object({
   indispos: z.array(LegacyIndispo).default([]),
   identitesConnues: z.array(z.string()).default([]),
 })
-export type LegacyInscriptions = z.infer<typeof LegacyInscriptions>
+export type LegacyInscriptions = Omit<z.infer<typeof LegacyInscriptions>, 'groupes'> & {
+  groupes: LegacyGroupe[]
+}
 
 export function parseLegacyInscriptions(raw: unknown): LegacyInscriptions {
-  return LegacyInscriptions.parse(raw)
+  // Cast : le schema Zod produit `postes_cherches: unknown[]` (voir docstring
+  // LegacyGroupe), le type exposé le narrow en `PosteCherche[]`. Les consommateurs
+  // ne consomment ce champ que s'il est présent (fallback vers `cherche` string
+  // sinon), donc le risque de type mismatch est cantonné à ce boundary.
+  return LegacyInscriptions.parse(raw) as unknown as LegacyInscriptions
 }
 
 /**

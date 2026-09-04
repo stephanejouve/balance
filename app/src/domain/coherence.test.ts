@@ -356,7 +356,7 @@ describe('cas P — morceau sans aucun membre (signalement)', () => {
       groupes: [
         { id: 'g', titre: 'Encore Sans Titre', auteur: '', style: '', tonalite: '',
           responsable_id: '', membres: [],
-          postes_cherches: ['chant', 'piano'], repetitions_deja_faites: 0, echeance: 'apero_mercredi' },
+          postes_cherches: [{ pupitre: 'chant', nb: 1 }, { pupitre: 'piano', nb: 1 }], repetitions_deja_faites: 0, echeance: 'apero_mercredi' },
       ],
     }
     expect(detecterAlertesCoherence(insc).filter((a) => a.type === 'morceau_vide')).toHaveLength(1)

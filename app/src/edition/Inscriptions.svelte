@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Inscriptions, Personne, Session } from '../domain/model'
-  import { libellePersonne } from '../domain/model'
+  import { formatPosteCherche, formatPostesCherches, libellePersonne } from '../domain/model'
 
   interface Props {
     inscriptions: Inscriptions
@@ -68,7 +68,7 @@
                     <span class="ink-soft">{g.membres.map((m) => m.pupitre).join(', ')}</span>
                   {/if}
                   {#if g.postes_cherches.length > 0}
-                    <span class="badge">cherche {g.postes_cherches.join(', ')}</span>
+                    <span class="badge">cherche {formatPostesCherches(g.postes_cherches)}</span>
                   {/if}
                 </summary>
                 <div class="membres-list">
@@ -76,13 +76,20 @@
                     {@const p = personnesParId.get(m.personne_id)}
                     <span class="chip">
                       {p ? libellePersonne(p) : m.personne_id}
-                      <em>{m.pupitre}{m.precision ? ` · ${m.precision}` : ''}</em>
+                      <!-- Le rôle vocal (lead / chœurs, feedback Stéphane
+                           brief CHERCHE 2026-09-04) s'affiche après le pupitre
+                           quand il est renseigné. La précision d'instrument
+                           (`m.precision`) reste indépendante — les deux
+                           coexistent en cas de chanteur avec instrument spécifié. -->
+                      <em>
+                        {m.pupitre}{m.role ? ` · ${m.role === 'choeurs' ? 'chœurs' : m.role}` : ''}{m.precision ? ` · ${m.precision}` : ''}
+                      </em>
                       <button class="mini" onclick={() => onRetirerMembre(g.id, mi)} title="Retirer ce membre du groupe">×</button>
                     </span>
                   {/each}
                   {#if g.postes_cherches.length > 0}
-                    {#each g.postes_cherches as pup}
-                      <span class="badge">cherche {pup}</span>
+                    {#each g.postes_cherches as poste}
+                      <span class="badge">cherche {formatPosteCherche(poste)}</span>
                     {/each}
                   {/if}
                 </div>

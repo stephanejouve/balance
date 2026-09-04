@@ -11,6 +11,7 @@
     nouvelIdPersonne,
     nouvelIdSalle,
     type Inscriptions,
+    type Pupitre,
   } from './domain/model'
   import { chargeParMusicien } from './engine/charge'
   import Contraintes from './edition/Contraintes.svelte'
@@ -563,16 +564,40 @@
     inscriptions.groupes.splice(i, 1)
     marquerObsolete()
   }
-  /** Affecte un renfort à un groupe : ajoute aux membres, retire du postes_cherches. */
+  /**
+   * Affecte un renfort à un groupe : ajoute aux membres, décrémente le
+   * poste correspondant dans `postes_cherches`. Feedback Stéphane
+   * 2026-09-04 (brief CHERCHE quantifié) : `nb` décroît de 1 ; quand il
+   * atteindrait 0, l'entrée est SUPPRIMÉE de la liste. Le badge « cherche
+   * N pupitres » disparaît d'un coup au dernier pourvoi — choix UX assumé
+   * (voir docstring `PosteCherche` dans domain/model.ts).
+   *
+   * Match du poste à décrémenter : par pupitre. Si plusieurs entrées de
+   * même pupitre existent (rare, ex: `CHERCHE lead` + `CHERCHE 2 chœurs`
+   * en deux entrées séparées), on décrémente la première trouvée — le
+   * raffinement par rôle sera nécessaire si l'UI propose d'affecter à un
+   * rôle précis (task suivante).
+   */
   function affecterRenfort(groupe_id: string, personne_id: string, pupitre: string) {
     const g = inscriptions.groupes.find((x) => x.id === groupe_id)
     if (!g) return
-    g.membres.push({ personne_id, pupitre })
-    const idx = g.postes_cherches.indexOf(pupitre)
-    if (idx >= 0) g.postes_cherches.splice(idx, 1)
+    g.membres.push({ personne_id, pupitre: pupitre as Pupitre })
+    const idx = g.postes_cherches.findIndex((pc) => pc.pupitre === pupitre)
+    if (idx >= 0) {
+      const poste = g.postes_cherches[idx]
+      if (poste.nb > 1) {
+        poste.nb -= 1
+      } else {
+        g.postes_cherches.splice(idx, 1)
+      }
+    }
     marquerObsolete()
   }
-  /** Retire un membre d'un groupe. Si le pupitre n'est plus tenu, l'ajoute à `postes_cherches`. */
+  /**
+   * Retire un membre d'un groupe. Si le pupitre n'est plus tenu par un
+   * autre membre, on l'ajoute à `postes_cherches` avec nb=1 ; si une
+   * entrée existe déjà pour ce pupitre, on incrémente son nb.
+   */
   function retirerMembre(groupe_id: string, membreIdx: number) {
     const g = inscriptions.groupes.find((x) => x.id === groupe_id)
     if (!g) return
@@ -584,8 +609,13 @@
     g.membres.splice(membreIdx, 1)
     // Auto : si personne d'autre ne tient ce pupitre, on le passe en cherche.
     const encore = g.membres.some((mm) => mm.pupitre === m.pupitre)
-    if (!encore && !g.postes_cherches.includes(m.pupitre)) {
-      g.postes_cherches.push(m.pupitre)
+    if (!encore) {
+      const existant = g.postes_cherches.find((pc) => pc.pupitre === m.pupitre)
+      if (existant) {
+        existant.nb += 1
+      } else {
+        g.postes_cherches.push({ pupitre: m.pupitre, nb: 1 })
+      }
     }
     marquerObsolete()
   }

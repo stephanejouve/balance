@@ -76,12 +76,17 @@ describe('migrerInscriptions', () => {
   })
 
   it('extrait les postes cherchés du champ « cherche »', () => {
+    // Depuis 2026-09-04 (brief CHERCHE quantifié) : `postes_cherches`
+    // est une structure typée `{ pupitre, nb, role? }[]` et non plus
+    // `Pupitre[]`. Le fallback via `extrairePostesCherchesString` traite
+    // les chaînes legacy comme 1 poste par occurrence.
     // groupe 01 · Sur La Place : "guitare (cherche guitare sèche)"
     const surLaPlace = canonique.groupes.find((g) => g.titre.startsWith('Sur La Place'))
-    expect(surLaPlace?.postes_cherches).toEqual(['guitare'])
+    expect(surLaPlace?.postes_cherches).toEqual([{ pupitre: 'guitare', nb: 1 }])
     // groupe 05 · Oye Como Va : "guitare, vents"
     const oye = canonique.groupes.find((g) => g.titre.startsWith('Oye Como Va'))
-    expect(oye?.postes_cherches).toEqual(expect.arrayContaining(['guitare', 'vents']))
+    const oyePupitres = oye?.postes_cherches.map((pc) => pc.pupitre) ?? []
+    expect(oyePupitres).toEqual(expect.arrayContaining(['guitare', 'vents']))
   })
 
   it('conserve Adrien 2× dans Boys Don\'t Cry (chant + guitare, même personne)', () => {

@@ -39,7 +39,11 @@ export function analyseQuotas(
   }
   for (const g of inscriptions.groupes) {
     for (const m of g.membres) pupitresPresents.add(m.pupitre)
-    for (const c of g.postes_cherches) pupitresPresents.add(c)
+    // `postes_cherches` : structure typée depuis 2026-09-04
+    // (`PosteCherche[]`), on lit le pupitre de chaque poste. Le `nb` et
+    // `role` ne sont pas consommés ici — les quotas raisonnent en
+    // pupitres, pas en postes.
+    for (const c of g.postes_cherches) pupitresPresents.add(c.pupitre)
   }
 
   const out: QuotaPupitre[] = []
@@ -52,7 +56,7 @@ export function analyseQuotas(
     const groupesDemandeurs = inscriptions.groupes.filter(
       (g) =>
         g.membres.some((m) => m.pupitre === pup) ||
-        g.postes_cherches.includes(pup),
+        g.postes_cherches.some((pc) => pc.pupitre === pup),
     )
     const nb_musiciens = musiciens.size
     const nb_groupes = groupesDemandeurs.length
