@@ -117,7 +117,31 @@ export interface DiagGroupe {
   titre: string
   obtenu: number
   cible: number
+  /**
+   * Créneaux où AUCUN membre du groupe n'est indisponible. Sémantique
+   * fidèle au calcul (`indispoBloque` sur chaque membre). Ne préjuge pas
+   * de la capacité restante — un créneau ouvert peut être saturé par
+   * d'autres groupes. Voir `creneaux_exploitables` pour la dimension
+   * capacité.
+   */
   creneaux_ouverts: number
+  /**
+   * Créneaux ouverts (cf. `creneaux_ouverts`) ET ayant au moins un slot
+   * capacité restant : `sallesUtilisables(c) - nb_placements_sur_c > 0`.
+   * Version simplifiée qui ne re-simule pas les collisions personnes
+   * cross-groupes du solveur (trop coûteux + duplication d'implémentation).
+   *
+   * Invariant par construction : `creneaux_exploitables <= creneaux_ouverts`.
+   *
+   * Sémantique messages « Pourquoi ça bloque » (feedback Stéphane 2026-09-04) :
+   * - `ouverts === 0` → cas A, cause indispos
+   * - `ouverts > 0 && exploitables === 0` → cas B, saturation capacité
+   * - `ouverts > 0 && exploitables > 0` → cas C, la capacité n'est PAS la
+   *   contrainte. Le chiffre `exploitables` devient faux ami à ce stade
+   *   (une collision personne cross-groupes peut le rendre optimiste),
+   *   il n'est pas affiché à l'utilisateur — on s'appuie sur `partages`.
+   */
+  creneaux_exploitables: number
   partages: Array<{ groupe_id: string; titre: string; communs: string[] }>
   poids_musicien?: {
     nom: string
@@ -140,6 +164,21 @@ export function diagnostiquer(
   const posesPar = new Map<string, number>()
   for (const p of placement) posesPar.set(p.groupe_id, (posesPar.get(p.groupe_id) ?? 0) + 1)
 
+  // Index créneau → nb placements (pour `creneaux_exploitables`).
+  const placementsParCreneau = new Map<string, number>()
+  for (const p of placement) {
+    placementsParCreneau.set(p.creneau_id, (placementsParCreneau.get(p.creneau_id) ?? 0) + 1)
+  }
+  const margePct = session.marge_pct || 0
+  // Miroir de `solver.ts::sallesUtilisables` — duplication contrôlée par
+  // l'invariant `exploitables <= ouverts` posé en test. Extraire vers module
+  // partagé = follow-up P3, hors scope.
+  const capaciteCreneau = (c: Creneau): number => {
+    const dispo = c.salles.length
+    if (dispo === 0 || margePct === 0) return dispo
+    return Math.max(1, Math.floor(dispo * (1 - margePct / 100)))
+  }
+
   const nbImposesPar = new Map<string, number>()
   for (const im of enrichies.imposes) {
     for (const pid of im.membres) {
@@ -156,7 +195,7 @@ export function diagnostiquer(
     const membres = [...new Set(g.membres.map((m) => m.personne_id))]
 
     // Créneaux ouverts : aucun membre indispo dessus
-    const ouverts = creneaux.filter((c) => {
+    const creneauxOuvertsListe = creneaux.filter((c) => {
       for (const pid of membres) {
         const p = parId.get(pid)
         if (!p) continue
@@ -164,6 +203,13 @@ export function diagnostiquer(
         if (indispoBloque(p, c, pups)) return false
       }
       return true
+    })
+    const ouverts = creneauxOuvertsListe.length
+
+    // Créneaux exploitables : sous-ensemble des ouverts ayant encore de la
+    // capacité salle (post-placement solveur). Invariant : exploitables ≤ ouverts.
+    const exploitables = creneauxOuvertsListe.filter((c) => {
+      return capaciteCreneau(c) - (placementsParCreneau.get(c.id) ?? 0) > 0
     }).length
 
     // Partages : autres groupes ayant au moins un membre commun
@@ -202,6 +248,7 @@ export function diagnostiquer(
       obtenu,
       cible: cibleG,
       creneaux_ouverts: ouverts,
+      creneaux_exploitables: exploitables,
       partages: partages.slice(0, 4),
       // Le remplacement d'un membre n'a plus de sens si le groupe a déjà répété
       poids_musicien: dejaFaites > 0 ? undefined : poids,

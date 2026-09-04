@@ -1155,28 +1155,57 @@
           </p>
           {#each solveurStore.solution.diagnostics as d}
             <div class="diag-bloc">
-              <b>{d.titre}</b> — {d.obtenu}/{d.cible} répétitions restantes,
-              seulement <b>{d.creneaux_ouverts}</b> créneaux compatibles sur {creneaux.length}.
+              <b>{d.titre}</b> — {d.obtenu}/{d.cible} répétitions restantes.
               {#if d.repetitions_deja_faites > 0}
                 <span class="badge" style="margin-left:6px">{d.repetitions_deja_faites} déjà fait(es)</span>
               {/if}
-              {#if d.partages.length > 0}
+              <!--
+                Bloc de cause — quatre branches selon (creneaux_ouverts,
+                creneaux_exploitables, partages), spec Stéphane 2026-09-04.
+                « aucun » plutôt que « 0 » — se lit comme une phrase qui
+                conclut, pas comme une valeur à scanner. Le chiffre
+                exploitables N'EST PAS affiché en cas C : c'est un faux ami
+                (une collision personne cross-groupe peut le rendre optimiste),
+                on s'appuie sur `partages` qui, lui, capte la vraie cause.
+              -->
+              {#if d.creneaux_ouverts === 0}
+                <!-- Cas A : indispos couvrent tous les créneaux ouverts pour ce groupe.
+                     Une seule phrase — afficher exploitables (0 par construction)
+                     suggérerait faussement deux constats indépendants. -->
+                <br /><span class="ink-soft">Aucun créneau ouvert.</span>
+              {:else if d.creneaux_exploitables === 0}
+                <!-- Cas B : créneaux ouverts pour les musiciens, mais capacité
+                     salle saturée par d'autres groupes. -->
                 <br /><span class="ink-soft">
-                  Partage des musiciens avec :
+                  {d.creneaux_ouverts} créneaux ouverts, aucun exploitable — tous saturés par d'autres groupes, la capacité totale est atteinte.
+                </span>
+              {:else if d.partages.length > 0}
+                <!-- Cas C1 : capacité libre, musiciens partagés avec d'autres groupes.
+                     `exploitables` non affiché (faux ami dans ce cas).
+                     `partages` est une PISTE, pas une cause démontrée — le libellé
+                     énumère la piste sans la présenter comme conclusion. Troncature
+                     au-delà de 3 groupes. -->
+                <br /><span class="ink-soft">
+                  {d.creneaux_ouverts} créneaux ouverts et de la place en salle : ce n'est pas la capacité qui bloque.
+                </span>
+                <br /><span class="ink-soft">
+                  Musiciens en commun :
                   {#each d.partages.slice(0, 3) as p, i}
-                    {i > 0 ? ', ' : ''}<b>{p.titre}</b> ({p.communs.join(', ')})
-                  {/each}
+                    {i > 0 ? ', ' : ''}{p.communs.join(', ')} avec <b>{p.titre}</b>
+                  {/each}{#if d.partages.length > 3}, et {d.partages.length - 3} autre{d.partages.length - 3 > 1 ? 's' : ''} groupe{d.partages.length - 3 > 1 ? 's' : ''}{/if}.
+                </span>
+                <br /><span class="ink-soft">
+                  Une même personne ne peut pas être à deux répétitions au même créneau.
+                </span>
+              {:else}
+                <!-- Cas C2 : capacité libre, aucun partage. Le placement s'est
+                     arrêté sans cause identifiable par le diagnostic simplifié —
+                     on le dit franchement plutôt que d'inventer une cause plausible. -->
+                <br /><span class="ink-soft">
+                  {d.creneaux_ouverts} créneaux ouverts, de la place en salle, aucun musicien en commun avec un autre groupe. Le placement s'est arrêté sans cause identifiable ici.
                 </span>
               {/if}
-              {#if d.poids_musicien}
-                <br /><span class="ink-soft">
-                  Piste : <b>{d.poids_musicien.nom}</b> cumule
-                  {d.poids_musicien.n_groupes} groupe(s)
-                  {#if d.poids_musicien.n_imposes > 0}
-                    + {d.poids_musicien.n_imposes} séance(s) imposée(s)
-                  {/if}. Le remplacer ici, ou accepter {Math.max(0, d.cible - 1)} répétitions supplémentaires, débloque la situation.
-                </span>
-              {:else if d.repetitions_deja_faites > 0}
+              {#if d.repetitions_deja_faites > 0}
                 <br /><span class="ink-soft">
                   Ce groupe a déjà commencé ses répétitions — modifier sa composition
                   n'est plus une option. Leviers possibles : accepter que les {d.cible} répétitions
