@@ -1085,12 +1085,16 @@
         <div class="msg warn">
           {#if solveurStore.solution.arret_precoce === 'heuristique'}
             <!-- Mode deterministic (défaut) — 1 essai heuristique, pas de
-                 mention de temps/essais qui n'ont pas de sens ici. -->
+                 mention de temps/essais qui n'ont pas de sens ici.
+                 Feedback Stéphane 2026-09-04 : ne PAS énumérer les pistes
+                 (surcharge musicien / contraintes / infaisabilité) — le
+                 bloc « Pourquoi ça bloque » ci-dessous calcule la cause
+                 par groupe, chaque énumération à côté crée une dette de
+                 synchronisation (le cas B « saturation capacité » manquait).
+                 Ne PAS affirmer l'optimalité (« maximum atteignable ») —
+                 le solveur s'arrête, pas nécessairement à l'optimum. -->
             <b>Placement heuristique : {nComplets}/{nTotal} groupes complets.</b>
-            C'est le maximum atteignable par l'heuristique déterministe.
-            Voir « Pourquoi ça bloque » ci-dessous pour identifier ce qui
-            empêche d'aller plus loin (surcharge musicien, contraintes,
-            groupes structurellement infaisables).
+            Voir « Pourquoi ça bloque » ci-dessous pour la cause identifiée par groupe.
           {:else if solveurStore.solution.arret_precoce === 'budget'}
             <b>Calcul interrompu à {Math.round(solveurStore.budgetMsCourant / 1000)} s pour ne pas geler l'écran.</b>
             {nComplets}/{nTotal} groupes complets après {solveurStore.solution.essais_executes}
@@ -1107,9 +1111,10 @@
             <b>{nManquants > 0 ? `${nManquants} groupe${nManquants > 1 ? 's non placés' : ' non placé'}` : 'Optimum atteint'}
               après {solveurStore.solution.essais_executes} essais sans progrès.</b>
             {#if nManquants > 0}
-              Le solveur a plafonné à {nComplets}/{nTotal} — probablement un ou
-              plusieurs groupes structurellement infaisables (voir « Pourquoi ça
-              bloque » ci-dessous et le contrôle en amont).
+              <!-- Idem heuristique : renvoi neutre vers « Pourquoi ça bloque »,
+                   pas d'énumération de causes potentielles à côté du canal
+                   qui les calcule (feedback Stéphane 2026-09-04). -->
+              Le solveur a plafonné à {nComplets}/{nTotal}. Voir « Pourquoi ça bloque » ci-dessous pour la cause identifiée par groupe.
             {:else}
               Solution complète trouvée, essais supplémentaires jugés inutiles.
             {/if}
@@ -1154,29 +1159,71 @@
             Voici sur quoi agir.
           </p>
           {#each solveurStore.solution.diagnostics as d}
+            {@const restantes = d.cible - d.obtenu}
             <div class="diag-bloc">
-              <b>{d.titre}</b> — {d.obtenu}/{d.cible} répétitions restantes,
-              seulement <b>{d.creneaux_ouverts}</b> créneaux compatibles sur {creneaux.length}.
+              <!--
+                Ratio restantes/visées (pas obtenu/cible) : le bloc s'intitule
+                « Voici sur quoi agir », le nombre utile est ce qu'il reste
+                à placer. Smoke Stéphane 2026-09-04 sur fixture-saturation :
+                « Echo 0/3 répétitions restantes » se lisait « rien à faire
+                pour Echo » alors qu'Echo n'avait AUCUNE répétition —
+                lecture contraire à la réalité, la plus grave sur le groupe
+                le plus bloqué.
+              -->
+              <b>{d.titre}</b> — {restantes} répétition{restantes > 1 ? 's' : ''} restante{restantes > 1 ? 's' : ''} sur {d.cible} visée{d.cible > 1 ? 's' : ''}.
               {#if d.repetitions_deja_faites > 0}
                 <span class="badge" style="margin-left:6px">{d.repetitions_deja_faites} déjà fait(es)</span>
               {/if}
-              {#if d.partages.length > 0}
+              <!--
+                Bloc de cause — quatre branches selon (creneaux_ouverts,
+                creneaux_exploitables, partages), spec Stéphane 2026-09-04.
+                « aucun » plutôt que « 0 » — se lit comme une phrase qui
+                conclut, pas comme une valeur à scanner. Le chiffre
+                exploitables N'EST PAS affiché en cas C : c'est un faux ami
+                (une collision personne cross-groupe peut le rendre optimiste),
+                on s'appuie sur `partages` qui, lui, capte la vraie cause.
+              -->
+              {#if d.creneaux_ouverts === 0}
+                <!-- Cas A : indispos couvrent tous les créneaux ouverts pour ce groupe.
+                     Une seule phrase — afficher exploitables (0 par construction)
+                     suggérerait faussement deux constats indépendants. -->
+                <br /><span class="ink-soft">Aucun créneau ouvert.</span>
+              {:else if d.creneaux_exploitables === 0}
+                <!-- Cas B : créneaux ouverts pour les musiciens, capacité
+                     saturée sur ces créneaux. Formulation neutre : ne préjuge
+                     pas de qui occupe. Smoke Stéphane : « tous saturés par
+                     d'autres groupes » était faux pour les groupes
+                     partiellement servis qui occupent aussi un des slots. -->
                 <br /><span class="ink-soft">
-                  Partage des musiciens avec :
+                  {d.creneaux_ouverts} créneaux ouverts, aucun exploitable — la capacité est atteinte sur ces créneaux.
+                </span>
+              {:else if d.partages.length > 0}
+                <!-- Cas C1 : capacité libre, musiciens partagés avec d'autres groupes.
+                     `exploitables` non affiché (faux ami dans ce cas).
+                     `partages` est une PISTE, pas une cause démontrée — le libellé
+                     énumère la piste sans la présenter comme conclusion. Troncature
+                     au-delà de 3 groupes. -->
+                <br /><span class="ink-soft">
+                  {d.creneaux_ouverts} créneaux ouverts et de la place en salle : ce n'est pas la capacité qui bloque.
+                </span>
+                <br /><span class="ink-soft">
+                  Musiciens en commun :
                   {#each d.partages.slice(0, 3) as p, i}
-                    {i > 0 ? ', ' : ''}<b>{p.titre}</b> ({p.communs.join(', ')})
-                  {/each}
+                    {i > 0 ? ', ' : ''}{p.communs.join(', ')} avec <b>{p.titre}</b>
+                  {/each}{#if d.partages.length > 3}, et {d.partages.length - 3} autre{d.partages.length - 3 > 1 ? 's' : ''} groupe{d.partages.length - 3 > 1 ? 's' : ''}{/if}.
+                </span>
+                <br /><span class="ink-soft">
+                  Une même personne ne peut pas être à deux répétitions au même créneau.
+                </span>
+              {:else}
+                <!-- Cas C2 : capacité libre, aucun partage. Le placement s'est
+                     arrêté sans cause identifiable par le diagnostic simplifié —
+                     on le dit franchement plutôt que d'inventer une cause plausible. -->
+                <br /><span class="ink-soft">
+                  {d.creneaux_ouverts} créneaux ouverts, de la place en salle, aucun musicien en commun avec un autre groupe. Le placement s'est arrêté sans cause identifiable ici.
                 </span>
               {/if}
-              {#if d.poids_musicien}
-                <br /><span class="ink-soft">
-                  Piste : <b>{d.poids_musicien.nom}</b> cumule
-                  {d.poids_musicien.n_groupes} groupe(s)
-                  {#if d.poids_musicien.n_imposes > 0}
-                    + {d.poids_musicien.n_imposes} séance(s) imposée(s)
-                  {/if}. Le remplacer ici, ou accepter {Math.max(0, d.cible - 1)} répétitions supplémentaires, débloque la situation.
-                </span>
-              {:else if d.repetitions_deja_faites > 0}
+              {#if d.repetitions_deja_faites > 0}
                 <br /><span class="ink-soft">
                   Ce groupe a déjà commencé ses répétitions — modifier sa composition
                   n'est plus une option. Leviers possibles : accepter que les {d.cible} répétitions
