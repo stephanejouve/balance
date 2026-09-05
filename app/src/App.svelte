@@ -36,7 +36,7 @@
   import type { EtapeConcert } from './engine/concert'
   import type { IdContrainte } from './engine/contraintes'
   import { registrePersonnalise } from './engine/contraintes'
-  import { analyserInfaisabilite } from './engine/diagnostic'
+  import { analyserCapaciteStage, analyserInfaisabilite } from './engine/diagnostic'
   import { preparerInscriptionsPourSolveur } from './engine/fonctions-activees'
   import { enrichirIndispos } from './engine/imposes'
   import { ciblesValides } from './engine/manuel'
@@ -180,6 +180,20 @@
       return analyserInfaisabilite(session, preparerInscriptionsPourSolveur(inscriptions, lieu), creneaux)
     } catch {
       return []
+    }
+  })
+  /**
+   * Signal capacité stage — feedback Stéphane 2026-09-05. Calculé au même
+   * niveau que `infaisabilites` (dérivé des mêmes entrées), affiché dès
+   * qu'il y a une infaisabilité per-personne pour éclairer le contexte
+   * (ratio demande/capacité) sans attribuer une cause. Voir docstring
+   * `DiagStage` dans engine/diagnostic.ts pour la sémantique complète.
+   */
+  const capaciteStage = $derived.by(() => {
+    try {
+      return analyserCapaciteStage(session, preparerInscriptionsPourSolveur(inscriptions, lieu), creneaux)
+    } catch {
+      return null
     }
   })
   const groupesParId = $derived(new Map(inscriptions.groupes.map((g) => [g.id, g])))
@@ -1025,26 +1039,64 @@
     {#if infaisabilites.length > 0}
       {@const surcharges = infaisabilites.filter((d) => d.type === 'surcharge')}
       {@const exclusions = infaisabilites.filter((d) => d.type === 'exclusion')}
+      <!--
+        Signal capacité stage — affiché dès qu'il y a une infaisabilité
+        per-personne, pour éclairer le contexte capacité sans attribuer
+        de cause. Message factuel : « N séances demandées pour M places
+        au total », deux causes possibles (manque salles/créneaux OU
+        cible trop élevée) laissées ouvertes à l'organisateur.
+        Feedback Stéphane 2026-09-05 : ne pas énumérer les remèdes,
+        même discipline que la refonte bandeau « Pourquoi ça bloque »
+        (PR #75). Le ton (warn vs info) s'adapte selon `sous_dimensionne`.
+      -->
+      {#if capaciteStage}
+        <!--
+          Ton unique (msg.warn) — la formulation neutre suffit à distinguer
+          contexte informatif (demande ≤ capacité) et alerte (dépassement).
+          Éviter un nouveau msg.info qui gonflerait la charte pour un cas
+          isolé.
+        -->
+        <div class="msg warn">
+          <b>Capacité du stage.</b>
+          {capaciteStage.demande_stage} séance{capaciteStage.demande_stage > 1 ? 's' : ''} demandée{capaciteStage.demande_stage > 1 ? 's' : ''}
+          pour {capaciteStage.capacite_stage} place{capaciteStage.capacite_stage > 1 ? 's' : ''} au total.
+        </div>
+      {/if}
       {#if surcharges.length > 0}
         {@const manquantsTotal = surcharges.reduce((s, d) => s + Math.max(0, d.demande - d.offre), 0)}
+        {@const surchargesMultiEngagement = surcharges.filter((d) => d.detail.groupes > 1)}
         <div class="msg warn">
-          <b>Contrôle en amont : {surcharges.length} musicien(s) en surcharge structurelle.</b>
+          <b>Contrôle en amont : {surcharges.length} musicien(s) en surcharge.</b>
           <p class="mini-h">
             Chacun ci-dessous demande plus de créneaux qu'il n'en a de disponibles
             ({manquantsTotal} créneau{manquantsTotal > 1 ? 'x' : ''} manquant{manquantsTotal > 1 ? 's' : ''}
             au total sur l'ensemble des musiciens signalés).
             <strong>Lancer maintenant produira un placement partiel — c'est prévu, pas un bug.</strong>
-            Réduire leurs engagements ou libérer des créneaux avant permet d'atteindre
-            un placement complet.
+            {#if surchargesMultiEngagement.length > 0}
+              Réduire les engagements des musiciens qui jouent dans plusieurs groupes,
+              ou libérer des créneaux, permet d'atteindre un placement complet.
+            {/if}
           </p>
           <ul>
             {#each surcharges.slice(0, 8) as d}
               <li>
                 <b>{d.nom}</b> — demande <b>{d.demande}</b> créneaux
-                ({d.detail.groupes} groupes × {d.detail.repetitions_visees}
+                ({d.detail.groupes} groupe{d.detail.groupes > 1 ? 's' : ''} × {d.detail.repetitions_visees}
                 {#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} imposés{/if})
                 mais seulement <b>{d.offre}</b> lui sont ouverts
                 (sur {d.detail.creneaux_total} au total).
+                <!--
+                  Remède adapté selon `d.detail.groupes` (feedback Stéphane
+                  2026-09-05) : « réduire ses engagements » n'a de sens que
+                  pour quelqu'un dans plusieurs groupes. Une personne dans 1
+                  seul groupe n'a rien à réduire — la vraie cause est ailleurs
+                  (capacité stage insuffisante ou indispos trop larges).
+                -->
+                {#if d.detail.groupes === 1}
+                  <span class="ink-soft">
+                    (1 seul groupe — pas de charge à réduire pour cette personne).
+                  </span>
+                {/if}
               </li>
             {/each}
             {#if surcharges.length > 8}
