@@ -67,17 +67,22 @@ export function estIndispoInterpretable(ind: Indispo): boolean {
   // ne contient que des dates ISO ("2026-08-28"), l'intention est explicite
   // (UI ou import structuré) et le motif est descriptif : « RDV médical »,
   // « congés annuels » ne doivent pas invalider une indispo bien posée.
-  const joursParTexte = ind.jours.some((j) => JOURS_FR_NORM.includes(j))
+  const joursParTexte = ind.jours.some((j) => JOURS_FR.includes(j))
   const rolesParTexte = ind.roles.length > 0
   if (!joursParTexte && !rolesParTexte) return true
 
   return residuNonReconnu(ind.motif, ind.roles).length === 0
 }
 
-/** Jours de semaine reconnus par le parser texte libre (miroir de
- *  `stagiaires-adapter.ts::JOURS_FR`). Duplication assumée : un extract vers
- *  un module partagé est un follow-up P3 (aussi en coherence.ts + grille.ts). */
-const JOURS_FR_NORM = [
+/** Jours de semaine indexés par `Date.getDay()` (dimanche = 0, ..., samedi = 6).
+ *
+ *  Constante partagée avec `coherence.ts` — celle-ci l'importe depuis ici
+ *  (fix 2026-09-08 « indispo noms de jour » : consolidation des deux
+ *  duplicatas voisins au moment du déplacement de `indispoJoursMatche` +
+ *  `jourSemaine` vers ce module, cf CD msg 6438). Le duplicata restant
+ *  dans `stagiaires-adapter.ts` et `grille.ts` est le sujet d'un ticket
+ *  refactor P3 dédié — hors scope de ce fix. */
+export const JOURS_FR: string[] = [
   'dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi',
 ]
 
@@ -122,11 +127,66 @@ function normaliser(s: string): string {
  */
 function residuNonReconnu(motif: string, roles: readonly Pupitre[]): string[] {
   let s = normaliser(motif)
-  for (const j of JOURS_FR_NORM) s = s.split(j).join(' ')
+  for (const j of JOURS_FR) s = s.split(j).join(' ')
   for (const r of roles) s = s.split(normaliser(r)).join(' ')
   s = s.replace(PLAGE_HORAIRE_RE, ' ')
   const tokens = s.split(/[^\p{L}\d]+/u).filter(Boolean)
   return tokens.filter((t) => !MOTS_VIDES.has(t))
+}
+
+/**
+ * Nom de jour FR (« lundi », « mardi »…) correspondant à une date ISO.
+ *
+ * Retourne `null` si la date est invalide. Le nom est lowercase, sans
+ * accent, aligné avec `JOURS_FR`. Utilisé pour permettre à
+ * `indispoJoursMatche` de comparer des noms de jour aux entrées `jours`
+ * d'une indispo (en plus des dates ISO).
+ *
+ * Déplacé depuis `domain/coherence.ts` en 2026-09-08 (CD msg 6438) —
+ * l'objectif est une implémentation unique consommée par les deux
+ * lecteurs (contrôle d'import cohérence + solveur / diagnostic /
+ * verify / renforts / manuel via `indispoBloque`).
+ */
+export function jourSemaine(dateIso: string): string | null {
+  const d = new Date(dateIso + 'T00:00:00')
+  if (isNaN(d.getTime())) return null
+  return JOURS_FR[d.getDay()]
+}
+
+/**
+ * True si le tableau `jours` d'une indispo couvre le créneau daté
+ * `dateIso`. Trois cas :
+ *
+ * - `jours` vide → couvre tous les jours de la session (sémantique
+ *   « une règle sans jours = tous les jours de la session », alignée
+ *   avec la génération de créneaux, cf `grille.ts::genererCreneaux`).
+ * - `jours` contient `dateIso` (comparaison ISO littérale) → couvre.
+ * - `jours` contient un nom de jour dont le lowercase == `jourSemaineOfDate`
+ *   → couvre.
+ *
+ * Le paramètre `jourSemaineOfDate` est précalculé par l'appelant pour
+ * éviter de recréer un `Date` pour chaque indispo d'une même personne
+ * (hot loop côté `indispoBloque` et `coherence::_detecterIndispoPercutee`).
+ *
+ * Déplacée depuis `domain/coherence.ts::_indispoMatche` en 2026-09-08
+ * (CD msg 6438). Corrige le défaut du lecteur solveur qui, avant ce
+ * déplacement, ne comparait `ind.jours` qu'à `creneau.date` en ISO — les
+ * entrées noms de jour (« mardi », « mercredi ») ne matchaient jamais
+ * un créneau et les indispos correspondantes étaient silencieusement
+ * ignorées (bug smoke Stéphane 2026-09-08 : Chloé placée 3 fois le mardi
+ * alors que 4 règles noms couvraient mardi-vendredi). Cf ticket #86.
+ */
+export function indispoJoursMatche(
+  joursIndispo: readonly string[],
+  dateIso: string,
+  jourSemaineOfDate: string | null,
+): boolean {
+  if (joursIndispo.length === 0) return true
+  for (const j of joursIndispo) {
+    if (j === dateIso) return true
+    if (jourSemaineOfDate && j.toLowerCase() === jourSemaineOfDate) return true
+  }
+  return false
 }
 
 export function indispoBloque(
@@ -134,9 +194,12 @@ export function indispoBloque(
   creneau: Creneau,
   pupitres: Pupitre[],
 ): boolean {
+  // Précalcul : le nom de jour d'un créneau ne dépend pas de l'indispo
+  // parcourue. Évite N `new Date(...)` pour N indispos de la même personne.
+  const jourSem = jourSemaine(creneau.date)
   return personne.indispos.some((ind) => {
     if (!estIndispoInterpretable(ind)) return false
-    if (ind.jours.length > 0 && !ind.jours.includes(creneau.date)) return false
+    if (!indispoJoursMatche(ind.jours, creneau.date, jourSem)) return false
     if (ind.roles.length > 0 && !pupitres.some((r) => ind.roles.includes(r))) return false
     if (!ind.debut && !ind.fin) return true
     if (ind.debut && !ind.fin) return creneau.debut === ind.debut

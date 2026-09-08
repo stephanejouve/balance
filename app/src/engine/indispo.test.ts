@@ -244,3 +244,97 @@ describe('indispoBloque — garde-fou "convalescence" (bug smoke #1)', () => {
     expect(indispoBloque(p, creneau('09:00', '10:00', '2026-08-26'), [])).toBe(false)
   })
 })
+
+// ─── Cas champ jours — noms de jour, ISO, vide (fix ticket #86) ──────────
+// Défaut smoke Stéphane 2026-09-08 : les 5 indispos de Chloé — 4 en noms
+// de jour (mardi/mercredi/jeudi/vendredi) + 1 en date ISO (2026-08-24
+// pour lundi) — ne bloquaient que le lundi (l'ISO). Les 4 noms étaient
+// silencieusement ignorés par `indispoBloque` (comparaison `includes` en
+// ISO uniquement). Chloé placée 3 fois le mardi.
+//
+// Refactor : `indispo.ts` importe désormais `indispoJoursMatche` de son
+// propre module (préalablement à `coherence.ts::_indispoMatche`) qui
+// accepte les deux formats. Ces 3 tests verrouillent les 3 comportements
+// que CD exige (msg 6438) : nom bloque son jour, ISO bloque son jour,
+// vide bloque toute la session. Un 4e test reproduit le mélange de
+// formats du cas Chloé (bonus CD msg 6438 : « vérification que les
+// répétitions ne se concentrent pas sur le jour en nom clair »).
+
+describe('indispoBloque — champ jours (fix ticket #86)', () => {
+  // Session 2026-08-24 (lundi) au 2026-08-28 (vendredi), miroir du cas Chloé.
+  const lundi = '2026-08-24'
+  const mardi = '2026-08-25'
+  const mercredi = '2026-08-26'
+  const jeudi = '2026-08-27'
+  const vendredi = '2026-08-28'
+
+  it('règle nommant un jour en clair bloque ce jour et lui seul', () => {
+    // Sans le fix : "mardi" comparé à "2026-08-25" en ISO → jamais → l'indispo passait sans bloquer.
+    const p = personne([{ jours: ['mardi'], debut: '00:00', fin: '23:59', roles: [], motif: '' }])
+    expect(indispoBloque(p, creneau('09:00', '10:00', mardi), [])).toBe(true)
+    expect(indispoBloque(p, creneau('14:00', '15:00', mardi), [])).toBe(true)
+    // Autres jours de la session → non bloqués
+    expect(indispoBloque(p, creneau('09:00', '10:00', lundi), [])).toBe(false)
+    expect(indispoBloque(p, creneau('09:00', '10:00', mercredi), [])).toBe(false)
+    expect(indispoBloque(p, creneau('09:00', '10:00', vendredi), [])).toBe(false)
+  })
+
+  it('règle en date ISO bloque ce jour et lui seul (verrouille le comportement pré-fix)', () => {
+    // CD msg 6438 : « le deuxième n'est pas redondant : il verrouille ce
+    // qui fonctionne déjà et qu'un correctif pourrait casser ».
+    const p = personne([{ jours: [lundi], debut: '00:00', fin: '23:59', roles: [], motif: '' }])
+    expect(indispoBloque(p, creneau('09:00', '10:00', lundi), [])).toBe(true)
+    expect(indispoBloque(p, creneau('22:00', '23:00', lundi), [])).toBe(true)
+    expect(indispoBloque(p, creneau('09:00', '10:00', mardi), [])).toBe(false)
+    expect(indispoBloque(p, creneau('09:00', '10:00', vendredi), [])).toBe(false)
+  })
+
+  it('règle sans jour (jours vide) bloque toute la session', () => {
+    // Cas de la 6ème règle Chloé qui a fait basculer le diagnostic : avec
+    // jours=[], le raccourci « la personne n'a plus aucun créneau ouvert »
+    // sortait immédiatement, alors que les 5 précédentes (dont 4 en noms
+    // de jour) ne bloquaient rien.
+    const p = personne([{ jours: [], debut: '00:00', fin: '23:59', roles: [], motif: '' }])
+    expect(indispoBloque(p, creneau('09:00', '10:00', lundi), [])).toBe(true)
+    expect(indispoBloque(p, creneau('14:00', '15:00', mardi), [])).toBe(true)
+    expect(indispoBloque(p, creneau('22:00', '23:00', mercredi), [])).toBe(true)
+    expect(indispoBloque(p, creneau('09:00', '10:00', jeudi), [])).toBe(true)
+    expect(indispoBloque(p, creneau('16:00', '17:00', vendredi), [])).toBe(true)
+  })
+
+  it('mélange de formats sur la même personne — cas Chloé (5 règles : 1 ISO + 4 noms)', () => {
+    // Reproduit exactement les 5 règles du fichier
+    // etat-defaut-indispos-chloe_20260908_120046.json.
+    // Avant le fix : seul le lundi (règle ISO) bloquait, les 4 autres
+    // (noms) étaient ignorées → Chloé restait disponible mardi–vendredi
+    // → planning concentré sur mardi (les 3 répétitions de Manha de
+    // Carnaval sur le seul jour disponible du solveur).
+    // Après le fix : les 5 jours de la session sont bloqués, plus aucun
+    // créneau disponible → contrôle en amont signale « aucun créneau ».
+    const p = personne([
+      { jours: [lundi], debut: '00:00', fin: '23:59', roles: ['chant'], motif: '' },
+      { jours: ['mardi'], debut: '00:00', fin: '23:59', roles: [], motif: '' },
+      { jours: ['mercredi'], debut: '00:00', fin: '23:59', roles: [], motif: '' },
+      { jours: ['jeudi'], debut: '00:00', fin: '23:59', roles: [], motif: '' },
+      { jours: ['vendredi'], debut: '00:00', fin: '23:59', roles: [], motif: '' },
+    ])
+    // Un créneau au moins par jour de session → tous bloqués
+    expect(indispoBloque(p, creneau('09:00', '10:00', lundi), ['chant'])).toBe(true)
+    expect(indispoBloque(p, creneau('09:00', '10:00', mardi), ['chant'])).toBe(true)
+    expect(indispoBloque(p, creneau('09:00', '10:00', mercredi), ['chant'])).toBe(true)
+    expect(indispoBloque(p, creneau('09:00', '10:00', jeudi), ['chant'])).toBe(true)
+    expect(indispoBloque(p, creneau('09:00', '10:00', vendredi), ['chant'])).toBe(true)
+    // Le créneau de 22h qui piégeait le solveur (Chloé placée à 22h le mardi)
+    // → aussi bloqué maintenant que la règle "mardi" est effective.
+    expect(indispoBloque(p, creneau('22:00', '23:00', mardi), ['chant'])).toBe(true)
+  })
+
+  it('nom de jour capitalisé (« Mardi ») bloque aussi — normalisation lowercase', () => {
+    // La saisie utilisateur peut être capitalisée. Le lecteur normalise
+    // via `j.toLowerCase() === jourSemaineOfDate` — cohérent avec le
+    // comportement pré-fix côté cohérence import (identique).
+    const p = personne([{ jours: ['Mardi'], debut: '00:00', fin: '23:59', roles: [], motif: '' }])
+    expect(indispoBloque(p, creneau('09:00', '10:00', mardi), [])).toBe(true)
+    expect(indispoBloque(p, creneau('09:00', '10:00', lundi), [])).toBe(false)
+  })
+})
