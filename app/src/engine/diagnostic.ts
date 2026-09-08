@@ -65,33 +65,68 @@ export interface DiagCharge {
  *     (`membres uniques × cible - déjà_faites`) + séances imposées
  *   - `capacite_stage` = somme des places-créneau (`sallesUtilisables(c)`
  *     sur tous les créneaux avant butoir)
- *   - `sous_dimensionne` = `demande_stage > capacite_stage` (marqueur
- *     booléen pour adapter le TON du message, PAS pour cacher/afficher
- *     le ratio — voir docstring de la fonction)
+ *   - `demande_depasse_capacite` = `demande_stage > capacite_stage`
+ *     (nom factuel — pas causal, cf réserve CD 6417 : « le libellé énonce
+ *     le fait, pas la cause »). Ce booléen ne cache pas le ratio, il
+ *     adapte le TON du message.
  *
- * Décisions verrouillées avec Stéphane 2026-09-05 :
+ * Décisions verrouillées avec Stéphane 2026-09-05 + arbitrage CD 2026-09-08 :
  *
- * - **Message factuel neutre** : « N séances demandées pour M places au
- *   total ». Aucun REMÈDE dans ce signal — deux causes possibles (manque
- *   salles/créneaux OU cible trop élevée) produisent le même ratio, et
- *   l'organisateur tranche. Même discipline qu'on a appliquée en supprimant
- *   les 3 pistes énumérées du bandeau « Pourquoi ça bloque » (PR #75).
+ * - **Message factuel neutre** (CD 6417 pt 3) : « N séances demandées pour
+ *   M places au total ». Aucun REMÈDE dans ce signal — deux causes possibles
+ *   (manque salles/créneaux OU cible trop élevée) produisent le même ratio,
+ *   et l'organisateur tranche. Même discipline qu'on a appliquée en
+ *   supprimant les 3 pistes énumérées du bandeau « Pourquoi ça bloque »
+ *   (PR #75). Le terme « sous-dimensionné » a été écarté car il désigne
+ *   une des deux issues (ajouter capacité) au détriment de l'autre
+ *   (baisser la cible).
  *
- * - **Ratio toujours visible** dès qu'il y a des infaisabilités
- *   per-personne, pas seulement quand `demande > capacite`. Un stage
- *   à 59 séances pour 60 places = tout juste = pas confortable ; le
- *   placement échouera souvent pour d'autres raisons (partages, indispos,
- *   espacement) sans que le contrôle strict ne l'ait signalé. Le nombre
- *   éclaire toujours l'écart per-personne.
+ * - **Ratio affiché dès que la capacité est en alerte** (CD 6417 pt 1) :
+ *   voir `capaciteEstEnAlerte`. Un stage à 59 séances pour 60 places =
+ *   tout juste = pas confortable, l'organisateur croit à tort que la
+ *   capacité n'est pas en cause. Le seuil `SEUIL_CAPACITE_SERRE` capte
+ *   les cas frontières.
  *
- * - **Non exclusif avec per-personne** : les deux signaux coexistent et
- *   s'affichent ensemble. Le stage global en tête, per-personne en dessous
- *   avec un remède adapté selon `d.detail.groupes` (voir UI App.svelte).
+ * - **Non exclusif avec per-personne** (CD 6417 pt 2) : les deux signaux
+ *   coexistent et s'affichent ensemble. Le stage global en tête,
+ *   per-personne en dessous avec un remède adapté selon `d.detail.groupes`
+ *   (voir UI App.svelte). Le critère du remède per-personne est le nombre
+ *   d'engagements de cette personne, pas l'état global du stage.
  */
 export interface DiagStage {
   demande_stage: number
   capacite_stage: number
-  sous_dimensionne: boolean
+  demande_depasse_capacite: boolean
+}
+
+/**
+ * Seuil de « capacité serrée » : ratio demande/capacité au-delà duquel
+ * le bandeau capacité s'affiche même sans dépassement strict (CD 6417 pt 1).
+ *
+ * À 90 %, un stage de 59/60 (ratio 0.983) déclenche l'affichage ; un stage
+ * de 30/100 (ratio 0.3) reste silencieux. La valeur est indicative — un
+ * seuil trop bas noie le signal, un seuil trop haut manque les frontières.
+ * 0.9 est un point de départ à réajuster à l'usage.
+ */
+export const SEUIL_CAPACITE_SERRE = 0.9
+
+/**
+ * True si le bandeau capacité stage doit être affiché, indépendamment
+ * des infaisabilités per-personne. Deux cas :
+ *
+ * - `demande_depasse_capacite` : dépassement strict — bandeau en ton warn.
+ * - Ratio `demande_stage / capacite_stage >= SEUIL_CAPACITE_SERRE` :
+ *   capacité serrée sans dépassement — bandeau en ton info attention.
+ *
+ * Le cas frontière `capacite_stage === 0` (aucune place, aucune séance)
+ * retourne `false` — rien à signaler. Si `capacite_stage === 0` mais
+ * `demande_stage > 0`, `demande_depasse_capacite` est déjà true et
+ * couvre le cas.
+ */
+export function capaciteEstEnAlerte(diag: DiagStage): boolean {
+  if (diag.demande_depasse_capacite) return true
+  if (diag.capacite_stage === 0) return false
+  return diag.demande_stage / diag.capacite_stage >= SEUIL_CAPACITE_SERRE
 }
 
 function pupitresDePersonneDansGroupe(g: Groupe, pid: string): Pupitre[] {
@@ -148,7 +183,7 @@ export function analyserCapaciteStage(
   return {
     demande_stage,
     capacite_stage,
-    sous_dimensionne: demande_stage > capacite_stage,
+    demande_depasse_capacite: demande_stage > capacite_stage,
   }
 }
 
