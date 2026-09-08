@@ -31,7 +31,7 @@
  * saisie corrigeables. À traiter en priorité côté UI/action.
  */
 
-import { estIndispoInterpretable } from '../engine/indispo'
+import { estIndispoInterpretable, indispoJoursMatche, jourSemaine } from '../engine/indispo'
 import type { Groupe, Impose, Inscriptions, Personne, Pupitre } from './model'
 
 export type AlerteCoherence =
@@ -177,11 +177,6 @@ function _detecterPupitreContreditEtPolyvalent(
 // M — indisponibilité percutée par séance Proposés (contradiction insoluble)
 // ───────────────────────────────────────────────────────────────────────
 
-const JOURS_FR = [
-  'dimanche', 'lundi', 'mardi', 'mercredi',
-  'jeudi', 'vendredi', 'samedi',
-] as const
-
 function _detecterIndispoPercutee(
   inscriptions: Inscriptions,
 ): AlerteCoherence[] {
@@ -189,7 +184,7 @@ function _detecterIndispoPercutee(
   const alertes: AlerteCoherence[] = []
   for (const imp of inscriptions.imposes) {
     for (const seance of imp.seances) {
-      const jourSemaine = _jourSemaine(seance.date)
+      const jourSemaineOfSeance = jourSemaine(seance.date)
       for (const membre of imp.membres) {
         const p = parId.get(membre)
         if (!p) continue
@@ -202,7 +197,7 @@ function _detecterIndispoPercutee(
           // Stéphane 2026-09-03 v20260903.1511 défaut #1 : coherence.ts exigeait
           // un arbitrage sur une contrainte que le solveur n'appliquait plus).
           if (!estIndispoInterpretable(indispo)) continue
-          if (!_indispoMatche(indispo.jours, seance.date, jourSemaine)) continue
+          if (!indispoJoursMatche(indispo.jours, seance.date, jourSemaineOfSeance)) continue
           if (!_creneauChevauche(seance.debut, seance.fin, indispo.debut, indispo.fin)) continue
           alertes.push({
             type: 'indispo_percutee',
@@ -219,25 +214,6 @@ function _detecterIndispoPercutee(
     }
   }
   return alertes
-}
-
-function _jourSemaine(dateIso: string): string | null {
-  const d = new Date(dateIso + 'T00:00:00')
-  if (isNaN(d.getTime())) return null
-  return JOURS_FR[d.getDay()]
-}
-
-function _indispoMatche(
-  joursIndispo: readonly string[],
-  dateIso: string,
-  jourSemaine: string | null,
-): boolean {
-  if (joursIndispo.length === 0) return true  // indispo tous les jours
-  for (const j of joursIndispo) {
-    if (j === dateIso) return true
-    if (jourSemaine && j.toLowerCase() === jourSemaine) return true
-  }
-  return false
 }
 
 function _creneauChevauche(
