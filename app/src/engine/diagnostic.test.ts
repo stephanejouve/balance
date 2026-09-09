@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { genererCreneaux } from '../domain/grille'
 import { Inscriptions, Lieu, Session } from '../domain/model'
-import { analyserInfaisabilite, diagnostiquer } from './diagnostic'
+import {
+  analyserCapaciteStage,
+  analyserInfaisabilite,
+  capaciteEstEnAlerte,
+  diagnostiquer,
+  SEUIL_CAPACITE_SERRE,
+} from './diagnostic'
 
 function fixture() {
   const lieu = Lieu.parse({
@@ -150,6 +156,205 @@ describe('analyserInfaisabilite', () => {
     // session bloque un créneau supplémentaire côté offre)
     const diag = analyserInfaisabilite(session, insc, creneaux)
     expect(diag[0].detail.seances_imposees).toBe(3)
+  })
+})
+
+// ─── analyserCapaciteStage — signal orthogonal au per-personne ────────
+// Feedback Stéphane 2026-09-05 : le contrôle per-personne mesure des
+// moments (correct pour la contrainte « personne à un endroit à la fois »),
+// mais le REMÈDE affiché « réduire ses engagements » n'a pas de sens pour
+// une personne dans 1 seul groupe. Le signal STAGE calcule la capacité
+// globale et rend le fait visible sans attribuer une cause précise.
+
+describe('analyserCapaciteStage', () => {
+  it('capacite_stage = somme des places-créneau (salles × créneaux)', () => {
+    const lieu = Lieu.parse({
+      id: 'l',
+      nom: 'L',
+      salles: [
+        { id: 'A', nom: 'A', jauge: 10 },
+        { id: 'B', nom: 'B', jauge: 10 },
+      ],
+    })
+    const session = Session.parse({
+      id: 's', nom: 'S', lieu_id: 'l',
+      date_debut: '2026-08-24', date_fin: '2026-08-24',
+      date_butoir: '2026-08-25', butoir_heure: '18:00',
+      grille: [{ debut: '09:00', fin: '12:00', pas_minutes: 60 }], // 3 créneaux
+      repetitions_visees: 3,
+    })
+    const creneaux = genererCreneaux(session, lieu)
+    const insc = Inscriptions.parse({
+      session_id: 's',
+      personnes: [{ id: 'a', nom: 'A' }],
+      groupes: [
+        { id: 'g1', titre: 'G1', membres: [{ personne_id: 'a', pupitre: 'chant' }] },
+      ],
+    })
+    const diag = analyserCapaciteStage(session, insc, creneaux)
+    // 3 créneaux × 2 salles = 6 places-créneau
+    expect(diag.capacite_stage).toBe(6)
+    // 1 groupe × 3 cible = 3 séances demandées, aucun imposé
+    expect(diag.demande_stage).toBe(3)
+    expect(diag.demande_depasse_capacite).toBe(false)
+  })
+
+  it('demande_depasse_capacite = true quand demande dépasse capacité (nom factuel, pas causal — cf CD 6417 pt 3)', () => {
+    // 1 créneau × 1 salle = 1 place ; 3 groupes × 3 cible = 9 séances demandées
+    const lieu = Lieu.parse({
+      id: 'l', nom: 'L',
+      salles: [{ id: 'A', nom: 'A', jauge: 10 }],
+    })
+    const session = Session.parse({
+      id: 's', nom: 'S', lieu_id: 'l',
+      date_debut: '2026-08-24', date_fin: '2026-08-24',
+      date_butoir: '2026-08-24', butoir_heure: '11:00',
+      grille: [{ debut: '10:00', fin: '11:00', pas_minutes: 60 }],
+      repetitions_visees: 3,
+    })
+    const creneaux = genererCreneaux(session, lieu)
+    const insc = Inscriptions.parse({
+      session_id: 's',
+      personnes: [
+        { id: 'a', nom: 'A' }, { id: 'b', nom: 'B' }, { id: 'c', nom: 'C' },
+      ],
+      groupes: [
+        { id: 'g1', titre: 'G1', membres: [{ personne_id: 'a', pupitre: 'chant' }] },
+        { id: 'g2', titre: 'G2', membres: [{ personne_id: 'b', pupitre: 'chant' }] },
+        { id: 'g3', titre: 'G3', membres: [{ personne_id: 'c', pupitre: 'chant' }] },
+      ],
+    })
+    const diag = analyserCapaciteStage(session, insc, creneaux)
+    expect(diag.capacite_stage).toBe(1)
+    expect(diag.demande_stage).toBe(9)
+    expect(diag.demande_depasse_capacite).toBe(true)
+  })
+
+  it('inclut les séances imposées dans la demande', () => {
+    const { session, lieu, creneaux } = fixture()
+    const insc = Inscriptions.parse({
+      session_id: 's',
+      personnes: [{ id: 'a', nom: 'A' }],
+      groupes: [
+        { id: 'g1', titre: 'G1', membres: [{ personne_id: 'a', pupitre: 'chant' }] },
+      ],
+      imposes: [
+        {
+          id: 'i1', morceau: 'X', membres: ['a'],
+          seances: [
+            { date: '2026-08-24', debut: '14:00', fin: '15:00' },
+            { date: '2026-08-24', debut: '15:00', fin: '16:00' },
+          ],
+        },
+      ],
+    })
+    const diag = analyserCapaciteStage(session, insc, creneaux)
+    // 3 créneaux × 1 salle = 3 places · 1 groupe × 3 cible + 2 imposés = 5 séances
+    expect(diag.capacite_stage).toBe(3)
+    expect(diag.demande_stage).toBe(5)
+    expect(diag.demande_depasse_capacite).toBe(true)
+    void lieu // fixture met le lieu à disposition mais on ne l'utilise pas ici
+  })
+
+  it('applique la marge d\'occupation via sallesUtilisables', () => {
+    // 2 salles avec marge 50 % → 1 place par créneau (floor(2 × 0.5))
+    const lieu = Lieu.parse({
+      id: 'l', nom: 'L',
+      salles: [
+        { id: 'A', nom: 'A', jauge: 10 },
+        { id: 'B', nom: 'B', jauge: 10 },
+      ],
+    })
+    const session = Session.parse({
+      id: 's', nom: 'S', lieu_id: 'l',
+      date_debut: '2026-08-24', date_fin: '2026-08-24',
+      date_butoir: '2026-08-25', butoir_heure: '18:00',
+      grille: [{ debut: '09:00', fin: '11:00', pas_minutes: 60 }], // 2 créneaux
+      repetitions_visees: 1,
+      marge_pct: 50,
+    })
+    const creneaux = genererCreneaux(session, lieu)
+    const insc = Inscriptions.parse({
+      session_id: 's',
+      personnes: [{ id: 'a', nom: 'A' }],
+      groupes: [
+        { id: 'g1', titre: 'G1', membres: [{ personne_id: 'a', pupitre: 'chant' }] },
+      ],
+    })
+    const diag = analyserCapaciteStage(session, insc, creneaux)
+    // 2 créneaux × floor(2 × 0.5) = 2 places, pas 4
+    expect(diag.capacite_stage).toBe(2)
+    expect(diag.demande_stage).toBe(1)
+    expect(diag.demande_depasse_capacite).toBe(false)
+  })
+
+  it('respecte repetitions_deja_faites (recalcul milieu de session)', () => {
+    // Groupe avec 2 répés déjà faites, cible 3 → 1 seule restante
+    const { session, lieu, creneaux } = fixture()
+    const insc = Inscriptions.parse({
+      session_id: 's',
+      personnes: [{ id: 'a', nom: 'A' }],
+      groupes: [
+        {
+          id: 'g1', titre: 'G1',
+          membres: [{ personne_id: 'a', pupitre: 'chant' }],
+          repetitions_deja_faites: 2,
+        },
+      ],
+    })
+    const diag = analyserCapaciteStage(session, insc, creneaux)
+    // 3 - 2 = 1 séance restante
+    expect(diag.demande_stage).toBe(1)
+    void lieu
+  })
+})
+
+// ─── capaciteEstEnAlerte — seuil « capacité serrée » (CD 6417 pt 1) ──
+// Contexte : le WIP initial n'affichait le bandeau capacité qu'en cas
+// d'infaisabilité per-personne. CD a signalé le cas 59/60 : ratio < 100 %
+// mais tout juste, sans per-personne qui bloque → aucun signal. Or le
+// placement échoue souvent pour d'autres raisons (partages, indispos,
+// espacement) quand la capacité est serrée. Le seuil SEUIL_CAPACITE_SERRE
+// capte les frontières.
+
+describe('capaciteEstEnAlerte', () => {
+  const mk = (demande: number, capacite: number): ReturnType<typeof analyserCapaciteStage> => ({
+    demande_stage: demande,
+    capacite_stage: capacite,
+    demande_depasse_capacite: demande > capacite,
+  })
+
+  it('true quand dépassement strict', () => {
+    expect(capaciteEstEnAlerte(mk(9, 6))).toBe(true)
+  })
+
+  it('true quand 59/60 (cas frontière signalé CD 6417 pt 1)', () => {
+    // Ratio 0.983 > SEUIL_CAPACITE_SERRE (0.9). Sans ce helper, l'organisateur
+    // croyait à tort que la capacité n'était pas en cause.
+    expect(capaciteEstEnAlerte(mk(59, 60))).toBe(true)
+  })
+
+  it('true à la limite exacte du seuil (ratio = SEUIL_CAPACITE_SERRE)', () => {
+    // 90/100 = 0.9 = SEUIL. Doit déclencher (>=, pas strict >).
+    expect(capaciteEstEnAlerte(mk(90, 100))).toBe(true)
+  })
+
+  it('false quand ratio confortable (30/100 = 0.3 < seuil)', () => {
+    expect(capaciteEstEnAlerte(mk(30, 100))).toBe(false)
+  })
+
+  it('false quand pas de demande ET pas de capacité (0/0 → rien à signaler)', () => {
+    expect(capaciteEstEnAlerte(mk(0, 0))).toBe(false)
+  })
+
+  it('true quand capacité = 0 mais demande > 0 (via demande_depasse_capacite)', () => {
+    // Sans salle mais séances demandées → dépassement trivial, on veut le signal.
+    expect(capaciteEstEnAlerte(mk(3, 0))).toBe(true)
+  })
+
+  it('SEUIL_CAPACITE_SERRE est exporté comme constante nommée (valeur = 0.9)', () => {
+    // Verrouille la valeur pour éviter les surprises ; réajuster à l'usage.
+    expect(SEUIL_CAPACITE_SERRE).toBe(0.9)
   })
 })
 

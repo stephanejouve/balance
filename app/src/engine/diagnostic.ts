@@ -47,8 +47,144 @@ export interface DiagCharge {
   }
 }
 
+/**
+ * Signal capacité stage — orthogonal au diagnostic per-personne.
+ *
+ * Contexte (Stéphane 2026-09-04) : le contrôle en amont per-personne
+ * (`analyserInfaisabilite`) calcule une OFFRE en moments (créneaux non
+ * bloqués par les indispos de la personne). Ce calcul est juste — une
+ * personne ne peut être qu'à un endroit à la fois, ses N répétitions
+ * demandent N moments distincts. Mais le REMÈDE affiché « réduire ses
+ * engagements » n'a de sens que si la personne est engagée dans plusieurs
+ * groupes. Pour un musicien dans 1 seul groupe qui manque de créneaux,
+ * la vraie cause est ailleurs — souvent la capacité stage elle-même.
+ *
+ * D'où ce signal STAGE, calculé une seule fois, indépendamment des
+ * personnes :
+ *   - `demande_stage` = somme des séances demandées par tous les groupes
+ *     (`membres uniques × cible - déjà_faites`) + séances imposées
+ *   - `capacite_stage` = somme des places-créneau (`sallesUtilisables(c)`
+ *     sur tous les créneaux avant butoir)
+ *   - `demande_depasse_capacite` = `demande_stage > capacite_stage`
+ *     (nom factuel — pas causal, cf réserve CD 6417 : « le libellé énonce
+ *     le fait, pas la cause »). Ce booléen ne cache pas le ratio, il
+ *     adapte le TON du message.
+ *
+ * Décisions verrouillées avec Stéphane 2026-09-05 + arbitrage CD 2026-09-08 :
+ *
+ * - **Message factuel neutre** (CD 6417 pt 3) : « N séances demandées pour
+ *   M places au total ». Aucun REMÈDE dans ce signal — deux causes possibles
+ *   (manque salles/créneaux OU cible trop élevée) produisent le même ratio,
+ *   et l'organisateur tranche. Même discipline qu'on a appliquée en
+ *   supprimant les 3 pistes énumérées du bandeau « Pourquoi ça bloque »
+ *   (PR #75). Le terme « sous-dimensionné » a été écarté car il désigne
+ *   une des deux issues (ajouter capacité) au détriment de l'autre
+ *   (baisser la cible).
+ *
+ * - **Ratio affiché dès que la capacité est en alerte** (CD 6417 pt 1) :
+ *   voir `capaciteEstEnAlerte`. Un stage à 59 séances pour 60 places =
+ *   tout juste = pas confortable, l'organisateur croit à tort que la
+ *   capacité n'est pas en cause. Le seuil `SEUIL_CAPACITE_SERRE` capte
+ *   les cas frontières.
+ *
+ * - **Non exclusif avec per-personne** (CD 6417 pt 2) : les deux signaux
+ *   coexistent et s'affichent ensemble. Le stage global en tête,
+ *   per-personne en dessous avec un remède adapté selon `d.detail.groupes`
+ *   (voir UI App.svelte). Le critère du remède per-personne est le nombre
+ *   d'engagements de cette personne, pas l'état global du stage.
+ */
+export interface DiagStage {
+  demande_stage: number
+  capacite_stage: number
+  demande_depasse_capacite: boolean
+}
+
+/**
+ * Seuil de « capacité serrée » : ratio demande/capacité au-delà duquel
+ * le bandeau capacité s'affiche même sans dépassement strict (CD 6417 pt 1).
+ *
+ * À 90 %, un stage de 59/60 (ratio 0.983) déclenche l'affichage ; un stage
+ * de 30/100 (ratio 0.3) reste silencieux. La valeur est indicative — un
+ * seuil trop bas noie le signal, un seuil trop haut manque les frontières.
+ * 0.9 est un point de départ à réajuster à l'usage.
+ */
+export const SEUIL_CAPACITE_SERRE = 0.9
+
+/**
+ * True si le bandeau capacité stage doit être affiché, indépendamment
+ * des infaisabilités per-personne. Deux cas :
+ *
+ * - `demande_depasse_capacite` : dépassement strict — bandeau en ton warn.
+ * - Ratio `demande_stage / capacite_stage >= SEUIL_CAPACITE_SERRE` :
+ *   capacité serrée sans dépassement — bandeau en ton info attention.
+ *
+ * Le cas frontière `capacite_stage === 0` (aucune place, aucune séance)
+ * retourne `false` — rien à signaler. Si `capacite_stage === 0` mais
+ * `demande_stage > 0`, `demande_depasse_capacite` est déjà true et
+ * couvre le cas.
+ */
+export function capaciteEstEnAlerte(diag: DiagStage): boolean {
+  if (diag.demande_depasse_capacite) return true
+  if (diag.capacite_stage === 0) return false
+  return diag.demande_stage / diag.capacite_stage >= SEUIL_CAPACITE_SERRE
+}
+
 function pupitresDePersonneDansGroupe(g: Groupe, pid: string): Pupitre[] {
   return g.membres.filter((m) => m.personne_id === pid).map((m) => m.pupitre)
+}
+
+/**
+ * Calcule le signal capacité stage (`DiagStage`) — indépendant des
+ * personnes, calculé à partir des créneaux, du lieu et de la session.
+ *
+ * `capacite_stage` = somme des places-créneau. Reprise stricte de
+ * `solver.ts::sallesUtilisables(c)` : `c.salles.length` réduit par la
+ * marge d'occupation (`session.marge_pct`), garantit ≥ 1 tant qu'il y a
+ * des salles. La duplication est contrôlée par des tests — un extract
+ * partagé est un follow-up P3 (déjà noté pour diagnostiquer's
+ * `capaciteCreneau`, PR #75).
+ *
+ * `demande_stage` = somme sur tous les groupes de
+ * `(cible - repetitions_deja_faites) × 1` (une séance = un placement,
+ * l'effectif n'entre pas — on compte des SÉANCES du planning, pas des
+ * chaises occupées) + séances imposées. Les imposés comptent 1 séance
+ * chacun (déjà atomique côté modèle).
+ */
+export function analyserCapaciteStage(
+  session: Session,
+  inscriptions: Inscriptions,
+  creneaux: readonly Creneau[],
+): DiagStage {
+  const cible = session.repetitions_visees
+  const margePct = session.marge_pct || 0
+  // Miroir sallesUtilisables (solver.ts, diagnostic.ts::capaciteCreneau).
+  // Duplication contrôlée — extract partagé = follow-up P3.
+  const capaciteCreneau = (c: Creneau): number => {
+    const dispo = c.salles.length
+    if (dispo === 0 || margePct === 0) return dispo
+    return Math.max(1, Math.floor(dispo * (1 - margePct / 100)))
+  }
+  const capacite_stage = creneaux.reduce((acc, c) => acc + capaciteCreneau(c), 0)
+
+  // Demande = séances de groupes + séances imposées.
+  // Une séance de groupe = un couple (groupe, créneau) — la cardinalité
+  // du groupe n'entre PAS (on compte des occupations de slot, chaque
+  // slot accueille un groupe entier). Défensif : max(0, cible - déjà).
+  const demandeGroupes = inscriptions.groupes.reduce((acc, g) => {
+    const restant = Math.max(0, cible - (g.repetitions_deja_faites || 0))
+    return acc + restant
+  }, 0)
+  const demandeImposes = inscriptions.imposes.reduce(
+    (acc, im) => acc + im.seances.length,
+    0,
+  )
+  const demande_stage = demandeGroupes + demandeImposes
+
+  return {
+    demande_stage,
+    capacite_stage,
+    demande_depasse_capacite: demande_stage > capacite_stage,
+  }
 }
 
 export function analyserInfaisabilite(

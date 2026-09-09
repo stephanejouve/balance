@@ -36,7 +36,7 @@
   import type { EtapeConcert } from './engine/concert'
   import type { IdContrainte } from './engine/contraintes'
   import { registrePersonnalise } from './engine/contraintes'
-  import { analyserInfaisabilite } from './engine/diagnostic'
+  import { analyserCapaciteStage, analyserInfaisabilite, capaciteEstEnAlerte } from './engine/diagnostic'
   import { preparerInscriptionsPourSolveur } from './engine/fonctions-activees'
   import { enrichirIndispos } from './engine/imposes'
   import { ciblesValides } from './engine/manuel'
@@ -180,6 +180,20 @@
       return analyserInfaisabilite(session, preparerInscriptionsPourSolveur(inscriptions, lieu), creneaux)
     } catch {
       return []
+    }
+  })
+  /**
+   * Signal capacité stage — feedback Stéphane 2026-09-05. Calculé au même
+   * niveau que `infaisabilites` (dérivé des mêmes entrées), affiché dès
+   * qu'il y a une infaisabilité per-personne pour éclairer le contexte
+   * (ratio demande/capacité) sans attribuer une cause. Voir docstring
+   * `DiagStage` dans engine/diagnostic.ts pour la sémantique complète.
+   */
+  const capaciteStage = $derived.by(() => {
+    try {
+      return analyserCapaciteStage(session, preparerInscriptionsPourSolveur(inscriptions, lieu), creneaux)
+    } catch {
+      return null
     }
   })
   const groupesParId = $derived(new Map(inscriptions.groupes.map((g) => [g.id, g])))
@@ -1022,29 +1036,71 @@
       Placer chaque groupe {session.repetitions_visees} fois avant l'échéance, sans jamais
       convoquer deux fois la même personne au même moment ni doubler une salle.
     </p>
+    <!--
+      Signal capacité stage — affiché indépendamment des infaisabilités
+      per-personne (CD 6417 pt 1 : « le ratio doit s'afficher dès que
+      quelque chose bloque, pas seulement au-delà du seuil »). Deux
+      déclencheurs coexistent (non exclusifs, CD 6417 pt 2) :
+        - capacité en alerte (dépassement OU ratio ≥ SEUIL_CAPACITE_SERRE)
+        - infaisabilités per-personne
+      Le libellé énonce le fait (« N séances demandées pour M places »),
+      pas la cause — deux issues restent ouvertes à l'organisateur :
+      ajouter de la capacité OU baisser la cible (CD 6417 pt 3).
+    -->
+    {#if capaciteStage && (capaciteEstEnAlerte(capaciteStage) || infaisabilites.length > 0)}
+      <div class="msg warn">
+        <b>Capacité du stage.</b>
+        {capaciteStage.demande_stage} séance{capaciteStage.demande_stage > 1 ? 's' : ''} demandée{capaciteStage.demande_stage > 1 ? 's' : ''}
+        pour {capaciteStage.capacite_stage} place{capaciteStage.capacite_stage > 1 ? 's' : ''} au total.
+      </div>
+    {/if}
     {#if infaisabilites.length > 0}
       {@const surcharges = infaisabilites.filter((d) => d.type === 'surcharge')}
       {@const exclusions = infaisabilites.filter((d) => d.type === 'exclusion')}
       {#if surcharges.length > 0}
         {@const manquantsTotal = surcharges.reduce((s, d) => s + Math.max(0, d.demande - d.offre), 0)}
+        {@const surchargesMultiEngagement = surcharges.filter((d) => d.detail.groupes > 1)}
         <div class="msg warn">
-          <b>Contrôle en amont : {surcharges.length} musicien(s) en surcharge structurelle.</b>
+          <b>Contrôle en amont : {surcharges.length} musicien(s) en surcharge.</b>
           <p class="mini-h">
             Chacun ci-dessous demande plus de créneaux qu'il n'en a de disponibles
             ({manquantsTotal} créneau{manquantsTotal > 1 ? 'x' : ''} manquant{manquantsTotal > 1 ? 's' : ''}
             au total sur l'ensemble des musiciens signalés).
             <strong>Lancer maintenant produira un placement partiel — c'est prévu, pas un bug.</strong>
-            Réduire leurs engagements ou libérer des créneaux avant permet d'atteindre
-            un placement complet.
+            <!--
+              CD 6417 pt 2 : ne pas asserter « permet d'atteindre un placement
+              complet ». Le remède per-personne n'est qu'une des deux causes
+              possibles ; si la capacité stage est aussi en cause (bandeau
+              ci-dessus), réduire les engagements seul ne suffira pas.
+              Formulation factuelle qui laisse les deux signaux coexister.
+            -->
+            {#if surchargesMultiEngagement.length > 0}
+              Réduire les engagements des musiciens qui jouent dans plusieurs groupes,
+              ou libérer des créneaux, peut améliorer la couverture — combiné
+              avec un ajustement de la capacité du stage si le bandeau
+              ci-dessus le signale.
+            {/if}
           </p>
           <ul>
             {#each surcharges.slice(0, 8) as d}
               <li>
                 <b>{d.nom}</b> — demande <b>{d.demande}</b> créneaux
-                ({d.detail.groupes} groupes × {d.detail.repetitions_visees}
+                ({d.detail.groupes} groupe{d.detail.groupes > 1 ? 's' : ''} × {d.detail.repetitions_visees}
                 {#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} imposés{/if})
                 mais seulement <b>{d.offre}</b> lui sont ouverts
                 (sur {d.detail.creneaux_total} au total).
+                <!--
+                  Remède adapté selon `d.detail.groupes` (feedback Stéphane
+                  2026-09-05) : « réduire ses engagements » n'a de sens que
+                  pour quelqu'un dans plusieurs groupes. Une personne dans 1
+                  seul groupe n'a rien à réduire — la vraie cause est ailleurs
+                  (capacité stage insuffisante ou indispos trop larges).
+                -->
+                {#if d.detail.groupes === 1}
+                  <span class="ink-soft">
+                    (1 seul groupe — pas de charge à réduire pour cette personne).
+                  </span>
+                {/if}
               </li>
             {/each}
             {#if surcharges.length > 8}
