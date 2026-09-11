@@ -149,8 +149,6 @@
   let chargementImport = $state<boolean>(false)
 
   let vue = $state<'groupes' | 'salles' | 'musiciens' | 'carte' | 'concert' | 'quotas'>('groupes')
-  /** Deltas d'exploration par pupitre (dans la vue Quotas). */
-  let deltasQuotas = $state<Record<string, number>>({})
   /** Ordre du conducteur, éditable par drag-drop. Recalculé quand solution change. */
   let ordreConducteur = $state<EtapeConcert[]>([])
   let dragIdx = $state<number | null>(null)
@@ -1421,8 +1419,6 @@
           {session}
           {inscriptions}
           {creneaux}
-          deltas={deltasQuotas}
-          onDelta={(pup, val) => (deltasQuotas = { ...deltasQuotas, [pup]: val })}
         />
       {:else if vue === 'concert'}
         <Concert

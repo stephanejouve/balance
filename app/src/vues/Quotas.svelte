@@ -7,18 +7,14 @@
     session: Session
     inscriptions: Inscriptions
     creneaux: Creneau[]
-    deltas: Record<string, number>
-    onDelta: (pupitre: string, valeur: number) => void
   }
-  let { session, inscriptions, creneaux, deltas, onDelta }: Props = $props()
+  let { session, inscriptions, creneaux }: Props = $props()
 
   const quotas = $derived(analyseQuotas(session, inscriptions, creneaux))
 </script>
 
 <p class="hint">
-  Simulation par pupitre : combien de groupes seraient réalisables si le nombre
-  de musiciens variait ? Curseur négatif = retirer, positif = ajouter —
-  l'estimation se met à jour en direct.
+  État des effectifs par pupitre.
 </p>
 <table>
   <thead>
@@ -27,14 +23,10 @@
       <th style="width:80px">Musiciens</th>
       <th style="width:90px">Groupes</th>
       <th style="width:100px">Saturation</th>
-      <th style="width:280px">Simuler ± musiciens</th>
-      <th style="width:110px">Groupes serviables</th>
     </tr>
   </thead>
   <tbody>
     {#each quotas as q}
-      {@const delta = deltas[q.pupitre] ?? 0}
-      {@const serviables = q.simuler_delta(delta)}
       {@const surcharge = q.ratio > 1}
       <tr class:surcharge>
         <td><b>{q.pupitre}</b></td>
@@ -44,33 +36,12 @@
           {Math.round(q.ratio * 100)}%
           {#if surcharge}<span class="rouge"> ⚠</span>{/if}
         </td>
-        <td>
-          <input
-            type="range"
-            min={-q.nb_musiciens}
-            max="10"
-            step="1"
-            value={delta}
-            oninput={(e) => onDelta(q.pupitre, Number((e.currentTarget as HTMLInputElement).value))}
-          />
-          <span class="mono ink-soft">
-            {delta >= 0 ? '+' : ''}{delta} → {q.nb_musiciens + delta} musicien(s)
-          </span>
-        </td>
-        <td class="center mono">
-          <b>{Math.min(serviables, q.nb_groupes_demandeurs)}</b>
-          {#if serviables < q.nb_groupes_demandeurs}
-            <span class="rouge"> / {q.nb_groupes_demandeurs}</span>
-          {/if}
-        </td>
       </tr>
     {/each}
   </tbody>
 </table>
 <p class="hint" style="margin-top:12px">
-  Le nombre de groupes serviables est plafonné par le pupitre le plus tendu.
-  Bougez les curseurs pour trouver combien il faudrait de musiciens en plus (ou en
-  moins) pour que tous les groupes tiennent — argument-clé au moment des inscriptions.
+  Chaque pupitre a sa propre saturation — argument-clé au moment des inscriptions.
 </p>
 
 <style>
