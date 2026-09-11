@@ -14,7 +14,7 @@
 </script>
 
 <p class="hint">
-  État des effectifs par pupitre.
+  Où reste-t-il de la marge, pupitre par pupitre.
 </p>
 <table>
   <thead>
@@ -41,7 +41,7 @@
   </tbody>
 </table>
 <p class="hint" style="margin-top:12px">
-  Chaque pupitre a sa propre saturation — argument-clé au moment des inscriptions.
+  Saturation par pupitre — repère pour l'arbitrage en cours de stage.
 </p>
 
 <style>
