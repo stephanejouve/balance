@@ -49,7 +49,8 @@
                   .filter(Boolean)
                 onInvalider()
               }}
-              placeholder="jours ISO (vide = tous)"
+              placeholder="mardi, 2026-08-25"
+              title="Vide = l'indisponibilité s'applique à toute la session."
               style="flex:1;min-width:150px"
             />
             <input type="time" bind:value={ind.debut} onchange={onInvalider} placeholder="début" />

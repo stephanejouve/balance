@@ -97,8 +97,13 @@ function ongletModeEmploi(): SheetCell[][] {
     ],
     [v(null), v(null)],
     [g('— Onglet Stagiaires : colonne Indispos —'), v(null)],
+    [v('mardi, 2026-08-25'), v('Jours acceptés : nom de jour FR ou date ISO (les deux formats coexistent)')],
     [v('mercredi 09h-10h chant'), v('Jour de la semaine + plage horaire + rôle ciblé')],
     [v('mardi 14:30 - 16:00'), v('Jour et plage horaire seuls')],
+    [
+      v('(champ jours vide)'),
+      v("L'indisponibilité s'applique à toute la session — préciser un jour pour la restreindre"),
+    ],
     [
       v('convalescence'),
       v('Texte libre conservé sans horaire spécifique (motif pour relecture humaine)'),
