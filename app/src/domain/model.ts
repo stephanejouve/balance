@@ -255,28 +255,75 @@ export const RegleCreneau = z.object({
 })
 export type RegleCreneau = z.infer<typeof RegleCreneau>
 
-export const Session = z.object({
-  id: z.string().min(1),
-  nom: z.string().min(1),
-  lieu_id: z.string().min(1),
-  date_debut: IsoDate,
-  date_fin: IsoDate,
-  /** Toutes les répétitions doivent tomber strictement avant. */
-  date_butoir: IsoDate,
-  butoir_heure: HhMm.default('23:59'),
-  grille: z.array(RegleCreneau).default([]),
-  plafond_morceaux: z.number().int().positive().default(13),
-  repetitions_visees: z.number().int().positive().default(3),
-  repetitions_min: z.number().int().positive().default(2),
-  /**
-   * Marge d'occupation en pourcentage : le solveur ne remplit pas plus de
-   * `(100 - marge_pct)`% des salles disponibles à chaque créneau. Permet
-   * de garder du jeu pour les imprévus (brief §5 « un planning optimal à
-   * 100 % est un planning qui casse au premier contretemps »).
-   * 0 = comportement historique (peut saturer à 100%).
-   */
-  marge_pct: z.number().min(0).max(90).default(0),
-})
+/**
+ * Migration Zod des JSON écrits avant #103 (butoir unique implicite = apéro).
+ * L'ancien schéma exposait `date_butoir` + `butoir_heure` sans mention de
+ * l'échéance, ces valeurs désignaient de facto le butoir de l'apéro (mercredi).
+ * Le nouveau schéma nomme explicitement les deux butoirs (apéro + vendredi),
+ * symétrie utile depuis que `Groupe.echeance` distingue les deux échéances
+ * (PR #58). Cette migration renomme les anciens champs et pose des defaults
+ * raisonnables pour la partie vendredi si elle est absente.
+ */
+function migrerSessionButoirs(val: unknown): unknown {
+  if (typeof val !== 'object' || val === null) return val
+  const obj = { ...(val as Record<string, unknown>) }
+  if ('date_butoir' in obj && !('butoir_apero_date' in obj)) {
+    obj.butoir_apero_date = obj.date_butoir
+    delete obj.date_butoir
+  }
+  if ('butoir_heure' in obj && !('butoir_apero_heure' in obj)) {
+    obj.butoir_apero_heure = obj.butoir_heure
+    delete obj.butoir_heure
+  }
+  // Vendredi absent : défaut sur `date_fin` (dernier jour de la session).
+  // Un stage qui ne joue pas le vendredi ignorera ce butoir, cohérent avec
+  // le fait qu'aucun groupe n'a `echeance = 'restitution_vendredi'` dans
+  // ce cas — le butoir vendredi est simplement inatteignable.
+  if (!('butoir_vendredi_date' in obj) && typeof obj.date_fin === 'string') {
+    obj.butoir_vendredi_date = obj.date_fin
+  }
+  return obj
+}
+
+export const Session = z.preprocess(
+  migrerSessionButoirs,
+  z.object({
+    id: z.string().min(1),
+    nom: z.string().min(1),
+    lieu_id: z.string().min(1),
+    date_debut: IsoDate,
+    date_fin: IsoDate,
+    /**
+     * Butoir de l'échéance `apero_mercredi` — toutes les répétitions des
+     * groupes de cette échéance doivent tomber strictement avant.
+     * Renommé depuis `date_butoir` par #103 pour la symétrie avec le butoir
+     * vendredi ; la migration Zod ci-dessus lit les anciens JSON.
+     */
+    butoir_apero_date: IsoDate,
+    butoir_apero_heure: HhMm.default('23:59'),
+    /**
+     * Butoir de l'échéance `restitution_vendredi` — introduit par #103.
+     * Symétrique du butoir apéro : toutes les répétitions des groupes
+     * d'échéance vendredi doivent tomber strictement avant. Un stage qui
+     * ne joue pas le vendredi peut laisser ce champ égal à `date_fin` —
+     * il ne sera pas utilisé si aucun groupe n'a `echeance = 'restitution_vendredi'`.
+     */
+    butoir_vendredi_date: IsoDate,
+    butoir_vendredi_heure: HhMm.default('23:59'),
+    grille: z.array(RegleCreneau).default([]),
+    plafond_morceaux: z.number().int().positive().default(13),
+    repetitions_visees: z.number().int().positive().default(3),
+    repetitions_min: z.number().int().positive().default(2),
+    /**
+     * Marge d'occupation en pourcentage : le solveur ne remplit pas plus de
+     * `(100 - marge_pct)`% des salles disponibles à chaque créneau. Permet
+     * de garder du jeu pour les imprévus (brief §5 « un planning optimal à
+     * 100 % est un planning qui casse au premier contretemps »).
+     * 0 = comportement historique (peut saturer à 100%).
+     */
+    marge_pct: z.number().min(0).max(90).default(0),
+  }),
+)
 export type Session = z.infer<typeof Session>
 
 /* -------------------------------------------------------------- Groupes ---*/

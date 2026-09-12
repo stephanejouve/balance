@@ -158,7 +158,15 @@ export function genererCreneaux(session: Session, lieu: Lieu, options: GenererOp
     return false
   }
 
-  const butoirKey = `${session.date_butoir}T${session.butoir_heure.replace(':', '')}`
+  // Le générateur produit tous les créneaux jusqu'au butoir MAXIMUM des deux
+  // échéances (issue #103) — le filtre par échéance est appliqué en aval, au
+  // moment où l'assignation d'un groupe à un créneau est décidée (voir
+  // `butoirDeGroupe` ci-dessous, consommé par le solveur et `verify.ts`).
+  // Générer jusqu'au max évite deux générations distinctes ; la filtration
+  // amont ne coûte qu'une comparaison de clés.
+  const butoirKeyApero = `${session.butoir_apero_date}T${session.butoir_apero_heure.replace(':', '')}`
+  const butoirKeyVendredi = `${session.butoir_vendredi_date}T${session.butoir_vendredi_heure.replace(':', '')}`
+  const butoirKeyMax = butoirKeyVendredi > butoirKeyApero ? butoirKeyVendredi : butoirKeyApero
 
   const maintenantKey = options.maintenant
     ? (() => {
@@ -171,7 +179,35 @@ export function genererCreneaux(session: Session, lieu: Lieu, options: GenererOp
 
   return emitted
     .filter((c) => !estBloqué(c))
-    .filter((c) => `${c.date}T${c.debut.replace(':', '')}` < butoirKey)
+    .filter((c) => `${c.date}T${c.debut.replace(':', '')}` < butoirKeyMax)
     .filter((c) => !maintenantKey || `${c.date}T${c.debut.replace(':', '')}` >= maintenantKey)
     .sort((a, b) => a.id.localeCompare(b.id))
+}
+
+/**
+ * Renvoie le butoir (date + heure) applicable à un groupe selon son échéance —
+ * issue #103. Consommé par les callers UI qui passent un `{date, heure}`
+ * (déplacement manuel, candidats case libre, etc.).
+ */
+export function butoirDeGroupe(
+  session: Pick<Session, 'butoir_apero_date' | 'butoir_apero_heure' | 'butoir_vendredi_date' | 'butoir_vendredi_heure'>,
+  echeance: 'apero_mercredi' | 'restitution_vendredi',
+): { date: string; heure: string } {
+  if (echeance === 'restitution_vendredi') {
+    return { date: session.butoir_vendredi_date, heure: session.butoir_vendredi_heure }
+  }
+  return { date: session.butoir_apero_date, heure: session.butoir_apero_heure }
+}
+
+/**
+ * Version compacte pour comparaison de clés — même signature que les clés
+ * créneau (`YYYY-MM-DDTHHMM`). Utilisé par `solver.ts::estLibre` et
+ * `verify.ts::butoirDuGroupe` pour filtrer sans re-formater à chaque appel.
+ */
+export function butoirKeyDeGroupe(
+  session: Pick<Session, 'butoir_apero_date' | 'butoir_apero_heure' | 'butoir_vendredi_date' | 'butoir_vendredi_heure'>,
+  echeance: 'apero_mercredi' | 'restitution_vendredi',
+): string {
+  const b = butoirDeGroupe(session, echeance)
+  return `${b.date}T${b.heure.replace(':', '')}`
 }

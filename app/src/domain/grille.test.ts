@@ -114,15 +114,21 @@ describe('genererCreneaux', () => {
     expect(c[0].salles).toEqual(['B'])
   })
 
-  it('applique le butoir : coupe les créneaux au-delà de la scène', () => {
+  it('applique le butoir : coupe les créneaux au-delà de la scène (butoirs symétriques)', () => {
+    // Comportement historique préservé quand les 2 butoirs coïncident : le
+    // générateur produit jusqu'au butoirMax (== butoir apéro == butoir vendredi
+    // dans ce cas). Depuis #103 le filtre par échéance est appliqué en aval
+    // par le solveur/`verify.ts` via `butoirKeyDeGroupe`.
     const session = Session.parse({
       id: 's',
       nom: 'Test',
       lieu_id: 'demo',
       date_debut: '2026-08-24',
       date_fin: '2026-08-28',
-      date_butoir: '2026-08-26',
-      butoir_heure: '18:00',
+      butoir_apero_date: '2026-08-26',
+      butoir_apero_heure: '18:00',
+      butoir_vendredi_date: '2026-08-26',
+      butoir_vendredi_heure: '18:00',
       grille: [{ debut: '09:00', fin: '10:00' }, { debut: '19:00', fin: '20:00' }],
     })
     const c = genererCreneaux(session, lieu)
@@ -133,6 +139,37 @@ describe('genererCreneaux', () => {
       '2026-08-25T0900',
       '2026-08-25T1900',
       '2026-08-26T0900',
+    ])
+  })
+
+  it('produit les créneaux jusqu\'au max des 2 butoirs (le vendredi étend la fenêtre)', () => {
+    // Depuis #103 : le butoir apéro peut être antérieur au butoir vendredi.
+    // Le générateur produit jusqu'au max ; le filtre par échéance côté groupe
+    // reste appliqué en aval. Ici vendredi étend jusqu'au 28.
+    const session = Session.parse({
+      id: 's',
+      nom: 'Test',
+      lieu_id: 'demo',
+      date_debut: '2026-08-24',
+      date_fin: '2026-08-28',
+      butoir_apero_date: '2026-08-26',
+      butoir_apero_heure: '18:00',
+      butoir_vendredi_date: '2026-08-28',
+      butoir_vendredi_heure: '20:00',
+      grille: [{ debut: '09:00', fin: '10:00' }, { debut: '19:00', fin: '20:00' }],
+    })
+    const c = genererCreneaux(session, lieu)
+    expect(c.map((x) => x.id)).toEqual([
+      '2026-08-24T0900',
+      '2026-08-24T1900',
+      '2026-08-25T0900',
+      '2026-08-25T1900',
+      '2026-08-26T0900',
+      '2026-08-26T1900',
+      '2026-08-27T0900',
+      '2026-08-27T1900',
+      '2026-08-28T0900',
+      '2026-08-28T1900',
     ])
   })
 

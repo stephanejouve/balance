@@ -1,4 +1,4 @@
-import type { Creneau } from '../domain/grille'
+import { butoirKeyDeGroupe, type Creneau } from '../domain/grille'
 import type { Groupe, Inscriptions, Lieu, Personne, Pupitre, Session } from '../domain/model'
 import type { RegistreContraintes } from './contraintes'
 import { actif } from './contraintes'
@@ -418,9 +418,19 @@ export function repartir(
     return Math.max(1, Math.floor(dispo * (1 - margePct / 100)))
   }
 
+  // Butoir par échéance (issue #103) : un groupe `apero_mercredi` ne peut
+  // pas être placé au-delà de `butoir_apero_*` ; un groupe `restitution_vendredi`
+  // a jusqu'à `butoir_vendredi_*`. Mémoïsation par groupe pour éviter les
+  // recalculs dans la boucle `estLibre`.
+  const butoirParGroupe = new Map(groupes.map((g) => [g.id, butoirKeyDeGroupe(session, g.echeance)]))
+
   const estLibre = (c: Creneau, g: Groupe, e: EtatEssai, contraintJour: boolean): boolean => {
     const cap = sallesUtilisables(c)
     if (actif(reg, 'salle-unique-groupe') && (e.occSlot.get(c.id) ?? 0) >= cap) return false
+    // Butoir échéance — un créneau qui tombe au-delà du butoir de l'échéance
+    // du groupe n'est pas candidat, quelle que soit la disponibilité salle/personne.
+    const butoirKey = butoirParGroupe.get(g.id)
+    if (butoirKey && `${c.date}T${c.debut.replace(':', '')}` >= butoirKey) return false
     const planG = e.plan.get(g.id) ?? []
     if (actif(reg, 'creneaux-consecutifs') && accolAvecPlan(c, planG, creneauxParId)) return false
     if (contraintJour && e.joursGroupe.get(g.id)?.has(c.date)) return false

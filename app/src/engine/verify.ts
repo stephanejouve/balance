@@ -102,7 +102,22 @@ export function verifier(
 
   // Butoir : le créneau doit exister ET tomber avant butoir (le générateur le
   // garantit déjà — on vérifie que l'assignation ne pointe pas hors grille).
-  const butoirKey = `${session.date_butoir}T${session.butoir_heure.replace(':', '')}`
+  // Butoir dépend de l'échéance du groupe (issue #103) : `apero_mercredi` →
+  // butoir apéro, `restitution_vendredi` → butoir vendredi.
+  const butoirKeyApero = `${session.butoir_apero_date}T${session.butoir_apero_heure.replace(':', '')}`
+  const butoirKeyVendredi = `${session.butoir_vendredi_date}T${session.butoir_vendredi_heure.replace(':', '')}`
+  const butoirDuGroupe = (groupe: Groupe | undefined): { key: string; label: string } => {
+    if (groupe && groupe.echeance === 'restitution_vendredi') {
+      return {
+        key: butoirKeyVendredi,
+        label: `${session.butoir_vendredi_date} ${session.butoir_vendredi_heure} (vendredi)`,
+      }
+    }
+    return {
+      key: butoirKeyApero,
+      label: `${session.butoir_apero_date} ${session.butoir_apero_heure} (apéro)`,
+    }
+  }
 
   // Index par créneau : liste des assignations
   const parCreneau = new Map<string, Assignation[]>()
@@ -126,15 +141,19 @@ export function verifier(
     }
 
     const creneauKey = `${creneau.date}T${creneau.debut.replace(':', '')}`
-    if (actif(registre, 'avant-butoir') && creneauKey >= butoirKey) {
-      ass.forEach((a) =>
-        problemes.push({
-          type: 'apres-butoir',
-          message: `${creneau.date} ${creneau.debut} tombe au-delà du butoir ${session.date_butoir} ${session.butoir_heure}`,
-          creneau_id,
-          groupe_id: a.groupe_id,
-        }),
-      )
+    if (actif(registre, 'avant-butoir')) {
+      ass.forEach((a) => {
+        const groupe = ctx.groupesParId.get(a.groupe_id)
+        const butoir = butoirDuGroupe(groupe)
+        if (creneauKey >= butoir.key) {
+          problemes.push({
+            type: 'apres-butoir',
+            message: `${creneau.date} ${creneau.debut} tombe au-delà du butoir ${butoir.label}`,
+            creneau_id,
+            groupe_id: a.groupe_id,
+          })
+        }
+      })
     }
 
     // Salles disponibles sur ce créneau
