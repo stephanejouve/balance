@@ -163,13 +163,18 @@
   /** Seuil de charge par musicien et par jour au-delà duquel on alerte. */
   let seuilChargeJour = $state(4)
   /** Si vrai, la grille écarte les créneaux dont l'heure de début est passée. */
-  let filtrerPasse = $state(false)
   /** Assignation en cours de déplacement (bascule la vue Par salle en mode cibles). */
   let deplacementEnCours = $state<Assignation | null>(null)
 
   const creneaux = $derived.by(() => {
     try {
-      return genererCreneaux(session, lieu, { maintenant: filtrerPasse ? new Date() : undefined })
+      // Les créneaux déjà écoulés sont toujours filtrés — si le stage a
+      // commencé, on ne propose de placer des répétitions que sur les
+      // jours qui restent. Retour utilisateur 2026-09-12 sur l'ancienne
+      // case à cocher « ne pas placer de répétitions dans le passé » :
+      // laisser ce comportement en option n'avait pas de sens (« c'est
+      // une blague ? »). Comportement désormais automatique.
+      return genererCreneaux(session, lieu, { maintenant: new Date() })
     } catch {
       return []
     }
@@ -1135,10 +1140,6 @@
         </div>
       {/if}
     {/if}
-    <label class="check" style="max-width:none;border:none;margin:8px 0 12px">
-      <input type="checkbox" bind:checked={filtrerPasse} />
-      <span>Ne pas placer de répétitions dans le passé (recalcul en cours de session)</span>
-    </label>
     <button class="big" onclick={lancer} disabled={solveurStore.calculEnCours}>
       {solveurStore.calculEnCours ? 'Recherche en cours…' : solveurStore.solution ? 'Relancer la répartition' : 'Lancer la répartition'}
     </button>
