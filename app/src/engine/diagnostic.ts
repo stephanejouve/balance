@@ -134,6 +134,21 @@ function pupitresDePersonneDansGroupe(g: Groupe, pid: string): Pupitre[] {
 }
 
 /**
+ * Retourne un calculateur de capacité créneau paramétré par `margePct`.
+ * Miroir `solver.ts::sallesUtilisables` — duplication historique entre
+ * `analyserCapaciteStage` et `diagnostiquer` (deux closures identiques)
+ * résolue en factory partagée module-level (nit 4 review Leader PR #81).
+ * L'extract vers `solver.ts` reste un follow-up P3 hors scope.
+ */
+function makeCapaciteCreneau(margePct: number): (c: Creneau) => number {
+  return (c: Creneau): number => {
+    const dispo = c.salles.length
+    if (dispo === 0 || margePct === 0) return dispo
+    return Math.max(1, Math.floor(dispo * (1 - margePct / 100)))
+  }
+}
+
+/**
  * Calcule le signal capacité stage (`DiagStage`) — indépendant des
  * personnes, calculé à partir des créneaux, du lieu et de la session.
  *
@@ -157,13 +172,7 @@ export function analyserCapaciteStage(
 ): DiagStage {
   const cible = session.repetitions_visees
   const margePct = session.marge_pct || 0
-  // Miroir sallesUtilisables (solver.ts, diagnostic.ts::capaciteCreneau).
-  // Duplication contrôlée — extract partagé = follow-up P3.
-  const capaciteCreneau = (c: Creneau): number => {
-    const dispo = c.salles.length
-    if (dispo === 0 || margePct === 0) return dispo
-    return Math.max(1, Math.floor(dispo * (1 - margePct / 100)))
-  }
+  const capaciteCreneau = makeCapaciteCreneau(margePct)
   const capacite_stage = creneaux.reduce((acc, c) => acc + capaciteCreneau(c), 0)
 
   // Demande = séances de groupes + séances imposées.
@@ -306,14 +315,7 @@ export function diagnostiquer(
     placementsParCreneau.set(p.creneau_id, (placementsParCreneau.get(p.creneau_id) ?? 0) + 1)
   }
   const margePct = session.marge_pct || 0
-  // Miroir de `solver.ts::sallesUtilisables` — duplication contrôlée par
-  // l'invariant `exploitables <= ouverts` posé en test. Extraire vers module
-  // partagé = follow-up P3, hors scope.
-  const capaciteCreneau = (c: Creneau): number => {
-    const dispo = c.salles.length
-    if (dispo === 0 || margePct === 0) return dispo
-    return Math.max(1, Math.floor(dispo * (1 - margePct / 100)))
-  }
+  const capaciteCreneau = makeCapaciteCreneau(margePct)
 
   const nbImposesPar = new Map<string, number>()
   for (const im of enrichies.imposes) {
