@@ -46,6 +46,7 @@ const insc = (overrides: Partial<Inscriptions> = {}): Inscriptions => ({
   personnes: [],
   groupes: [],
   imposes: [],
+  refus: [],
   ...overrides,
 })
 

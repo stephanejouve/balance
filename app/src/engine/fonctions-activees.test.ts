@@ -91,6 +91,7 @@ describe('preparerInscriptionsPourSolveur — cascade solveur', () => {
         seances: [{ date: '2026-08-28', debut: '14:00', fin: '15:00' }],
       },
     ],
+    refus: [],
   }
   const lieuBase = Lieu.parse({
     id: 'l',

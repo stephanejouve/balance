@@ -186,6 +186,7 @@ describe('construireCandidatExcel — candidat complet, une seule affectation', 
     personnes: [],
     groupes: [],
     imposes: [],
+    refus: [],
     ...o,
   })
 

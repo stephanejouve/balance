@@ -114,7 +114,7 @@
   }
 
   function inscriptionsVides(): Inscriptions {
-    return { session_id: session.id, personnes: [], groupes: [], imposes: [] }
+    return { session_id: session.id, personnes: [], groupes: [], imposes: [], refus: [] }
   }
 
   /**
@@ -259,7 +259,7 @@
       { jours: [], debut: '14:00', fin: '18:00', pas_minutes: 60, salles: [], bloque: false },
     )
     // Inscriptions vides (personnes + groupes + imposés)
-    inscriptions = { session_id: 'nouvelle-session', personnes: [], groupes: [], imposes: [] }
+    inscriptions = { session_id: 'nouvelle-session', personnes: [], groupes: [], imposes: [], refus: [] }
     sourceLabel = `nouvelle session dans « ${lieu.nom} »`
     warningsImport = []
     erreurImport = ''

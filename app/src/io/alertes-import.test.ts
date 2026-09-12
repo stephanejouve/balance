@@ -269,6 +269,7 @@ describe('mentionsDepuisCandidat / analyserIdentitesCandidat — wire post-const
         ] },
     ],
     imposes: [],
+    refus: [],
   }
 
   it('mentionsDepuisCandidat produit 1 mention par instrument stagiaire + 1 par MembreGroupe', () => {
@@ -318,6 +319,7 @@ describe('mentionsDepuisCandidat / analyserIdentitesCandidat — wire post-const
           ] },
       ],
       imposes: [],
+      refus: [],
     }
     const analyse = analyserIdentitesCandidat(inscriptionsCasN)
     const absents = analyse.alertes_coherence.filter((a) => a.type === 'nom_cite_absent_stagiaires')
@@ -342,6 +344,7 @@ describe('mentionsDepuisCandidat / analyserIdentitesCandidat — wire post-const
           ] },
       ],
       imposes: [],
+      refus: [],
     }
     const mentions = mentionsDepuisCandidat(inscriptionsOrphelin)
     // 1 stagiaire + 1 membre valide (l'inexistant est skippé)

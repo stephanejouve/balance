@@ -523,6 +523,54 @@ export const Impose = z.object({
 })
 export type Impose = z.infer<typeof Impose>
 
+/* -------------------------------------------------------- Refus (pool §96) */
+
+/**
+ * Refus persistant d'une proposition du pool d'arbitrage effectif — issue #96
+ * §D Q1, PR 2/6 du chantier pool.
+ *
+ * Un refus est enregistré quand une personne (ou l'organisateur en son nom)
+ * refuse un mouvement proposé par le pool. Le pool filtre les propositions
+ * déjà refusées pour ne pas les reproposer — sinon l'organisateur relancerait
+ * quelqu'un qui a déjà dit non, et c'est précisément ce que Stéphane veut
+ * éviter (cadrage CD msg 6542 relayant Stéphane).
+ *
+ * Match strict sur `(personne_id, source_groupe_id, cible_groupe_id?)` — un
+ * refus « retrait sans réaffectation » (cible absente) ne bloque pas un
+ * transfert vers la même source, et réciproquement.
+ *
+ * Position CD msg 6620 : pas de statut « pending » pour l'instant. Un refus
+ * doit persister parce qu'il EMPÊCHE quelque chose ; un pending n'empêche
+ * rien, une relance n'est pas une faute. Ajoutable plus tard (champ de plus
+ * sur le même artefact, pas une refonte).
+ */
+export const Refus = z.object({
+  personne_id: z.string().min(1),
+  /** Groupe où la personne était et d'où on la retirait. */
+  source_groupe_id: z.string().min(1),
+  /**
+   * Groupe cible du mouvement, si le mouvement était un TRANSFERT.
+   * Absent pour un RETRAIT SANS RÉAFFECTATION (retrait pur pour libérer
+   * un morceau qui ne loge pas). Le match du filtre pool est strict sur
+   * cette valeur — refus de retrait pur ≠ refus de transfert vers la
+   * même source.
+   */
+  cible_groupe_id: z.string().min(1).optional(),
+  /**
+   * Datetime ISO 8601 UTC du refus. Utilisé pour l'audit et pour une
+   * éventuelle expiration future (les hypothèses de disponibilité
+   * évoluent — un refus d'il y a un mois n'engage peut-être plus la
+   * personne). Pas d'expiration côté code aujourd'hui.
+   */
+  refuse_at: z.string().datetime({ message: 'attendu ISO 8601 UTC (ex. 2026-09-12T13:00:00Z)' }),
+  /**
+   * Motif libre saisi par l'organisateur au moment du refus. Facultatif.
+   * Sert à la relecture humaine ; jamais interprété côté code.
+   */
+  motif: z.string().optional(),
+})
+export type Refus = z.infer<typeof Refus>
+
 /* ---------------------------------------------------------- Inscriptions --*/
 
 export const Inscriptions = z.object({
@@ -530,6 +578,13 @@ export const Inscriptions = z.object({
   personnes: z.array(Personne).default([]),
   groupes: z.array(Groupe).default([]),
   imposes: z.array(Impose).default([]),
+  /**
+   * Historique des refus du pool d'arbitrage effectif — issue #96 §D Q1.
+   * Par défaut vide (les anciens JSON sans ce champ obtiennent `[]` via
+   * le default Zod, migration transparente). Populé par l'actionnable
+   * « refuser une proposition » (PR 4 du chantier pool).
+   */
+  refus: z.array(Refus).default([]),
 })
 export type Inscriptions = z.infer<typeof Inscriptions>
 
