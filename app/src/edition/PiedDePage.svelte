@@ -17,6 +17,13 @@
    */
 
   const raw = __APP_VERSION__
+  // SHA court du commit au moment du build (7 caractères). Ajouté par CD
+  // 2026-09-12 après incident de cache navigateur : le timestamp seul dit
+  // QUAND, il ne dit pas CE QUI. Un SHA à côté vérifie qu'on est bien sur
+  // le bon commit — utile pour un rapport de bug traçable ou une confusion
+  // branche/main. Chaîne vide si le build n'a pas eu accès à un repo git
+  // (dev local sans .git, container non initialisé) — dégradation silencieuse.
+  const raw_sha = __APP_SHA__
 
   function formaterVersion(v: string): string {
     // Format attendu : YYYYMMDD.HHMM (ex. 20260901.1420)
@@ -34,12 +41,16 @@
     return `${jour} ${nomMois} ${y} · ${hh}:${mn} UTC`
   }
 
+  // Contenu à copier : version + SHA si dispo, pour qu'un rapport de bug
+  // porte les deux d'un coup (« je suis sur v20260912.1351 · 151eb51 »).
+  const contenuCopie = raw_sha ? `v${raw} · ${raw_sha}` : `v${raw}`
+
   let copie = $state<boolean>(false)
   let timer: ReturnType<typeof setTimeout> | null = null
 
   async function copier() {
     try {
-      await navigator.clipboard.writeText(raw)
+      await navigator.clipboard.writeText(contenuCopie)
       copie = true
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => (copie = false), 1500)
@@ -55,10 +66,14 @@
     type="button"
     class="version"
     onclick={copier}
-    title="Cliquer pour copier la version brute"
+    title="Cliquer pour copier la version + SHA"
   >
     <span class="tag">Balance</span>
     <span class="ver">v{raw}</span>
+    {#if raw_sha}
+      <span class="sep">·</span>
+      <span class="sha" title="Commit au moment du build">{raw_sha}</span>
+    {/if}
     <span class="humaine">({formaterVersion(raw)})</span>
     {#if copie}<span class="copie">✓ copié</span>{/if}
   </button>
@@ -92,6 +107,13 @@
     font-weight: 600;
   }
   .ver {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #9ca3af;
+  }
+  .sep {
+    color: #d1d5db;
+  }
+  .sha {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     color: #9ca3af;
   }
