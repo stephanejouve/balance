@@ -241,13 +241,22 @@
       d.setDate(d.getDate() + n)
       return iso(d)
     }
+    // Les 4 champs butoir portent les noms canoniques post-#103 (2 échéances).
+    // Object.assign N'ÉCRASE PAS les propriétés qui ne figurent pas dans le
+    // patch — écrire les anciens noms (`date_butoir`, `butoir_heure`) laisserait
+    // `butoir_apero_date` et `butoir_vendredi_date` aux valeurs héritées du
+    // parse précédent, et le générateur produirait 0 créneau si les dates
+    // héritées sont antérieures à `date_debut` (régression production
+    // 2026-09-12 sur v20260912.1845, cf hotfix).
     Object.assign(session, {
       id: 'nouvelle-session',
       nom: 'Nouvelle session',
       date_debut: iso(today),
       date_fin: dansXjours(6),
-      date_butoir: dansXjours(6),
-      butoir_heure: '23:59',
+      butoir_apero_date: dansXjours(6),
+      butoir_apero_heure: '23:59',
+      butoir_vendredi_date: dansXjours(6),
+      butoir_vendredi_heure: '23:59',
       repetitions_visees: 3,
       repetitions_min: 2,
       plafond_morceaux: 13,
