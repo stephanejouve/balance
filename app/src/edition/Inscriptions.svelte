@@ -1,11 +1,19 @@
 <script lang="ts">
   import type { Inscriptions, Personne, Session } from '../domain/model'
   import { formatPosteCherche, formatPostesCherches, libellePersonne } from '../domain/model'
+  import { analyserPlafondSalle } from '../engine/plafond-salle'
 
   interface Props {
     inscriptions: Inscriptions
     session: Session
     personnesParId: Map<string, Personne>
+    /**
+     * Plus grande jauge parmi les salles actives (calculée en amont via
+     * `plusGrandeJaugeActive(lieu.salles)`). Sert au badge « plafond de
+     * salle » sur chaque carte de morceau — cadrage CD msg 6542 + 6582,
+     * issue #96.
+     */
+    plus_grande_jauge_active: number
     onAjouterGroupe: () => void
     onSupprimerGroupe: (i: number) => void
     onRetirerMembre: (groupe_id: string, membreIdx: number) => void
@@ -19,6 +27,7 @@
     inscriptions = $bindable(),
     session,
     personnesParId,
+    plus_grande_jauge_active,
     onAjouterGroupe,
     onSupprimerGroupe,
     onRetirerMembre,
@@ -52,6 +61,7 @@
       </thead>
       <tbody>
         {#each inscriptions.groupes as g, i}
+          {@const plafond = analyserPlafondSalle(g, plus_grande_jauge_active)}
           <tr>
             <td class="mono">{i + 1}</td>
             <td><input bind:value={g.titre} onchange={onInvalider} /></td>
@@ -69,6 +79,21 @@
                   {/if}
                   {#if g.postes_cherches.length > 0}
                     <span class="badge">cherche {formatPostesCherches(g.postes_cherches)}</span>
+                  {/if}
+                  {#if plafond.etat === 'ne_loge_pas'}
+                    <span
+                      class="badge alerte"
+                      title="Effectif actuel {plafond.effectif_actuel} personnes > plus grande jauge active {plafond.plus_grande_jauge_active}"
+                    >
+                      ne loge pas · {plafond.effectif_actuel} pers. > {plafond.plus_grande_jauge_active}
+                    </span>
+                  {:else if plafond.etat === 'ne_logera_plus'}
+                    <span
+                      class="badge risque"
+                      title="Si tous les postes cherchés sont pourvus par de nouvelles personnes : {plafond.effectif_max_potentiel} pers. > jauge {plafond.plus_grande_jauge_active}"
+                    >
+                      ne logera plus si pourvu · {plafond.effectif_max_potentiel} pers. potentielles > {plafond.plus_grande_jauge_active}
+                    </span>
                   {/if}
                 </summary>
                 <div class="membres-list">
@@ -161,5 +186,19 @@
     background: #f4e4a1;
     font-weight: 600;
     border-color: #c9a24a;
+  }
+  /* Badges plafond de salle — cadrage CD msg 6582, issue #96.
+     Deux états distincts (fait vs risque) doivent avoir des couleurs
+     distinctes pour ne pas se lire comme le même avertissement. */
+  :global(.badge.alerte) {
+    background: #fbe4e0;
+    color: #a03020;
+    border-color: #e6a898;
+  }
+  :global(.badge.risque) {
+    background: #fbecd2;
+    color: #8a5c11;
+    border-color: #d9b774;
+    font-style: italic;
   }
 </style>

@@ -40,6 +40,7 @@
   import { preparerInscriptionsPourSolveur } from './engine/fonctions-activees'
   import { enrichirIndispos } from './engine/imposes'
   import { ciblesValides } from './engine/manuel'
+  import { plusGrandeJaugeActive } from './engine/plafond-salle'
   import { suggererRenforts } from './engine/renforts'
   import { repartir } from './engine/solver'
   import type { Assignation } from './engine/types'
@@ -198,6 +199,7 @@
   const personnesParId = $derived(new Map(inscriptions.personnes.map((p) => [p.id, p])))
   const creneauxParId = $derived(new Map(creneaux.map((c) => [c.id, c])))
   const sallesParId = $derived(new Map(lieu.salles.map((s) => [s.id, s])))
+  const plusGrandeJauge = $derived(plusGrandeJaugeActive(lieu.salles))
 
   // Repli auto quand la vue courante devient indisponible (fonction du lieu
   // désactivée). Sinon on afficherait un bouton disparu sur une vue vide.
@@ -973,6 +975,7 @@
     bind:inscriptions
     {session}
     {personnesParId}
+    plus_grande_jauge_active={plusGrandeJauge}
     onAjouterGroupe={ajouterGroupe}
     onSupprimerGroupe={supprimerGroupe}
     onRetirerMembre={retirerMembre}
