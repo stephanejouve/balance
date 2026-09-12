@@ -87,7 +87,8 @@ describe('Session', () => {
     expect(s.repetitions_visees).toBe(3)
     expect(s.repetitions_min).toBe(2)
     expect(s.plafond_morceaux).toBe(13)
-    expect(s.butoir_heure).toBe('23:59')
+    expect(s.butoir_apero_heure).toBe('23:59')
+    expect(s.butoir_vendredi_heure).toBe('23:59')
   })
 })
 

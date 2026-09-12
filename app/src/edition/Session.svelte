@@ -23,7 +23,7 @@
     <p class="eyebrow">Étape 2b · Session</p>
     <h2>{session.nom}</h2>
     <p class="hint">
-      {session.date_debut} → {session.date_fin}, butoir {session.date_butoir} {session.butoir_heure}.
+      {session.date_debut} → {session.date_fin}, butoirs apéro {session.butoir_apero_date} {session.butoir_apero_heure} / vendredi {session.butoir_vendredi_date} {session.butoir_vendredi_heure}.
       {session.grille.filter((r) => !r.bloque).length} règle(s) créatrice(s),
       {session.grille.filter((r) => r.bloque).length} règle(s) de blocage —
       <b>{nbCreneaux}</b> créneaux générés.
@@ -36,8 +36,10 @@
     <div class="fields">
       <label>Début <input type="date" bind:value={session.date_debut} onchange={onInvalider} /></label>
       <label>Fin <input type="date" bind:value={session.date_fin} onchange={onInvalider} /></label>
-      <label>Butoir <input type="date" bind:value={session.date_butoir} onchange={onInvalider} /></label>
-      <label>Butoir heure <input type="time" bind:value={session.butoir_heure} onchange={onInvalider} /></label>
+      <label>Butoir apéro <input type="date" bind:value={session.butoir_apero_date} onchange={onInvalider} /></label>
+      <label>Heure <input type="time" bind:value={session.butoir_apero_heure} onchange={onInvalider} /></label>
+      <label>Butoir vendredi <input type="date" bind:value={session.butoir_vendredi_date} onchange={onInvalider} /></label>
+      <label>Heure <input type="time" bind:value={session.butoir_vendredi_heure} onchange={onInvalider} /></label>
       <label>Répétitions visées <input type="number" min="1" max="10" bind:value={session.repetitions_visees} onchange={onInvalider} /></label>
       <label>Minimum acceptable <input type="number" min="1" max="10" bind:value={session.repetitions_min} onchange={onInvalider} /></label>
       <label>

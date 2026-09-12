@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { genererCreneaux } from './domain/grille'
+  import { butoirDeGroupe, genererCreneaux } from './domain/grille'
   import { parseLegacyInscriptions } from './domain/legacy'
   import { migrerInscriptions } from './domain/migrate'
   import {
@@ -780,7 +780,7 @@
       preparerInscriptionsPourSolveur(inscriptions, lieu),
       creneaux,
       autres,
-      { date: session.date_butoir, heure: session.butoir_heure },
+      butoirDeGroupe(session, g.echeance),
     )
     return new Set(cibles.map((c) => `${c.creneau.id}|${c.salle_id}`))
   })
@@ -856,7 +856,7 @@
         preparerInscriptionsPourSolveur(inscriptions, lieu),
         creneaux,
         autres,
-        { date: session.date_butoir, heure: session.butoir_heure },
+        butoirDeGroupe(session, g.echeance),
       )
       if (cibles.some((x) => x.creneau.id === inspecteCase!.creneauId && x.salle_id === inspecteCase!.salleId)) {
         out.push({ groupe_id: g.id, titre: g.titre })
@@ -931,7 +931,7 @@
       musiciens, groupes et salles.
       {#if inscriptions.groupes.length > 0 || inscriptions.personnes.length > 0}
         {inscriptions.groupes.length} groupes,
-        {inscriptions.personnes.length} musiciens, {creneaux.length} créneaux avant butoir du {session.date_butoir}.
+        {inscriptions.personnes.length} musiciens, {creneaux.length} créneaux avant butoir du {session.butoir_apero_date}.
       {:else}
         Aucune session chargée — importez un fichier pour commencer.
       {/if}

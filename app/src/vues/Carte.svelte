@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Creneau } from '../domain/grille'
+  import { butoirDeGroupe, type Creneau } from '../domain/grille'
   import type { Groupe, Inscriptions, Lieu, Salle, Session } from '../domain/model'
   import { ciblesValides } from '../engine/manuel'
   import type { Assignation } from '../engine/types'
@@ -53,10 +53,15 @@
     const out: Array<{ groupe_id: string; titre: string }> = []
     for (const g of inscriptions.groupes) {
       const fictif: Assignation = { groupe_id: g.id, creneau_id: '__none__', salle_id: '__none__' }
-      const cibles = ciblesValides(fictif, g, lieu, inscriptions, creneaux, autres, {
-        date: session.date_butoir,
-        heure: session.butoir_heure,
-      })
+      const cibles = ciblesValides(
+        fictif,
+        g,
+        lieu,
+        inscriptions,
+        creneaux,
+        autres,
+        butoirDeGroupe(session, g.echeance),
+      )
       if (
         cibles.some(
           (x) => x.creneau.id === inspecteCase!.creneauId && x.salle_id === inspecteCase!.salleId,
