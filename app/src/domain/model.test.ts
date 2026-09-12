@@ -4,6 +4,7 @@ import {
   Inscriptions,
   Lieu,
   Personne,
+  Refus,
   Session,
   libellePersonne,
   nouvelIdGroupe,
@@ -127,6 +128,128 @@ describe('Inscriptions', () => {
     const i = Inscriptions.parse({ session_id: 's5' })
     expect(i.personnes).toEqual([])
     expect(i.groupes).toEqual([])
+  })
+
+  it('refus par défaut = [] (migration transparente anciens JSON — issue #96 §D Q1)', () => {
+    // Un ancien JSON écrit avant PR 2 pool §96 n'a pas de champ `refus`.
+    // Le default Zod le remplit avec `[]` sans erreur — aucune migration
+    // à écrire, le pool démarre sans refus enregistré.
+    const i = Inscriptions.parse({ session_id: 's5' })
+    expect(i.refus).toEqual([])
+  })
+
+  it('accepte un tableau de refus valides', () => {
+    const i = Inscriptions.parse({
+      session_id: 's5',
+      refus: [
+        {
+          personne_id: 'marie',
+          source_groupe_id: 'caravan',
+          cible_groupe_id: 'zombie',
+          refuse_at: '2026-09-12T13:00:00Z',
+          motif: 'Déjà refusé le mois dernier',
+        },
+      ],
+    })
+    expect(i.refus).toHaveLength(1)
+    expect(i.refus[0]!.personne_id).toBe('marie')
+  })
+})
+
+// ─── Schéma Refus (pool §96 D Q1) ────────────────────────────────────────
+// Verrouille les invariants du schéma persistant. Les invariants métier du
+// filtre pool (match strict source × cible?) sont testés dans engine/pool.test.ts.
+
+describe('Refus (pool §96)', () => {
+  it('accepte un refus « transfert » avec cible_groupe_id', () => {
+    const r = Refus.parse({
+      personne_id: 'marie',
+      source_groupe_id: 'caravan',
+      cible_groupe_id: 'zombie',
+      refuse_at: '2026-09-12T13:00:00Z',
+    })
+    expect(r.personne_id).toBe('marie')
+    expect(r.cible_groupe_id).toBe('zombie')
+  })
+
+  it('accepte un refus « retrait sans réaffectation » sans cible_groupe_id', () => {
+    // Cas Feeling Good : Marie refuse d'être retirée du morceau (retrait pur,
+    // sans destination proposée). Le schéma doit accepter l'absence de cible.
+    const r = Refus.parse({
+      personne_id: 'marie',
+      source_groupe_id: 'feeling-good',
+      refuse_at: '2026-09-12T13:00:00Z',
+    })
+    expect(r.cible_groupe_id).toBeUndefined()
+  })
+
+  it('accepte un motif libre facultatif', () => {
+    const r = Refus.parse({
+      personne_id: 'marie',
+      source_groupe_id: 'caravan',
+      refuse_at: '2026-09-12T13:00:00Z',
+      motif: 'Trop de morceaux avec cette personne, elle sature',
+    })
+    expect(r.motif).toBe('Trop de morceaux avec cette personne, elle sature')
+  })
+
+  it('rejette un refus sans personne_id', () => {
+    expect(() =>
+      Refus.parse({
+        source_groupe_id: 'caravan',
+        refuse_at: '2026-09-12T13:00:00Z',
+      }),
+    ).toThrow()
+  })
+
+  it('rejette un refus sans source_groupe_id', () => {
+    expect(() =>
+      Refus.parse({
+        personne_id: 'marie',
+        refuse_at: '2026-09-12T13:00:00Z',
+      }),
+    ).toThrow()
+  })
+
+  it('rejette un refus sans refuse_at', () => {
+    expect(() =>
+      Refus.parse({
+        personne_id: 'marie',
+        source_groupe_id: 'caravan',
+      }),
+    ).toThrow()
+  })
+
+  it('rejette un refuse_at hors format ISO 8601 (nit N1 review Leader PR #107)', () => {
+    // `z.string().datetime()` protège le format déclaré dans le docstring.
+    // Un string court comme `2026-09-12` (date seule) ou `hier` ne passe pas.
+    expect(() =>
+      Refus.parse({
+        personne_id: 'marie',
+        source_groupe_id: 'caravan',
+        refuse_at: 'hier',
+      }),
+    ).toThrow()
+    expect(() =>
+      Refus.parse({
+        personne_id: 'marie',
+        source_groupe_id: 'caravan',
+        refuse_at: '2026-09-12', // date seule, sans time
+      }),
+    ).toThrow()
+  })
+
+  it('rejette un cible_groupe_id vide (min 1)', () => {
+    // La chaîne vide `""` ne doit pas passer pour cible_groupe_id — invariant
+    // qui distingue « pas de cible » (undefined) de « cible mal formée ».
+    expect(() =>
+      Refus.parse({
+        personne_id: 'marie',
+        source_groupe_id: 'caravan',
+        cible_groupe_id: '',
+        refuse_at: '2026-09-12T13:00:00Z',
+      }),
+    ).toThrow()
   })
 })
 

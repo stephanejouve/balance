@@ -383,6 +383,7 @@ export function construireCandidatExcel(
     personnes: [...inscriptionsActuelles.personnes],
     groupes: [...inscriptionsActuelles.groupes],
     imposes: [...inscriptionsActuelles.imposes],
+    refus: [...inscriptionsActuelles.refus],
   }
   const personnesParId = new Map(candidat.personnes.map((p) => [p.id, p]))
 

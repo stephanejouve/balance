@@ -53,6 +53,7 @@ function inscriptions(): Inscriptions {
       },
     ],
     imposes: [],
+    refus: [],
   }
 }
 

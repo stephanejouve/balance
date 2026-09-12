@@ -46,6 +46,7 @@ const inscriptions = (groupes: Inscriptions['groupes']): Inscriptions => ({
   personnes: [],
   groupes,
   imposes: [],
+  refus: [],
 })
 
 describe('attribuerSalles — cas nominaux', () => {

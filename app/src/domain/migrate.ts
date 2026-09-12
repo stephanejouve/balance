@@ -217,5 +217,5 @@ export function migrerInscriptions(legacy: LegacyInscriptions, session_id: strin
     }
   })
 
-  return { session_id, personnes, groupes, imposes }
+  return { session_id, personnes, groupes, imposes, refus: [] }
 }

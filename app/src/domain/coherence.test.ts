@@ -23,7 +23,7 @@ import { migrerInscriptions } from './migrate'
 // ─── helpers ──────────────────────────────────────────────────────────
 
 function inscriptionsVides(): Inscriptions {
-  return { session_id: 's', personnes: [], groupes: [], imposes: [] }
+  return { session_id: 's', personnes: [], groupes: [], imposes: [], refus: [] }
 }
 
 // ─── J — pupitre contredit ────────────────────────────────────────────
