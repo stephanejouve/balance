@@ -80,7 +80,22 @@ export interface Proposition {
    * vidé (pupitre à occupant unique). 0 sinon.
    */
   cout_source: number
-  /** `gain_source + gain_cible − cout_source`. Filtre pool = `> 0`. */
+  /**
+   * 1 si le morceau source a déjà des postes cherchés non pourvus ET
+   * `gain_source == 0` (le retrait ne bascule pas le plafond, donc n'aide
+   * pas la source). Retirer d'un morceau déjà incomplet aggrave sa
+   * situation d'organisation. Introduit par CD 6754/6756 après observation
+   * du défaut A sur Luc (vents) → Seven Nation Army (cherche piano) : le
+   * retrait ne servait ni la source ni ne basculait le plafond. Sans ce
+   * terme, l'énumération produisait des propositions sans bénéfice.
+   *
+   * Note formulation basique — la garde `gain_source == 0` est essentielle :
+   * un morceau trop grand qui cherche quelqu'un peut malgré tout justifier
+   * le retrait quand il bascule sous le plafond. Une formulation « fine »
+   * qui pénalise même le cas `gain_source > 0` serait fausse. CD 6756.
+   */
+  cout_source_cherche: number
+  /** `gain_source + gain_cible − cout_source − cout_source_cherche`. Filtre pool = `> 0`. */
   gain_net: number
   /**
    * Étiquette lisible pour l'UI. « Transfert » (avec cible) ou
@@ -195,6 +210,25 @@ export function calculerPool(
   const personnesParId = new Map(inscriptions.personnes.map((p) => [p.id, p]))
   const groupes = inscriptions.groupes
 
+  // Défaut B (CD 6754 sur observation Stéphane, corrigé CD 6756) : un
+  // transfert n'a de valeur que si la cible ne peut pas se pourvoir
+  // autrement. « Autrement » = un candidat LIBRE au pupitre concerné,
+  // dans la définition (a) : inscrit ayant ce pupitre + membre d'aucun
+  // groupe. C'est ce que l'UI affiche déjà (badge LIBRE vert dans la
+  // liste des candidats), donc auditable par l'organisateur. Un calcul
+  // dont il peut vérifier la prémisse vaut mieux qu'un plus fin qu'il
+  // doit croire.
+  const engagesPar = new Map<string, number>()
+  for (const g of groupes) {
+    const membres = new Set(g.membres.map((m) => m.personne_id))
+    for (const pid of membres) engagesPar.set(pid, (engagesPar.get(pid) ?? 0) + 1)
+  }
+  const libresParPupitre = new Set<Pupitre>()
+  for (const personne of inscriptions.personnes) {
+    if ((engagesPar.get(personne.id) ?? 0) > 0) continue
+    for (const pup of pupitresDePersonne(personne)) libresParPupitre.add(pup)
+  }
+
   // Q2 filtre 1 : personnes globalement exclues (aucun créneau libre sur
   // aucun de leurs pupitres). Calcul inline via `indispoBloque` — pas de
   // dépendance à `analyserInfaisabilite(session, ...)` qui exigerait la
@@ -249,6 +283,14 @@ export function calculerPool(
         if (etatApres !== 'ne_loge_pas') gain_source = 1
       }
 
+      // Défaut A (CD 6754, corrigé CD 6756) : coût supplémentaire quand le
+      // morceau source a des postes cherchés non pourvus ET que le retrait
+      // ne fait pas basculer sous le plafond. La garde `gain_source == 0`
+      // est essentielle — un morceau trop grand qui cherche quelqu'un peut
+      // malgré tout justifier le retrait s'il bascule sous le plafond.
+      const cout_source_cherche =
+        source.postes_cherches.length > 0 && gain_source === 0 ? 1 : 0
+
       // Énumération des cibles = groupes avec CHERCHE au pupitre de P.
       // Pour chaque combinaison (personne, source, cible) on émet un
       // transfert candidat.
@@ -259,6 +301,11 @@ export function calculerPool(
           // Q2 filtre 3 : la cible cherche-t-elle ce pupitre ?
           const cherchesPupitre = cible.postes_cherches.filter((pc) => pc.pupitre === pup)
           if (cherchesPupitre.length === 0) continue
+
+          // Défaut B : la cible peut-elle se pourvoir sans mouvement ?
+          // Si au moins un inscrit LIBRE (engagé nulle part) a ce pupitre,
+          // aucun transfert vers cette cible pour ce pupitre ne se justifie.
+          if (libresParPupitre.has(pup)) continue
 
           // Q2 filtre 2 : la personne a-t-elle au moins un créneau libre
           // compatible avec un créneau candidat de la CIBLE ? Le morceau
@@ -279,7 +326,7 @@ export function calculerPool(
           if (estRefuse(refus, personne_id, source.id, cible.id)) continue
 
           const gain_cible = 1
-          const gain_net = gain_source + gain_cible - cout_source
+          const gain_net = gain_source + gain_cible - cout_source - cout_source_cherche
           if (gain_net <= 0) continue
 
           propositions.push({
@@ -290,6 +337,7 @@ export function calculerPool(
             gain_source,
             gain_cible,
             cout_source,
+            cout_source_cherche,
             gain_net,
             nom_mouvement: 'transfert',
           })
@@ -303,6 +351,11 @@ export function calculerPool(
         // Refus persistants
         if (estRefuse(refus, personne_id, source.id, undefined)) continue
 
+        // Note : `cout_source_cherche = 0` par construction ici parce que le
+        // bloc est gardé par `gain_source > 0` — et `cout_source_cherche` ne
+        // vaut 1 que si `gain_source == 0`. On rend le champ explicite dans
+        // la proposition émise pour cohérence de forme, mais il n'affecte
+        // pas le gain net d'un retrait sans réaffectation.
         const gain_net = gain_source - cout_source
         if (gain_net > 0) {
           // Un seul pupitre représentatif dans la proposition — l'affichage
@@ -315,6 +368,7 @@ export function calculerPool(
             gain_source,
             gain_cible: 0,
             cout_source,
+            cout_source_cherche: 0,
             gain_net,
             nom_mouvement: 'retrait_sans_reaffectation',
           })
