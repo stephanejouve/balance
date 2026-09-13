@@ -579,3 +579,180 @@ describe('calculerPool — pool vide quand rien à proposer', () => {
     expect(props).toEqual([])
   })
 })
+
+// ─── Défauts A et B (CD msgs 6754 → 6756) ──────────────────────────────────
+//
+// Défaut A : le retrait ne sert pas la source (Luc vents / Seven Nation Army
+// cherche piano). Avant fix : proposition émise avec `gain_source=0,
+// gain_cible=1, cout_source=0, gain_net=1`. Après fix : `cout_source_cherche
+// = 1` (source cherche + gain_source = 0) → `gain_net = 0` → filtré.
+//
+// Défaut B : la cible peut se pourvoir sans mouvement (Seven Nation Army a
+// 11 candidats piano dont 3 LIBRE). Avant fix : transferts émis vers la
+// cible. Après fix : dès qu'un candidat LIBRE existe au pupitre, plus de
+// transfert vers cette cible pour ce pupitre.
+
+describe('calculerPool — défaut A (source qui cherche + retrait qui ne bascule pas)', () => {
+  it("cout_source_cherche = 1 et la proposition est écartée", () => {
+    // Reproduction du défaut Luc/Seven Nation Army : Luc joue les vents dans
+    // un morceau source qui cherche PIANO. Retirer Luc n'aide pas le morceau
+    // (pas de piano à trouver dans les vents) et n'a pas d'effet plafond
+    // (le groupe n'est pas trop grand). La cible cherche des vents et n'a
+    // pas de candidat libre (personne d'autre inscrit avec vents).
+    const { session, creneaux, plusGrandeJauge } = fixture({ jauge: 10 })
+    const insc = Inscriptions.parse({
+      session_id: 's',
+      personnes: [
+        { id: 'luc', nom: 'Luc', instruments: [{ pupitre: 'vents' }] },
+        { id: 'anna', nom: 'Anna', instruments: [{ pupitre: 'vents' }] },
+        { id: 'boris', nom: 'Boris', instruments: [{ pupitre: 'chant' }] },
+      ],
+      groupes: [
+        {
+          id: 'source',
+          titre: 'Seven Nation Army',
+          membres: [
+            { personne_id: 'luc', pupitre: 'vents' },
+            { personne_id: 'anna', pupitre: 'vents' }, // 2 vents → retrait ne vide pas
+            { personne_id: 'boris', pupitre: 'chant' },
+          ],
+          postes_cherches: [{ pupitre: 'piano', nb: 1 }],
+        },
+        {
+          id: 'cible',
+          titre: 'Autre morceau',
+          membres: [{ personne_id: 'boris', pupitre: 'chant' }],
+          postes_cherches: [{ pupitre: 'vents', nb: 1 }],
+        },
+      ],
+    })
+    const props = calculerPool(insc, session, creneaux, [], plusGrandeJauge)
+    // Avant fix : Luc → cible serait proposé avec gain_net=1. Après fix :
+    // filtré (cout_source_cherche=1 fait tomber le gain_net à 0).
+    expect(props.find((p) => p.personne_id === 'luc' && p.cible_groupe_id === 'cible')).toBeUndefined()
+    // Anna aussi devrait être filtrée (mêmes raisons).
+    expect(props.find((p) => p.personne_id === 'anna' && p.cible_groupe_id === 'cible')).toBeUndefined()
+  })
+
+  it("cout_source_cherche = 0 quand gain_source > 0 (garde de la formulation)", () => {
+    // Source à 4 personnes, jauge=3 → source_ne_loge_pas. Retirer un vents
+    // laisse 3 personnes → tient → gain_source=1. La source cherche aussi
+    // quelqu'un, mais le retrait bascule sous le plafond donc le mouvement
+    // est justifié. La garde `gain_source == 0` du cout_source_cherche
+    // l'exempte ici.
+    const { session, creneaux, plusGrandeJauge } = fixture({ jauge: 3 })
+    const insc = Inscriptions.parse({
+      session_id: 's',
+      personnes: [
+        { id: 'p1', nom: 'P1', instruments: [{ pupitre: 'vents' }] },
+        { id: 'p2', nom: 'P2', instruments: [{ pupitre: 'vents' }] },
+        { id: 'p3', nom: 'P3', instruments: [{ pupitre: 'chant' }] },
+        { id: 'p4', nom: 'P4', instruments: [{ pupitre: 'piano' }] },
+      ],
+      groupes: [
+        {
+          id: 'source',
+          titre: 'Juste au-dessus du plafond',
+          membres: [
+            { personne_id: 'p1', pupitre: 'vents' },
+            { personne_id: 'p2', pupitre: 'vents' },
+            { personne_id: 'p3', pupitre: 'chant' },
+            { personne_id: 'p4', pupitre: 'piano' },
+          ],
+          postes_cherches: [{ pupitre: 'guitare', nb: 1 }],
+        },
+        {
+          id: 'cible',
+          titre: 'Cible cherche vents',
+          membres: [],
+          postes_cherches: [{ pupitre: 'vents', nb: 1 }],
+        },
+      ],
+    })
+    const props = calculerPool(insc, session, creneaux, [], plusGrandeJauge)
+    // Une proposition de transfert p1/p2 (vents) → cible doit exister
+    // avec gain_source=1 et cout_source_cherche=0 malgré la source qui cherche.
+    const trans = props.find((p) => p.source_groupe_id === 'source' && p.cible_groupe_id === 'cible')
+    expect(trans).toBeDefined()
+    expect(trans!.gain_source).toBe(1)
+    expect(trans!.cout_source_cherche).toBe(0)
+  })
+})
+
+describe('calculerPool — défaut B (cible peut se pourvoir sans mouvement)', () => {
+  it("écarte le transfert quand un candidat LIBRE existe au pupitre cible", () => {
+    // La cible cherche PIANO. Un inscrit (freddy) joue piano et n'est
+    // membre d'aucun groupe → LIBRE au sens (a). Aucun transfert vers
+    // cette cible pour piano ne doit être proposé, même si des membres
+    // d'autres groupes jouent piano.
+    const { session, creneaux, plusGrandeJauge } = fixture({ jauge: 10 })
+    const insc = Inscriptions.parse({
+      session_id: 's',
+      personnes: [
+        { id: 'sara', nom: 'Sara', instruments: [{ pupitre: 'piano' }] },
+        { id: 'tim', nom: 'Tim', instruments: [{ pupitre: 'chant' }] },
+        { id: 'freddy', nom: 'Freddy', instruments: [{ pupitre: 'piano' }] }, // LIBRE
+      ],
+      groupes: [
+        {
+          id: 'source',
+          titre: 'Autre',
+          membres: [
+            { personne_id: 'sara', pupitre: 'piano' },
+            { personne_id: 'tim', pupitre: 'chant' },
+          ],
+          postes_cherches: [{ pupitre: 'guitare', nb: 1 }],
+        },
+        {
+          id: 'cible',
+          titre: 'Cherche piano',
+          membres: [{ personne_id: 'tim', pupitre: 'chant' }],
+          postes_cherches: [{ pupitre: 'piano', nb: 1 }],
+        },
+      ],
+    })
+    const props = calculerPool(insc, session, creneaux, [], plusGrandeJauge)
+    // Aucun transfert de sara (piano) vers cible ne doit être proposé.
+    expect(props.find((p) => p.cible_groupe_id === 'cible' && p.pupitre === 'piano')).toBeUndefined()
+  })
+
+  it("laisse passer le transfert quand aucun candidat libre au pupitre", () => {
+    // Source à 5 personnes, jauge=4 → source_ne_loge_pas. Retirer sara (piano)
+    // laisse 4 personnes → tient. gain_source=1. Sara est le seul piano de
+    // la source → cout_source=1 (pupitre vidé). Mais gain_source+gain_cible
+    // -cout_source-cout_source_cherche = 1+1-1-0 = 1 > 0 → proposition émise.
+    // AUCUN inscrit LIBRE : sara+tim sont dans source, personne d'autre.
+    const { session, creneaux, plusGrandeJauge } = fixture({ jauge: 4 })
+    const insc = Inscriptions.parse({
+      session_id: 's',
+      personnes: [
+        { id: 'sara', nom: 'Sara', instruments: [{ pupitre: 'piano' }] },
+        { id: 'tim', nom: 'Tim', instruments: [{ pupitre: 'chant' }] },
+        { id: 'a', nom: 'A', instruments: [{ pupitre: 'chant' }] },
+        { id: 'b', nom: 'B', instruments: [{ pupitre: 'basse' }] },
+        { id: 'c', nom: 'C', instruments: [{ pupitre: 'batterie' }] },
+      ],
+      groupes: [
+        {
+          id: 'source',
+          titre: 'Trop grand + pas de LIBRE piano',
+          membres: [
+            { personne_id: 'sara', pupitre: 'piano' },
+            { personne_id: 'tim', pupitre: 'chant' },
+            { personne_id: 'a', pupitre: 'chant' },
+            { personne_id: 'b', pupitre: 'basse' },
+            { personne_id: 'c', pupitre: 'batterie' },
+          ],
+        },
+        {
+          id: 'cible',
+          titre: 'Cherche piano',
+          membres: [{ personne_id: 'tim', pupitre: 'chant' }],
+          postes_cherches: [{ pupitre: 'piano', nb: 1 }],
+        },
+      ],
+    })
+    const props = calculerPool(insc, session, creneaux, [], plusGrandeJauge)
+    expect(props.find((p) => p.cible_groupe_id === 'cible' && p.pupitre === 'piano')).toBeDefined()
+  })
+})
