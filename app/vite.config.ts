@@ -46,18 +46,7 @@ const APP_SHA = (() => {
     return ''
   }
   try {
-    const porcelain = execSync('git status --porcelain', { cwd }).toString()
-    const dirty = porcelain.length > 0
-    // Instrumentation temporaire (issue #113) : imprime CE QUE vite voit
-    // exactement. Le pas de diagnostic dans pages.yml (git status juste
-    // avant `npm run build`) sort clean, alors que ce check trouve dirty.
-    // Il y a un delta entre les deux — l'imprimer révèle CE QUI apparaît
-    // entre le pas de diagnostic et le calcul SHA de vite. À retirer une
-    // fois la cause caractérisée.
-    console.log('[vite.config #113 diag] porcelain length:', porcelain.length)
-    if (dirty) {
-      console.log('[vite.config #113 diag] porcelain content:\n' + porcelain)
-    }
+    const dirty = execSync('git status --porcelain', { cwd }).toString().length > 0
     return dirty ? `${sha}-dirty` : sha
   } catch (err) {
     console.warn('[vite.config] git status --porcelain indisponible, dirty non vérifié :', err)

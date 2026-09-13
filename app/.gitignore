@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Fichier temporaire créé par Vite pour transpiler `vite.config.ts` avant
+# de l'exécuter (chargé en .mjs, puis nettoyé après le build). Il traînait
+# comme fichier non-suivi au moment où l'IIFE `APP_SHA` de vite.config.ts
+# appelle `git status --porcelain`, ce qui déclenchait le suffixe `-dirty`
+# en permanence sur le SHA affiché en prod. Cause circulaire identifiée
+# via l'instrumentation PR #116 (issue #113).
+vite.config.ts.timestamp-*.mjs
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
