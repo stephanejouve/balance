@@ -212,21 +212,28 @@ export function calculerPool(
 
   // Défaut B (CD 6754 sur observation Stéphane, corrigé CD 6756) : un
   // transfert n'a de valeur que si la cible ne peut pas se pourvoir
-  // autrement. « Autrement » = un candidat LIBRE au pupitre concerné,
-  // dans la définition (a) : inscrit ayant ce pupitre + membre d'aucun
-  // groupe. C'est ce que l'UI affiche déjà (badge LIBRE vert dans la
-  // liste des candidats), donc auditable par l'organisateur. Un calcul
-  // dont il peut vérifier la prémisse vaut mieux qu'un plus fin qu'il
-  // doit croire.
+  // autrement. « Autrement » = candidat LIBRE au pupitre concerné, où
+  // LIBRE = inscrit ayant ce pupitre + membre d'aucun groupe (définition
+  // (a), cohérente avec le badge affiché par l'UI).
+  //
+  // Version comptée (CD 6769, après cas de bord Leader sur PR #119) :
+  // depuis CHERCHE quantifié (PR #80), un morceau peut chercher `nb > 1`
+  // au même pupitre. La version binaire écartait TOUS les transferts dès
+  // qu'un seul LIBRE existait, alors qu'il restait `cherche.nb − 1`
+  // places à pourvoir. Le nouveau filtre compte : un transfert vers un
+  // (cible, pupitre) n'est écarté que si `libres_count >= total_cherche`
+  // à ce pupitre.
   const engagesPar = new Map<string, number>()
   for (const g of groupes) {
     const membres = new Set(g.membres.map((m) => m.personne_id))
     for (const pid of membres) engagesPar.set(pid, (engagesPar.get(pid) ?? 0) + 1)
   }
-  const libresParPupitre = new Set<Pupitre>()
+  const libresCountParPupitre = new Map<Pupitre, number>()
   for (const personne of inscriptions.personnes) {
     if ((engagesPar.get(personne.id) ?? 0) > 0) continue
-    for (const pup of pupitresDePersonne(personne)) libresParPupitre.add(pup)
+    for (const pup of pupitresDePersonne(personne)) {
+      libresCountParPupitre.set(pup, (libresCountParPupitre.get(pup) ?? 0) + 1)
+    }
   }
 
   // Q2 filtre 1 : personnes globalement exclues (aucun créneau libre sur
@@ -302,10 +309,12 @@ export function calculerPool(
           const cherchesPupitre = cible.postes_cherches.filter((pc) => pc.pupitre === pup)
           if (cherchesPupitre.length === 0) continue
 
-          // Défaut B : la cible peut-elle se pourvoir sans mouvement ?
-          // Si au moins un inscrit LIBRE (engagé nulle part) a ce pupitre,
-          // aucun transfert vers cette cible pour ce pupitre ne se justifie.
-          if (libresParPupitre.has(pup)) continue
+          // Défaut B (version comptée CD 6769) : la cible peut-elle se
+          // pourvoir sans mouvement au pupitre `pup` ? Somme des `nb` des
+          // postes cherchés au pupitre côté cible, comparée au nombre de
+          // LIBRE au même pupitre. Écarté seulement si `libres >= total`.
+          const totalCherche = cherchesPupitre.reduce((s, pc) => s + pc.nb, 0)
+          if ((libresCountParPupitre.get(pup) ?? 0) >= totalCherche) continue
 
           // Q2 filtre 2 : la personne a-t-elle au moins un créneau libre
           // compatible avec un créneau candidat de la CIBLE ? Le morceau
