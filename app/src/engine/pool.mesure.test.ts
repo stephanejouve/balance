@@ -13,6 +13,14 @@
  * rapportée dans le corps de la PR (chaque relève doit refléter la
  * fonction réellement exécutée, cf feedback CD 6588 « recalculer un
  * tableau de valeurs avec la formule réelle »).
+ *
+ * NOTE post-N1 comptée (CD msg 6769) : dans les 2 fixtures versionnées,
+ * TOUS les `postes_cherches[].nb` valent 1. La version comptée
+ * `libres_count >= cherche.nb` est donc strictement équivalente à la
+ * version binaire pour ces jeux — les chiffres 42 / 0 sont inchangés.
+ * Le cas de bord Leader (cible cherche `nb > 1` avec `libres < nb`) est
+ * couvert par un test unitaire dédié dans `pool.test.ts` (défaut B —
+ * version comptée), qui isole le comportement sans dépendre des fixtures.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'

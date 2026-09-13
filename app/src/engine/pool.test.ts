@@ -716,6 +716,81 @@ describe('calculerPool — défaut B (cible peut se pourvoir sans mouvement)', (
     expect(props.find((p) => p.cible_groupe_id === 'cible' && p.pupitre === 'piano')).toBeUndefined()
   })
 
+  it("laisse passer le transfert quand la cible cherche plus que le nombre de libres (version comptée, CD 6769)", () => {
+    // Le cas de bord soulevé par Leader (nit N1 review PR #119) : cible
+    // cherche `nb: 3` au pupitre, 1 seul candidat LIBRE. La version binaire
+    // écartait tous les transferts dès qu'un seul LIBRE existait, alors
+    // qu'il restait 2 places à pourvoir. Version comptée : le filtre ne
+    // s'applique que si `libres_count >= total_cherche`.
+    const { session, creneaux, plusGrandeJauge } = fixture({ jauge: 10 })
+    const insc = Inscriptions.parse({
+      session_id: 's',
+      personnes: [
+        { id: 'sara', nom: 'Sara', instruments: [{ pupitre: 'piano' }] },
+        { id: 'tim', nom: 'Tim', instruments: [{ pupitre: 'chant' }] },
+        { id: 'freddy', nom: 'Freddy', instruments: [{ pupitre: 'piano' }] }, // 1 LIBRE piano
+      ],
+      groupes: [
+        {
+          id: 'source',
+          titre: 'Autre',
+          membres: [
+            { personne_id: 'sara', pupitre: 'piano' },
+            // Duplique sara pour ne pas vider le pupitre au retrait
+            { personne_id: 'tim', pupitre: 'piano' },
+            { personne_id: 'tim', pupitre: 'chant' },
+          ],
+        },
+        {
+          id: 'cible',
+          titre: 'Cherche 3 pianos',
+          membres: [],
+          // La cible a besoin de 3 pianos. 1 seul LIBRE → il en manque 2.
+          postes_cherches: [{ pupitre: 'piano', nb: 3 }],
+        },
+      ],
+    })
+    const props = calculerPool(insc, session, creneaux, [], plusGrandeJauge)
+    // Le transfert de sara (piano) → cible doit passer parce que le
+    // filtre N1 comptée voit que 1 libre < 3 cherché.
+    expect(props.find((p) => p.cible_groupe_id === 'cible' && p.pupitre === 'piano')).toBeDefined()
+  })
+
+  it("écarte le transfert quand la cible cherche autant/moins que les libres (version comptée)", () => {
+    // Contre-exemple du test précédent : 3 LIBRE piano ≥ 3 cherchés → filtré.
+    const { session, creneaux, plusGrandeJauge } = fixture({ jauge: 10 })
+    const insc = Inscriptions.parse({
+      session_id: 's',
+      personnes: [
+        { id: 'sara', nom: 'Sara', instruments: [{ pupitre: 'piano' }] },
+        { id: 'tim', nom: 'Tim', instruments: [{ pupitre: 'chant' }] },
+        { id: 'l1', nom: 'L1', instruments: [{ pupitre: 'piano' }] },
+        { id: 'l2', nom: 'L2', instruments: [{ pupitre: 'piano' }] },
+        { id: 'l3', nom: 'L3', instruments: [{ pupitre: 'piano' }] },
+      ],
+      groupes: [
+        {
+          id: 'source',
+          titre: 'Autre',
+          membres: [
+            { personne_id: 'sara', pupitre: 'piano' },
+            { personne_id: 'tim', pupitre: 'piano' },
+            { personne_id: 'tim', pupitre: 'chant' },
+          ],
+        },
+        {
+          id: 'cible',
+          titre: 'Cherche 3 pianos, 3 LIBRE dispo',
+          membres: [],
+          postes_cherches: [{ pupitre: 'piano', nb: 3 }],
+        },
+      ],
+    })
+    const props = calculerPool(insc, session, creneaux, [], plusGrandeJauge)
+    // 3 LIBRE ≥ 3 cherchés → cible se pourvoit sans mouvement → filtré.
+    expect(props.find((p) => p.cible_groupe_id === 'cible' && p.pupitre === 'piano')).toBeUndefined()
+  })
+
   it("laisse passer le transfert quand aucun candidat libre au pupitre", () => {
     // Source à 5 personnes, jauge=4 → source_ne_loge_pas. Retirer sara (piano)
     // laisse 4 personnes → tient. gain_source=1. Sara est le seul piano de
