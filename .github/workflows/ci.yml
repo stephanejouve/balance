@@ -100,6 +100,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Diagnostic — état de l'arbre avant build (issue #113)
+        # Le SHA build inclut un suffixe `-dirty` quand `git status --porcelain`
+        # (côté vite.config.ts) trouve des fichiers modifiés. Le suffixe est
+        # présent en permanence en prod alors que le checkout part propre.
+        # Ce pas de diagnostic imprime ce que le workflow a modifié entre le
+        # checkout et le calcul SHA — pour savoir ce qu'il faut corriger.
+        # CD msg 6715 (2026-09-13) : « établis d'abord CE QUI salit l'arbre —
+        # un git status dans le workflow juste avant le calcul suffira à le
+        # dire — avant de décider comment le corriger ».
+        working-directory: .
+        run: |
+          echo "=== git status --porcelain (à la racine du dépôt) ==="
+          git status --porcelain || true
+          echo ""
+          echo "=== git diff --stat (fichiers modifiés vs HEAD) ==="
+          git diff --stat || true
+          echo ""
+          echo "=== fichiers non-suivis ==="
+          git ls-files --others --exclude-standard || true
+
       - name: Build
         run: npm run build
 
