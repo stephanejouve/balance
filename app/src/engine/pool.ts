@@ -223,10 +223,10 @@ export function calculerPool(
     const membres = new Set(g.membres.map((m) => m.personne_id))
     for (const pid of membres) engagesPar.set(pid, (engagesPar.get(pid) ?? 0) + 1)
   }
-  const libresParPupitre = new Map<Pupitre, boolean>()
+  const libresParPupitre = new Set<Pupitre>()
   for (const personne of inscriptions.personnes) {
     if ((engagesPar.get(personne.id) ?? 0) > 0) continue
-    for (const pup of pupitresDePersonne(personne)) libresParPupitre.set(pup, true)
+    for (const pup of pupitresDePersonne(personne)) libresParPupitre.add(pup)
   }
 
   // Q2 filtre 1 : personnes globalement exclues (aucun créneau libre sur
@@ -305,7 +305,7 @@ export function calculerPool(
           // Défaut B : la cible peut-elle se pourvoir sans mouvement ?
           // Si au moins un inscrit LIBRE (engagé nulle part) a ce pupitre,
           // aucun transfert vers cette cible pour ce pupitre ne se justifie.
-          if (libresParPupitre.get(pup)) continue
+          if (libresParPupitre.has(pup)) continue
 
           // Q2 filtre 2 : la personne a-t-elle au moins un créneau libre
           // compatible avec un créneau candidat de la CIBLE ? Le morceau
