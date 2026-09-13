@@ -14,12 +14,14 @@
     type Pupitre,
   } from './domain/model'
   import { chargeParMusicien } from './engine/charge'
+  import { calculerPool } from './engine/pool'
   import Contraintes from './edition/Contraintes.svelte'
   import ImposesEdit from './edition/Imposes.svelte'
   import IndisposEdit from './edition/Indispos.svelte'
   import InscriptionsEdit from './edition/Inscriptions.svelte'
   import LieuEdit from './edition/Lieu.svelte'
   import PersonnesEdit from './edition/Personnes.svelte'
+  import PanneauPool from './edition/PanneauPool.svelte'
   import SessionEdit from './edition/Session.svelte'
   import EcranRelectureIdentites from './edition/EcranRelectureIdentites.svelte'
   import ImportUnique from './edition/ImportUnique.svelte'
@@ -175,6 +177,18 @@
       // laisser ce comportement en option n'avait pas de sens (« c'est
       // une blague ? »). Comportement désormais automatique.
       return genererCreneaux(session, lieu, { maintenant: new Date() })
+    } catch {
+      return []
+    }
+  })
+  // Pool d'arbitrage effectif — issue #96, PR 3/6 chantier §D+§E. Consomme
+  // la fonction pure `calculerPool` (PR 1) et les refus persistants (PR 2).
+  // Affiché en panneau repliable juste après l'Étape 1B Inscriptions — voir
+  // `PanneauPool.svelte`. Le pool ne dépend pas du planning en cours, donc
+  // il est utile dès la composition (avant même la première passe solveur).
+  const pool = $derived.by(() => {
+    try {
+      return calculerPool(inscriptions, session, creneaux, inscriptions.refus, plusGrandeJauge)
     } catch {
       return []
     }
@@ -1006,6 +1020,12 @@
     onSupprimerGroupe={supprimerGroupe}
     onRetirerMembre={retirerMembre}
     onInvalider={marquerObsolete}
+  />
+
+  <PanneauPool
+    propositions={pool}
+    {groupesParId}
+    {personnesParId}
   />
 
   <IndisposEdit
