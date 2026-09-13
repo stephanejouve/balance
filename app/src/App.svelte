@@ -573,6 +573,11 @@
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
+    // Audit timestamp — reflète l'action réelle d'export (quand l'utilisateur
+    // a cliqué), pas le présent applicatif fixé par `?maintenant=`. Un
+    // fichier `balance-…-2026-08-23.json` téléchargé en septembre serait
+    // faux et gênerait la traçabilité. Ne PAS remplacer par `maintenantFixe`
+    // (mention défensive après leçon PR #109 sur les renommages qui traversent).
     a.download = `balance-${session.id}-${new Date().toISOString().slice(0, 10)}.json`
     document.body.appendChild(a)
     a.click()
@@ -1440,7 +1445,12 @@
         {#if session.date_debut && session.date_fin}
           · {session.date_debut} → {session.date_fin}
         {/if}
-        · imprimé le {new Date().toLocaleString('fr-FR', {
+        · imprimé le {/* Audit timestamp — reflète l'action réelle d'impression
+          (quand le PDF est produit), pas le présent applicatif fixé par
+          `?maintenant=`. Un PDF « imprimé le 23/08/2026 » sorti en septembre
+          serait faux — un lecteur du PDF ne saurait pas quand le document a
+          effectivement été produit. Ne PAS remplacer par `maintenantFixe`. */
+          ''}{new Date().toLocaleString('fr-FR', {
           day: '2-digit',
           month: '2-digit',
           year: 'numeric',
