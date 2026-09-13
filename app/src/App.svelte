@@ -1,5 +1,6 @@
 <script lang="ts">
   import { butoirDeGroupe, diagnostiquerGrille, genererCreneaux } from './domain/grille'
+  import { parseMaintenantUrlParam } from './domain/maintenant'
   import { parseLegacyInscriptions } from './domain/legacy'
   import { migrerInscriptions } from './domain/migrate'
   import {
@@ -26,6 +27,7 @@
   import EcranRelectureIdentites from './edition/EcranRelectureIdentites.svelte'
   import ImportUnique from './edition/ImportUnique.svelte'
   import { analyserIdentitesCandidat, type AnalyseIdentitesImport } from './io/alertes-import'
+  import BandeauMaintenantFixe from './edition/BandeauMaintenantFixe.svelte'
   import MiseAJourBandeau from './edition/MiseAJourBandeau.svelte'
   import PiedDePage from './edition/PiedDePage.svelte'
   import Carte from './vues/Carte.svelte'
@@ -134,9 +136,38 @@
     return new URLSearchParams(window.location.search).get('demo') === 'apero'
   }
 
+  /**
+   * Injection d'un « maintenant » de référence via URL param
+   * `?maintenant=YYYY-MM-DD[THH:MM]` — CD msg 6777.
+   *
+   * Contexte : les fixtures et états de reproduction datent d'un moment
+   * qui n'est plus dans le futur. Avec le filtre `maintenant` automatique
+   * (PR #100 mergée 12/09), les créneaux tombent tous dans le passé →
+   * pool vide + « Session non configurable ». La fixture démo apéro,
+   * les états JSON de Chloé du 08/09, tous meurent avec leur session.
+   *
+   * Le paramètre `?maintenant=` gèle le présent à la valeur donnée, ce
+   * qui rend les fixtures rejouables. La date est parsée localement,
+   * milieu de journée par défaut (12:00) si l'heure n'est pas fournie
+   * — pour ne pas surprendre en frontière matin/soir.
+   *
+   * ATTENTION — CD 6777 non négociable : quand `maintenant` est fixé,
+   * l'application le DIT visiblement et en permanence (bandeau qui reste
+   * sous les yeux tant que l'état dure). Sinon un utilisateur peut se
+   * retrouver à travailler dans un présent faux sans le savoir. Le
+   * bandeau est rendu par `BandeauMaintenantFixe.svelte`.
+   */
+  function initialMaintenant(): Date | null {
+    if (typeof window === 'undefined' || !window.location) return null
+    const raw = new URLSearchParams(window.location.search).get('maintenant')
+    return parseMaintenantUrlParam(raw)
+  }
+
   /* --- État réactif ----------------------------------------------------- */
 
   const _demoInit = initialDemo()
+  /** `Date` de référence figée si `?maintenant=` fourni, sinon null (→ new Date() live). */
+  const maintenantFixe = initialMaintenant()
   let inscriptions = $state<Inscriptions>(_demoInit ? chargerDemo() : inscriptionsVides())
   let modeDemo = $state<boolean>(_demoInit)
   let sourceLabel = $state<string>(
@@ -176,7 +207,7 @@
       // case à cocher « ne pas placer de répétitions dans le passé » :
       // laisser ce comportement en option n'avait pas de sens (« c'est
       // une blague ? »). Comportement désormais automatique.
-      return genererCreneaux(session, lieu, { maintenant: new Date() })
+      return genererCreneaux(session, lieu, { maintenant: maintenantFixe ?? new Date() })
     } catch {
       return []
     }
@@ -258,8 +289,12 @@
     )
       return
     // Lieu inchangé (salles, restrictions, pupitres, équipements).
-    // Session : cette semaine, grille type minimale
-    const today = new Date()
+    // Session : cette semaine, grille type minimale. `today` respecte
+    // `maintenantFixe` si `?maintenant=` a fixé un présent (CD 6777) —
+    // sinon la « nouvelle session » démarrerait à la date système réelle,
+    // ce qui casserait l'invariant « quand maintenant est fixé, l'app
+    // raisonne sur cette valeur ».
+    const today = maintenantFixe ?? new Date()
     const iso = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     const dansXjours = (n: number) => {
@@ -538,6 +573,11 @@
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
+    // Audit timestamp — reflète l'action réelle d'export (quand l'utilisateur
+    // a cliqué), pas le présent applicatif fixé par `?maintenant=`. Un
+    // fichier `balance-…-2026-08-23.json` téléchargé en septembre serait
+    // faux et gênerait la traçabilité. Ne PAS remplacer par `maintenantFixe`
+    // (mention défensive après leçon PR #109 sur les renommages qui traversent).
     a.download = `balance-${session.id}-${new Date().toISOString().slice(0, 10)}.json`
     document.body.appendChild(a)
     a.click()
@@ -1405,7 +1445,12 @@
         {#if session.date_debut && session.date_fin}
           · {session.date_debut} → {session.date_fin}
         {/if}
-        · imprimé le {new Date().toLocaleString('fr-FR', {
+        · imprimé le {/* Audit timestamp — reflète l'action réelle d'impression
+          (quand le PDF est produit), pas le présent applicatif fixé par
+          `?maintenant=`. Un PDF « imprimé le 23/08/2026 » sorti en septembre
+          serait faux — un lecteur du PDF ne saurait pas quand le document a
+          effectivement été produit. Ne PAS remplacer par `maintenantFixe`. */
+          ''}{new Date().toLocaleString('fr-FR', {
           day: '2-digit',
           month: '2-digit',
           year: 'numeric',
@@ -1539,6 +1584,8 @@
     </section>
   {/if}
 </main>
+
+<BandeauMaintenantFixe {maintenantFixe} />
 
 <MiseAJourBandeau />
 
