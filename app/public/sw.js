@@ -77,7 +77,15 @@ self.addEventListener('fetch', (evt) => {
         return fetch(url.href, {
           credentials: 'same-origin',
           redirect: 'follow',
-        }).catch(() => caches.match('./balance.html'))
+        }).catch(() =>
+          // Fallback offline : `caches.match` peut retourner undefined si
+          // l'app-shell n'est pas en cache (première visite offline, install
+          // interrompu). `respondWith(undefined)` = erreur SW pour le browser
+          // — on rend explicitement une Response d'erreur, laquelle affichera
+          // la page d'erreur navigateur au lieu de briser le respondWith
+          // (nit N1 review Leader PR #114).
+          caches.match('./balance.html').then((fb) => fb || Response.error()),
+        )
       }),
     )
     return
