@@ -1,9 +1,23 @@
 <script lang="ts">
+  import type { DiagnosticGrille } from '../domain/grille'
   import type { Session } from '../domain/model'
 
   interface Props {
     session: Session
     nbCreneaux: number
+    /**
+     * Diagnostic pré-génération (issues #110 + #111). Quand `nbCreneaux === 0`
+     * alors qu'au moins une règle créatrice est définie, ce diagnostic
+     * détaille chaque règle pathologique (jours-invalides, plage-vide,
+     * pas-trop-grand, tout-bloqué) et les défauts globaux (session-sans-jour,
+     * aucune-regle-creatrice). L'affichage ci-dessous consomme ces catégories
+     * pour composer la phrase à l'utilisateur — la fonction pure ne produit
+     * aucune phrase préfabriquée.
+     * `null` = calcul de secours ou erreur silencieuse — ne pas afficher.
+     * Prop optionnelle : les tests unitaires du composant (session-props-
+     * ownership) peuvent monter sans, l'affichage tombe alors à vide.
+     */
+    diagnostic?: DiagnosticGrille | null
     onAjouterRegle: () => void
     onSupprimerRegle: (i: number) => void
     onInvalider: () => void
@@ -14,8 +28,56 @@
   // `ownership_invalid_mutation` (156 occurrences smoke Stéphane 2026-09-03)
   // et des comportements de bind imprévisibles. Le parent passe la prop en
   // `bind:session={session}`.
-  let { session = $bindable(), nbCreneaux, onAjouterRegle, onSupprimerRegle, onInvalider }: Props =
-    $props()
+  let {
+    session = $bindable(),
+    nbCreneaux,
+    diagnostic = null,
+    onAjouterRegle,
+    onSupprimerRegle,
+    onInvalider,
+  }: Props = $props()
+
+  /**
+   * Libellé de règle affichable — utilise l'index humain (1-based) et la
+   * plage horaire brute pour rester compréhensible même quand la règle est
+   * défaillante (aucune traduction Zod sur `jours` ne dépendant de la
+   * catégorie). Format : « Règle #N (HH:MM-HH:MM) ».
+   */
+  function libelleRegle(regleIndex: number, debut: string, fin: string): string {
+    return `Règle #${regleIndex + 1} (${debut}–${fin})`
+  }
+
+  /**
+   * Traduit une catégorie de défaut de règle en phrase — la fonction pure
+   * ne produit pas de traduction (elle reste testable sans i18n). Chaque
+   * catégorie ci-dessous est nommée pour aider l'organisateur à situer la
+   * correction à faire.
+   */
+  function raisonRegle(categorie: string): string {
+    switch (categorie) {
+      case 'jours-invalides':
+        return "aucun jour valide (les jours listés ne correspondent à aucun jour de la session)"
+      case 'plage-vide':
+        return 'plage horaire vide (fin ≤ début)'
+      case 'pas-trop-grand':
+        return 'pas trop grand pour la plage (aucun tour possible)'
+      case 'tout-bloqué':
+        return 'tous les créneaux sont bloqués par une règle de blocage ou tombent au-delà du butoir'
+      default:
+        return categorie
+    }
+  }
+
+  function raisonGlobale(categorie: string): string {
+    switch (categorie) {
+      case 'session-sans-jour':
+        return "la session n'a aucun jour (intervalle date de début → date de fin invalide ou vide)"
+      case 'aucune-regle-creatrice':
+        return 'aucune règle créatrice définie (seules des règles de blocage sont présentes)'
+      default:
+        return categorie
+    }
+  }
 </script>
 
 <details class="sheet" open>
@@ -28,6 +90,28 @@
       {session.grille.filter((r) => r.bloque).length} règle(s) de blocage —
       <b>{nbCreneaux}</b> créneaux générés.
     </p>
+    <!--
+      Issue #110 : quand la génération ne produit rien alors que des règles
+      créatrices sont définies, nommer explicitement ce qui cloche plutôt
+      que laisser le compteur muet (« 3 règles → 0 créneaux » sans expliquer).
+      Le diagnostic vient du parent (App.svelte::diagnosticGrille), qui
+      appelle la fonction pure `diagnostiquerGrille(session, lieu)`.
+    -->
+    {#if diagnostic && !diagnostic.configurable && (diagnostic.defauts_regles.length > 0 || diagnostic.defauts_globaux.length > 0)}
+      <div class="msg warn" style="margin-top:8px">
+        <b>Session non configurable — aucun créneau généré.</b>
+        <ul style="margin:6px 0 0 0">
+          {#each diagnostic.defauts_globaux as cat}
+            <li>{raisonGlobale(cat)}</li>
+          {/each}
+          {#each diagnostic.defauts_regles as d}
+            <li>
+              <b>{libelleRegle(d.regleIndex, d.debut, d.fin)}</b> — {raisonRegle(d.categorie)}.
+            </li>
+          {/each}
+        </ul>
+      </div>
+    {/if}
   </summary>
   <div class="body">
     <label class="line">

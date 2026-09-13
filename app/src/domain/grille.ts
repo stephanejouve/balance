@@ -184,6 +184,186 @@ export function genererCreneaux(session: Session, lieu: Lieu, options: GenererOp
     .sort((a, b) => a.id.localeCompare(b.id))
 }
 
+/* ------------------------------------------------- Diagnostic non-configurable */
+
+/**
+ * Catégorie de défaut détecté par `diagnostiquerGrille` — utile côté UI pour
+ * grouper les raisons quand plusieurs règles sont pathologiques (issues #110
+ * et #111). Le libellé UI est construit par le composant à partir de la
+ * catégorie + du contexte de la règle (index humain, plage, etc.) — la
+ * fonction pure ne produit ni ne traduit de phrase.
+ *
+ * Sémantique par catégorie (dans l'ordre d'évaluation) :
+ *  - `jours-invalides` : la règle a des jours listés qui ne matchent aucun
+ *    jour de la session (ou aucun jour reconnu par `resoudreJours`).
+ *  - `plage-vide` : `debut >= fin` (fin normalisée pour minuit `00:00→24:00`).
+ *  - `pas-trop-grand` : `pas_minutes > (fin - debut)` — la division entière
+ *    retourne 0 tour, aucun créneau émis. `pas_minutes <= 0` tombe dans le
+ *    même bucket (impossible via l'UI, borne défensive).
+ *  - `tout-bloqué` : chaque créneau émis par la règle est capturé par une
+ *    règle de blocage postérieure ou tombe au-delà du butoir maximal.
+ */
+export type CategorieDefautRegle =
+  | 'jours-invalides'
+  | 'plage-vide'
+  | 'pas-trop-grand'
+  | 'tout-bloqué'
+
+export interface DefautRegle {
+  /** Index de la règle dans `session.grille` (ordre saisi UI, 0-based). */
+  regleIndex: number
+  categorie: CategorieDefautRegle
+  /** Instantané de la règle pour affichage (debut/fin bruts, avant normalisation). */
+  debut: HhMm
+  fin: HhMm
+}
+
+/**
+ * Catégorie de défaut global (indépendant d'une règle particulière). Utile
+ * pour distinguer les cas où la session est inconfigurable pour une raison
+ * plus haute que la grille (session sans jour, aucune règle créatrice).
+ *
+ * `aucune-salle-active` n'est PAS listée ici : quand aucune salle du lieu
+ * n'est active, `genererCreneaux` émet quand même des créneaux avec
+ * `salles=[]` (donc `nb_creneaux > 0`). Ce cas produit une CAPACITÉ nulle,
+ * pas une grille vide — il est capturé côté `DiagStage` (analyserCapaciteStage)
+ * et fait l'objet d'un défaut séparé (à traiter dans #111 seul, sans
+ * confondre avec le compteur muet #110).
+ */
+export type CategorieDefautGlobal =
+  | 'aucune-regle-creatrice'
+  | 'session-sans-jour'
+
+/**
+ * Résultat de `diagnostiquerGrille`. `configurable === true` ssi le générateur
+ * produit au moins un créneau. Sinon `defauts_regles` et `defauts_globaux`
+ * documentent pourquoi — sans phrase pré-fabriquée : l'UI compose son message
+ * à partir des catégories.
+ */
+export interface DiagnosticGrille {
+  configurable: boolean
+  nb_creneaux: number
+  defauts_regles: DefautRegle[]
+  defauts_globaux: CategorieDefautGlobal[]
+}
+
+/**
+ * Diagnostic pré-génération : quand la grille produit 0 créneau alors que
+ * des règles créatrices sont définies, cette fonction nomme ce qui cloche.
+ *
+ * Contexte (issues #110 et #111) : l'écran Session affichait « X règle(s)
+ * créatrice(s) → 0 créneaux » sans nommer l'écart, et le contrôle en amont
+ * rapportait `N musicien(s) n'a accès à aucun créneau SUR 0` — N lignes
+ * nominatives pour une cause GLOBALE. Ce diagnostic remonte ce que
+ * `genererCreneaux` sait déjà (par construction : il itère règle par règle
+ * et voit celles qui ne contribuent rien) mais qui n'était pas exposé.
+ *
+ * Contrat :
+ *  - Si `nb_creneaux > 0` : `configurable = true`, listes vides. La
+ *    fonction ne signale RIEN d'utilisable quand la génération réussit —
+ *    l'UI n'a rien à afficher dans ce cas.
+ *  - Si `nb_creneaux == 0` : `configurable = false`, les listes portent
+ *    la cause. `defauts_globaux` d'abord (raisons plus hautes que la
+ *    grille), `defauts_regles` ensuite (chaque règle pathologique).
+ *
+ * Fonction pure — ne mute rien. Réutilise `genererCreneaux` pour le compte
+ * final (garantie que le diagnostic reste cohérent si le générateur change).
+ */
+export function diagnostiquerGrille(session: Session, lieu: Lieu): DiagnosticGrille {
+  const nb_creneaux = genererCreneaux(session, lieu).length
+  if (nb_creneaux > 0) {
+    return { configurable: true, nb_creneaux, defauts_regles: [], defauts_globaux: [] }
+  }
+
+  const defauts_globaux: CategorieDefautGlobal[] = []
+  const defauts_regles: DefautRegle[] = []
+
+  const jours = joursDeSession(session.date_debut, session.date_fin)
+  const reglesCreatrices = session.grille
+    .map((r, i) => ({ regle: r, index: i }))
+    .filter(({ regle }) => !regle.bloque)
+  const reglesBloqueuses = session.grille.filter((r) => r.bloque)
+
+  // Défauts globaux — évalués une fois, indépendamment des règles.
+  if (jours.length === 0) defauts_globaux.push('session-sans-jour')
+  if (reglesCreatrices.length === 0) defauts_globaux.push('aucune-regle-creatrice')
+
+  // Butoirs — même calcul que `genererCreneaux` pour rester aligné.
+  const butoirKeyApero = `${session.butoir_apero_date}T${session.butoir_apero_heure.replace(':', '')}`
+  const butoirKeyVendredi = `${session.butoir_vendredi_date}T${session.butoir_vendredi_heure.replace(':', '')}`
+  const butoirKeyMax = butoirKeyVendredi > butoirKeyApero ? butoirKeyVendredi : butoirKeyApero
+
+  // Diagnostic par règle créatrice, dans l'ordre saisi.
+  for (const { regle, index } of reglesCreatrices) {
+    const jourReglés = regle.jours.length ? resoudreJours(regle.jours, jours) : jours
+    if (jourReglés.length === 0) {
+      // La règle a `jours` non vide mais aucun n'est reconnu ou présent
+      // dans la session. Cas `regle.jours = []` sans jour de session est
+      // couvert par le défaut global `session-sans-jour`, on ne redouble pas.
+      if (regle.jours.length > 0) {
+        defauts_regles.push({
+          regleIndex: index,
+          categorie: 'jours-invalides',
+          debut: regle.debut,
+          fin: regle.fin,
+        })
+      }
+      continue
+    }
+
+    const finNormale = normaliserFinMinuit(regle.fin)
+    const debutMin = toMinutes(regle.debut)
+    const finMin = toMinutes(finNormale)
+    if (finMin <= debutMin) {
+      defauts_regles.push({
+        regleIndex: index,
+        categorie: 'plage-vide',
+        debut: regle.debut,
+        fin: regle.fin,
+      })
+      continue
+    }
+    if (regle.pas_minutes <= 0 || regle.pas_minutes > finMin - debutMin) {
+      defauts_regles.push({
+        regleIndex: index,
+        categorie: 'pas-trop-grand',
+        debut: regle.debut,
+        fin: regle.fin,
+      })
+      continue
+    }
+
+    // La règle émettrait des créneaux — vérifier s'ils sont TOUS effacés par
+    // blocage ou butoir. Rejouer decouper + estBloqué sur chaque jour de la
+    // règle, compter les survivants.
+    const tours = decouper(regle.debut, finNormale, regle.pas_minutes)
+    let survivants = 0
+    for (const jour of jourReglés) {
+      for (const tour of tours) {
+        const cleCreneau = `${jour}T${tour.debut.replace(':', '')}`
+        if (cleCreneau >= butoirKeyMax) continue
+        const bloquePar = reglesBloqueuses.some((rb) => {
+          const jrb = rb.jours.length ? resoudreJours(rb.jours, jours) : jours
+          if (!jrb.includes(jour)) return false
+          const finRbNormale = normaliserFinMinuit(rb.fin)
+          return tour.debut >= rb.debut && tour.debut < finRbNormale
+        })
+        if (!bloquePar) survivants++
+      }
+    }
+    if (survivants === 0) {
+      defauts_regles.push({
+        regleIndex: index,
+        categorie: 'tout-bloqué',
+        debut: regle.debut,
+        fin: regle.fin,
+      })
+    }
+  }
+
+  return { configurable: false, nb_creneaux, defauts_regles, defauts_globaux }
+}
+
 /**
  * Renvoie le butoir (date + heure) applicable à un groupe selon son échéance —
  * issue #103. Consommé par les callers UI qui passent un `{date, heure}`

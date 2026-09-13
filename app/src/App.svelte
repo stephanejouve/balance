@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { butoirDeGroupe, genererCreneaux } from './domain/grille'
+  import { butoirDeGroupe, diagnostiquerGrille, genererCreneaux } from './domain/grille'
   import { parseLegacyInscriptions } from './domain/legacy'
   import { migrerInscriptions } from './domain/migrate'
   import {
@@ -177,6 +177,18 @@
       return genererCreneaux(session, lieu, { maintenant: new Date() })
     } catch {
       return []
+    }
+  })
+  // Diagnostic pré-génération — issues #110 + #111. Quand la grille produit
+  // 0 créneau, cette structure porte les raisons (règles pathologiques +
+  // défauts globaux) qu'`Étape 2b Session` affiche en dépliant sa phrase
+  // muette, et qu'Étape 3 utilise pour remplacer les N lignes nominatives
+  // d'exclusion par un unique bandeau « session non configurable ».
+  const diagnosticGrille = $derived.by(() => {
+    try {
+      return diagnostiquerGrille(session, lieu)
+    } catch {
+      return null
     }
   })
   const infaisabilites = $derived.by(() => {
@@ -1029,6 +1041,7 @@
   <SessionEdit
     bind:session
     nbCreneaux={creneaux.length}
+    diagnostic={diagnosticGrille}
     onAjouterRegle={ajouterRegle}
     onSupprimerRegle={supprimerRegle}
     onInvalider={resetSolution}
@@ -1125,28 +1138,51 @@
         </div>
       {/if}
       {#if exclusions.length > 0}
-        <div class="msg warn">
-          <b>Contrôle en amont : {exclusions.length} musicien(s) sans aucun créneau disponible.</b>
-          <p class="mini-h">
-            Chacun ci-dessous n'a accès à aucun créneau — souvent parce que ses
-            indisponibilités couvrent toute la semaine, ou parce que les séances
-            imposées lui bloquent tout. À vérifier avant de lancer : le solveur
-            ne pourra pas les placer.
-          </p>
-          <ul>
-            {#each exclusions.slice(0, 8) as d}
-              <li>
-                <b>{d.nom}</b> — n'a accès à aucun créneau sur
-                {d.detail.creneaux_total} (demande <b>{d.demande}</b> :
-                {d.detail.groupes} groupes × {d.detail.repetitions_visees}
-                {#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} imposés{/if}).
-              </li>
-            {/each}
-            {#if exclusions.length > 8}
-              <li>… et {exclusions.length - 8} autres</li>
-            {/if}
-          </ul>
-        </div>
+        {#if creneaux.length === 0}
+          <!--
+            Court-circuit issue #111 : quand la grille est vide (offre=0), TOUS
+            les musiciens engagés sont mécaniquement exclus (offre=0-bloques=0).
+            Rapporter nominativement une exclusion par personne pour une cause
+            globale (session non configurable) faisait chercher côté musicien
+            alors que le problème est en amont. Cf CD msg 6698 (2026-09-12
+            22:26) : « 63 lignes nominatives — Denis, Fanny, Adèle... — pour
+            une cause qui n'en concernait aucune ».
+            La cause « pourquoi la grille est vide » est détaillée sur l'écran
+            Étape 2b Session (issue #110, via `diagnostiquerGrille`).
+          -->
+          <div class="msg warn">
+            <b>Session non configurable — aucun créneau généré.</b>
+            <p class="mini-h">
+              La grille de la session ne produit aucun créneau : les {exclusions.length} musicien(s)
+              engagé(s) sont mécaniquement sans place. La cause est globale, pas
+              individuelle — voir <b>Étape 2b Session</b> ci-dessus pour le
+              détail des règles pathologiques.
+            </p>
+          </div>
+        {:else}
+          <div class="msg warn">
+            <b>Contrôle en amont : {exclusions.length} musicien(s) sans aucun créneau disponible.</b>
+            <p class="mini-h">
+              Chacun ci-dessous n'a accès à aucun créneau — souvent parce que ses
+              indisponibilités couvrent toute la semaine, ou parce que les séances
+              imposées lui bloquent tout. À vérifier avant de lancer : le solveur
+              ne pourra pas les placer.
+            </p>
+            <ul>
+              {#each exclusions.slice(0, 8) as d}
+                <li>
+                  <b>{d.nom}</b> — n'a accès à aucun créneau sur
+                  {d.detail.creneaux_total} (demande <b>{d.demande}</b> :
+                  {d.detail.groupes} groupes × {d.detail.repetitions_visees}
+                  {#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} imposés{/if}).
+                </li>
+              {/each}
+              {#if exclusions.length > 8}
+                <li>… et {exclusions.length - 8} autres</li>
+              {/if}
+            </ul>
+          </div>
+        {/if}
       {/if}
     {/if}
     <button class="big" onclick={lancer} disabled={solveurStore.calculEnCours}>
