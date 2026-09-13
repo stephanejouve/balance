@@ -77,9 +77,12 @@
     {#if propositions.length === 0}
       <p class="empty">
         Le pool est vide — aucun mouvement pertinent n'est disponible
-        dans l'état actuel (soit tous les morceaux logent et pourvoient
-        leurs postes cherchés, soit tous les mouvements possibles ont
-        déjà été refusés).
+        dans l'état actuel. Trois causes possibles (non exclusives) :
+        tous les morceaux logent et pourvoient leurs postes cherchés,
+        tous les mouvements possibles ont déjà été refusés, ou la
+        composition en cours n'a pas encore assez de morceaux et
+        d'inscriptions pour générer des transferts croisés (nit N1
+        review Leader PR #118).
       </p>
     {:else}
       <ul class="propositions">
@@ -89,7 +92,7 @@
               <b>{nomPersonne(p.personne_id)}</b>
               <span class="pupitre">({p.pupitre})</span>
               <span class="gain" title="gain net = gain_source + gain_cible − cout_source">
-                gain net {p.gain_net}
+                gain net {p.gain_net > 0 ? `+${p.gain_net}` : p.gain_net}
               </span>
             </div>
             <div class="mouvement">
