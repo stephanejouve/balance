@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decouper, genererCreneaux, joursDeSession } from './grille'
+import { decouper, diagnostiquerGrille, genererCreneaux, joursDeSession } from './grille'
 import { Lieu, Session } from './model'
 
 describe('decouper', () => {
@@ -225,5 +225,146 @@ describe('genererCreneaux', () => {
     const c = genererCreneaux(session, lieu)
     const ids = c.map((x) => x.id)
     expect(ids).toEqual([...ids].sort())
+  })
+})
+
+// ─── diagnostiquerGrille (issues #110 + #111) ──────────────────────────────
+//
+// Contrat vérifié :
+//  1. Quand la génération produit au moins 1 créneau → configurable=true,
+//     listes vides. Rien à afficher côté UI.
+//  2. Quand la génération produit 0 créneau → configurable=false, les
+//     défauts sont catégorisés (jamais phrase pré-fabriquée, l'UI compose).
+//
+// Chaque catégorie de défaut a un test dédié qui reproduit le symptôme.
+
+describe('diagnostiquerGrille (issues #110 + #111)', () => {
+  const lieuOk = Lieu.parse({
+    id: 'demo',
+    nom: 'Site de démo',
+    salles: [
+      { id: 'A', nom: 'Salle A', jauge: 8 },
+      { id: 'B', nom: 'Salle B', jauge: 5 },
+    ],
+  })
+
+  function sessionOk(overrides: Partial<Parameters<typeof Session.parse>[0]> = {}) {
+    return Session.parse({
+      id: 's',
+      nom: 'Test',
+      lieu_id: 'demo',
+      date_debut: '2026-08-24',
+      date_fin: '2026-08-26',
+      date_butoir: '2026-08-27',
+      grille: [{ debut: '09:00', fin: '12:00', pas_minutes: 60 }],
+      ...overrides,
+    })
+  }
+
+  it('configurable=true et listes vides quand la génération produit ≥ 1 créneau', () => {
+    const diag = diagnostiquerGrille(sessionOk(), lieuOk)
+    expect(diag.configurable).toBe(true)
+    expect(diag.nb_creneaux).toBeGreaterThan(0)
+    expect(diag.defauts_regles).toEqual([])
+    expect(diag.defauts_globaux).toEqual([])
+  })
+
+  it('signale aucune-regle-creatrice quand seules des règles de blocage existent', () => {
+    const s = sessionOk({
+      grille: [{ debut: '09:00', fin: '12:00', pas_minutes: 60, bloque: true }],
+    })
+    const diag = diagnostiquerGrille(s, lieuOk)
+    expect(diag.configurable).toBe(false)
+    expect(diag.defauts_globaux).toContain('aucune-regle-creatrice')
+    expect(diag.defauts_regles).toEqual([])
+  })
+
+  it('signale jours-invalides quand aucun jour de la règle ne matche la session', () => {
+    const s = sessionOk({
+      // Session du 24 au 26 août 2026 (lundi-mercredi). La règle cible des
+      // dates hors session — aucune ne correspond à un jour existant.
+      grille: [
+        { jours: ['2026-09-01', '2026-09-02'], debut: '09:00', fin: '10:00', pas_minutes: 60 },
+      ],
+    })
+    const diag = diagnostiquerGrille(s, lieuOk)
+    expect(diag.configurable).toBe(false)
+    expect(diag.defauts_regles).toHaveLength(1)
+    expect(diag.defauts_regles[0]!.categorie).toBe('jours-invalides')
+    expect(diag.defauts_regles[0]!.regleIndex).toBe(0)
+  })
+
+  it('signale plage-vide quand debut >= fin', () => {
+    const s = sessionOk({
+      grille: [{ debut: '10:00', fin: '09:00', pas_minutes: 60 }],
+    })
+    const diag = diagnostiquerGrille(s, lieuOk)
+    expect(diag.configurable).toBe(false)
+    expect(diag.defauts_regles).toHaveLength(1)
+    expect(diag.defauts_regles[0]!.categorie).toBe('plage-vide')
+    expect(diag.defauts_regles[0]!.debut).toBe('10:00')
+    expect(diag.defauts_regles[0]!.fin).toBe('09:00')
+  })
+
+  it('signale pas-trop-grand quand pas_minutes > durée de la plage', () => {
+    const s = sessionOk({
+      // Plage 09:00-09:30 (30 min) avec pas de 60 min → aucun tour possible.
+      grille: [{ debut: '09:00', fin: '09:30', pas_minutes: 60 }],
+    })
+    const diag = diagnostiquerGrille(s, lieuOk)
+    expect(diag.configurable).toBe(false)
+    expect(diag.defauts_regles).toHaveLength(1)
+    expect(diag.defauts_regles[0]!.categorie).toBe('pas-trop-grand')
+  })
+
+  it('signale tout-bloqué quand une règle de blocage couvre entièrement les créneaux émis', () => {
+    const s = sessionOk({
+      grille: [
+        { debut: '09:00', fin: '10:00', pas_minutes: 60 },
+        { debut: '09:00', fin: '10:00', pas_minutes: 60, bloque: true },
+      ],
+    })
+    const diag = diagnostiquerGrille(s, lieuOk)
+    expect(diag.configurable).toBe(false)
+    expect(diag.defauts_regles).toHaveLength(1)
+    expect(diag.defauts_regles[0]!.categorie).toBe('tout-bloqué')
+    expect(diag.defauts_regles[0]!.regleIndex).toBe(0)
+  })
+
+  it('signale tout-bloqué quand tous les créneaux tombent au-delà du butoir', () => {
+    // Butoirs à 2026-08-24 23:59 pour les 2 (fin très tôt) : les créneaux
+    // émis à partir du 25 tombent au-delà et disparaissent tous.
+    const s = sessionOk({
+      date_debut: '2026-08-25',
+      date_fin: '2026-08-26',
+      grille: [{ debut: '09:00', fin: '10:00', pas_minutes: 60 }],
+    })
+    const sPatched = Session.parse({
+      ...s,
+      butoir_apero_date: '2026-08-24',
+      butoir_apero_heure: '23:59',
+      butoir_vendredi_date: '2026-08-24',
+      butoir_vendredi_heure: '23:59',
+    })
+    const diag = diagnostiquerGrille(sPatched, lieuOk)
+    expect(diag.configurable).toBe(false)
+    expect(diag.defauts_regles).toHaveLength(1)
+    expect(diag.defauts_regles[0]!.categorie).toBe('tout-bloqué')
+  })
+
+  it('remonte plusieurs défauts par règle indexés dans l ordre saisi', () => {
+    const s = sessionOk({
+      grille: [
+        { debut: '10:00', fin: '09:00', pas_minutes: 60 }, // #0 plage-vide
+        { debut: '09:00', fin: '12:00', pas_minutes: 60, bloque: true }, // #1 bloque, ignoré
+        { debut: '09:00', fin: '09:15', pas_minutes: 60 }, // #2 pas-trop-grand
+      ],
+    })
+    const diag = diagnostiquerGrille(s, lieuOk)
+    expect(diag.configurable).toBe(false)
+    const indexes = diag.defauts_regles.map((d) => d.regleIndex)
+    expect(indexes).toEqual([0, 2])
+    const cats = diag.defauts_regles.map((d) => d.categorie)
+    expect(cats).toEqual(['plage-vide', 'pas-trop-grand'])
   })
 })
