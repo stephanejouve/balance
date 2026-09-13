@@ -71,7 +71,7 @@
   function raisonGlobale(categorie: string): string {
     switch (categorie) {
       case 'session-sans-jour':
-        return "la session n'a aucun jour (date de début postérieure à date de fin)"
+        return "la session n'a aucun jour (intervalle date de début → date de fin invalide ou vide)"
       case 'aucune-regle-creatrice':
         return 'aucune règle créatrice définie (seules des règles de blocage sont présentes)'
       default:

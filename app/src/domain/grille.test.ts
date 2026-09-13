@@ -352,6 +352,26 @@ describe('diagnostiquerGrille (issues #110 + #111)', () => {
     expect(diag.defauts_regles[0]!.categorie).toBe('tout-bloqué')
   })
 
+  it('remonte simultanément défauts globaux et défauts par règle (nit C review Leader PR #112)', () => {
+    // Cas mixte : session sans jour (date_debut > date_fin → jours=[]) ET
+    // une règle créatrice avec des jours explicites qui ne pourront rien
+    // matcher (session vide). Le contrat couvre les 2 axes en même temps —
+    // pas mutuellement exclusifs. `session-sans-jour` remonte comme global,
+    // `jours-invalides` remonte pour la règle qui avait des jours listés.
+    const s = sessionOk({
+      date_debut: '2026-08-28',
+      date_fin: '2026-08-24', // inversé → joursDeSession retourne []
+      grille: [
+        { jours: ['2026-08-24'], debut: '09:00', fin: '10:00', pas_minutes: 60 },
+      ],
+    })
+    const diag = diagnostiquerGrille(s, lieuOk)
+    expect(diag.configurable).toBe(false)
+    expect(diag.defauts_globaux).toContain('session-sans-jour')
+    expect(diag.defauts_regles).toHaveLength(1)
+    expect(diag.defauts_regles[0]!.categorie).toBe('jours-invalides')
+  })
+
   it('remonte plusieurs défauts par règle indexés dans l ordre saisi', () => {
     const s = sessionOk({
       grille: [
