@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decouper, diagnostiquerGrille, genererCreneaux, joursDeSession } from './grille'
+import { decouper, diagnostiquerGrille, genererCreneaux, joursDeSession, normaliserFinBorne } from './grille'
 import { Lieu, Session } from './model'
 
 describe('decouper', () => {
@@ -386,5 +386,112 @@ describe('diagnostiquerGrille (issues #110 + #111)', () => {
     expect(indexes).toEqual([0, 2])
     const cats = diag.defauts_regles.map((d) => d.categorie)
     expect(cats).toEqual(['plage-vide', 'pas-trop-grand'])
+  })
+})
+
+describe('normaliserFinBorne', () => {
+  it('convertit minuit fin de journée : 00:00 → 24:00', () => {
+    expect(normaliserFinBorne('00:00')).toBe('24:00')
+  })
+
+  it('convertit H:59 en (H+1):00 pour toute heure', () => {
+    expect(normaliserFinBorne('23:59')).toBe('24:00')
+    expect(normaliserFinBorne('11:59')).toBe('12:00')
+    expect(normaliserFinBorne('00:59')).toBe('01:00')
+    expect(normaliserFinBorne('08:59')).toBe('09:00')
+  })
+
+  it('laisse les autres valeurs inchangées', () => {
+    expect(normaliserFinBorne('10:00')).toBe('10:00')
+    expect(normaliserFinBorne('09:30')).toBe('09:30')
+    expect(normaliserFinBorne('12:00')).toBe('12:00')
+    expect(normaliserFinBorne('23:00')).toBe('23:00')
+  })
+})
+
+describe('decouper — convention borne fin (#82)', () => {
+  // Garde-fou négatif : sans normalisation de la borne de fin,
+  // decouper('22:00', '23:59', 60) donnerait 1 seul tour (Math.floor(119/60)).
+  // Le fait que genererCreneaux passe par normaliserFinBorne rend la démo
+  // Session 5 nocturne cohérente avec la saisie utilisateur.
+  it('decouper brut : 22:00 → 23:59 pas 60 donne 1 tour (borne exclusive)', () => {
+    // Ce cas documente le comportement de decouper appelé DIRECTEMENT.
+    // La correction du défaut passe par normaliserFinBorne EN AMONT (cf test
+    // ci-dessous « démo Session 5 nocturne » qui vérifie 2 tours après
+    // normalisation).
+    const tours = decouper('22:00', '23:59', 60)
+    expect(tours).toHaveLength(1)
+  })
+
+  it('après normaliserFinBorne : 22:00 → 23:59 pas 60 donne 2 tours', () => {
+    const tours = decouper('22:00', normaliserFinBorne('23:59'), 60)
+    expect(tours).toHaveLength(2)
+    expect(tours[0]).toEqual({ debut: '22:00', fin: '23:00' })
+    expect(tours[1]).toEqual({ debut: '23:00', fin: '24:00' })
+  })
+
+  it('après normaliserFinBorne : 09:00 → 11:59 pas 30 donne 6 tours (dernier 11:30)', () => {
+    const tours = decouper('09:00', normaliserFinBorne('11:59'), 30)
+    expect(tours).toHaveLength(6)
+    expect(tours[0]).toEqual({ debut: '09:00', fin: '09:30' })
+    expect(tours[5]).toEqual({ debut: '11:30', fin: '12:00' })
+  })
+
+  it('après normaliserFinBorne : 09:00 → 12:00 pas 60 donne 3 tours (comportement inchangé)', () => {
+    const tours = decouper('09:00', normaliserFinBorne('12:00'), 60)
+    expect(tours).toHaveLength(3)
+    expect(tours[2]).toEqual({ debut: '11:00', fin: '12:00' })
+  })
+})
+
+describe('genererCreneaux — démo Session 5 nocturne (#82 CD 6790)', () => {
+  const lieuDemo = Lieu.parse({
+    id: 'demo',
+    nom: 'Site de démo',
+    salles: [{ id: 'A', nom: 'Salle A', jauge: 8 }],
+  })
+
+  it('règle 22:00 → 23:59 pas 60 émet 2 créneaux par jour', () => {
+    // Contexte : CD msg 6790 (2026-09-13) — la grille démo Session 5 portait
+    // une règle « tous les jours, 22:00, fin VIDE, pas 60 » qui produisait
+    // 0 créneau (comptée créatrice mais inopérante). Stéphane a rempli le
+    // champ vide avec 23:59 : 46 → 53 créneaux, soit 1/jour × 7 jours.
+    // La correction (normaliserFinBorne étendu) porte ce total à 60,
+    // soit 2/jour × 7 jours — la minute manquante ne coûte plus un créneau.
+    const session = Session.parse({
+      id: 's',
+      nom: 'Démo Session 5',
+      lieu_id: 'demo',
+      date_debut: '2026-08-24',
+      date_fin: '2026-08-30',
+      date_butoir: '2026-08-31',
+      grille: [{ debut: '22:00', fin: '23:59', pas_minutes: 60 }],
+    })
+    const c = genererCreneaux(session, lieuDemo)
+    expect(c).toHaveLength(14) // 2 créneaux × 7 jours
+    const dansPremierJour = c.filter((x) => x.date === '2026-08-24')
+    expect(dansPremierJour.map((x) => x.debut)).toEqual(['22:00', '23:00'])
+  })
+
+  it('règle bloqueuse 22:00 → 23:59 bloque bien 22:00 ET 23:00 (symétrie créatrices/bloqueuses)', () => {
+    // CD 6819 : « une règle bloquant 22:00 vers 23:59 bloquera bien 22:00 ET
+    // 23:00 — cohérent, pas un effet de bord ». Vérifie que la normalisation
+    // s'applique symétriquement.
+    const session = Session.parse({
+      id: 's',
+      nom: 'Test blocage',
+      lieu_id: 'demo',
+      date_debut: '2026-08-24',
+      date_fin: '2026-08-24',
+      date_butoir: '2026-08-25',
+      grille: [
+        { debut: '20:00', fin: '23:59', pas_minutes: 60 },
+        { debut: '22:00', fin: '23:59', pas_minutes: 60, bloque: true },
+      ],
+    })
+    const c = genererCreneaux(session, lieuDemo)
+    // Créatrice 20:00→23:59 pas 60 = 4 tours (20, 21, 22, 23). Bloqueuse
+    // 22:00→23:59 retire 22 et 23. Reste 20 et 21.
+    expect(c.map((x) => x.debut).sort()).toEqual(['20:00', '21:00'])
   })
 })

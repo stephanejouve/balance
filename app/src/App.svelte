@@ -607,7 +607,7 @@
     lieu.salles[salleIdx].restrictions.push({
       jours: [],
       debut: '22:00',
-      fin: '24:00',
+      fin: '23:59',
       contrainte: 'interdit',
       motif: '',
     })

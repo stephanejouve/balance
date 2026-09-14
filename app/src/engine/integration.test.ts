@@ -44,7 +44,7 @@ function sessionCinq() {
     grille: [
       { debut: '09:00', fin: '12:00', pas_minutes: 60 },
       { debut: '13:30', fin: '18:30', pas_minutes: 60 },
-      { debut: '22:00', fin: '24:00', pas_minutes: 60 },
+      { debut: '22:00', fin: '23:59', pas_minutes: 60 },
     ],
     repetitions_visees: 3,
     repetitions_min: 2,

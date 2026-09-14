@@ -73,8 +73,28 @@ export function resoudreJours(saisi: readonly string[], joursSession: readonly I
   return [...out].sort()
 }
 
-function normaliserFinMinuit(t: HhMm): HhMm {
-  return t === '00:00' ? '24:00' : t
+/**
+ * Convertit une borne de fin saisie utilisateur en borne exclusive interne.
+ *
+ * Deux notations utilisateur sont acceptées pour désigner la fin d'une plage :
+ *  - `'00:00'` (minuit fin de journée, saisi par certains navigateurs)
+ *  - `'H:59'` (dernière minute de l'heure H — le sélecteur horaire HTML natif
+ *    n'exposant pas `24:00`, cette écriture est la seule façon pour un
+ *    organisateur d'exprimer « jusqu'à H+1 » via un champ standard)
+ *
+ * En interne, la convention `decouper` / `estBloqué` / `diagnostic` est
+ * **fin exclusive** : la borne sortie est `(H+1):00` (ou `24:00` pour minuit).
+ * Cette conversion appliquée uniformément aux 4 sites d'appel maintient la
+ * symétrie règles créatrices / règles bloqueuses.
+ */
+export function normaliserFinBorne(t: HhMm): HhMm {
+  if (t === '00:00') return '24:00'
+  // `H:59` → `(H+1):00`. La regex garantit un format HH:MM valide en amont.
+  if (t.endsWith(':59')) {
+    const h = Number(t.slice(0, 2))
+    return `${String(h + 1).padStart(2, '0')}:00`
+  }
+  return t
 }
 
 /**
@@ -134,7 +154,7 @@ export function genererCreneaux(session: Session, lieu: Lieu, options: GenererOp
   for (const regle of reglesCreatrices) {
     const jourReglés = regle.jours.length ? resoudreJours(regle.jours, jours) : jours
     const salles = regle.salles.length ? regle.salles : sallesActives
-    const finNormale = normaliserFinMinuit(regle.fin)
+    const finNormale = normaliserFinBorne(regle.fin)
     for (const jour of jourReglés) {
       for (const tour of decouper(regle.debut, finNormale, regle.pas_minutes)) {
         emitted.push({
@@ -152,7 +172,7 @@ export function genererCreneaux(session: Session, lieu: Lieu, options: GenererOp
     for (const regle of reglesBloqueuses) {
       const jourReglés = regle.jours.length ? resoudreJours(regle.jours, jours) : jours
       if (!jourReglés.includes(c.date)) continue
-      const finNormale = normaliserFinMinuit(regle.fin)
+      const finNormale = normaliserFinBorne(regle.fin)
       if (c.debut >= regle.debut && c.debut < finNormale) return true
     }
     return false
@@ -196,7 +216,8 @@ export function genererCreneaux(session: Session, lieu: Lieu, options: GenererOp
  * Sémantique par catégorie (dans l'ordre d'évaluation) :
  *  - `jours-invalides` : la règle a des jours listés qui ne matchent aucun
  *    jour de la session (ou aucun jour reconnu par `resoudreJours`).
- *  - `plage-vide` : `debut >= fin` (fin normalisée pour minuit `00:00→24:00`).
+ *  - `plage-vide` : `debut >= fin` (fin normalisée via `normaliserFinBorne` :
+ *    `00:00 → 24:00`, `H:59 → (H+1):00`).
  *  - `pas-trop-grand` : `pas_minutes > (fin - debut)` — la division entière
  *    retourne 0 tour, aucun créneau émis. `pas_minutes <= 0` tombe dans le
  *    même bucket (impossible via l'UI, borne défensive).
@@ -311,7 +332,7 @@ export function diagnostiquerGrille(session: Session, lieu: Lieu): DiagnosticGri
       continue
     }
 
-    const finNormale = normaliserFinMinuit(regle.fin)
+    const finNormale = normaliserFinBorne(regle.fin)
     const debutMin = toMinutes(regle.debut)
     const finMin = toMinutes(finNormale)
     if (finMin <= debutMin) {
@@ -345,7 +366,7 @@ export function diagnostiquerGrille(session: Session, lieu: Lieu): DiagnosticGri
         const bloquePar = reglesBloqueuses.some((rb) => {
           const jrb = rb.jours.length ? resoudreJours(rb.jours, jours) : jours
           if (!jrb.includes(jour)) return false
-          const finRbNormale = normaliserFinMinuit(rb.fin)
+          const finRbNormale = normaliserFinBorne(rb.fin)
           return tour.debut >= rb.debut && tour.debut < finRbNormale
         })
         if (!bloquePar) survivants++

@@ -552,7 +552,7 @@ les décrire **par règles**, l'outil les déploie :
 
 - « tous les jours, 09:00–10:00 » ; « tous les jours, 13:30–14:30 »
 - « lundi, 16:30–20:30, découpé en tours d'une heure »
-- « du lundi au mercredi, 22:00–24:00, tours d'une heure »
+- « du lundi au mercredi, 22:00–23:59, tours d'une heure »
 - « le dernier jour, tours de 30 minutes seulement »
 - exceptions ponctuelles : un jour retiré, une plage bloquée par une réunion
 
