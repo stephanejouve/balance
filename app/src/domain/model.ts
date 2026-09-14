@@ -94,6 +94,14 @@ export const Indispo = z.object({
   jours: z.array(IsoDate).default([]),
   debut: HhMm.optional(),
   fin: HhMm.optional(),
+  /**
+   * Valeur brute que l'utilisateur a saisie AVANT correction automatique
+   * `H:00 → (H−1):59` (convention Stéphane, CD msg 6832). Renseigné quand
+   * `fin` a été corrigée par `corrigerSaisieFin` ; sert à afficher la
+   * mention persistante « on a interprété ta saisie comme… ». Effacé
+   * dès que l'utilisateur ré-édite vers une valeur naturelle H:59.
+   */
+  fin_saisie_original: HhMm.optional(),
   roles: z.array(Pupitre).default([]),
   motif: z.string().default(''),
 })
@@ -155,6 +163,8 @@ export const RestrictionHoraire = z.object({
   jours: z.array(IsoDate).default([]),
   debut: HhMm,
   fin: HhMm,
+  /** Voir `Indispo.fin_saisie_original`. */
+  fin_saisie_original: HhMm.optional(),
   contrainte: z.enum(['interdit', 'acoustique_seulement', 'pas_reduit']),
   pas_max_minutes: z.number().int().positive().optional(),
   motif: z.string().default(''),
@@ -251,6 +261,8 @@ export const RegleCreneau = z.object({
   jours: z.array(IsoDate).default([]),
   debut: HhMm,
   fin: HhMm,
+  /** Voir `Indispo.fin_saisie_original`. */
+  fin_saisie_original: HhMm.optional(),
   /** Durée d'un tour, en minutes. Défaut 60. */
   pas_minutes: z.number().int().positive().default(60),
   /** Restreint aux salles listées. Vide = toutes les salles actives du lieu. */
@@ -510,6 +522,8 @@ export const Seance = z.object({
   date: IsoDate,
   debut: HhMm,
   fin: HhMm,
+  /** Voir `Indispo.fin_saisie_original`. */
+  fin_saisie_original: HhMm.optional(),
   salle_id: z.string().optional(),
 })
 export type Seance = z.infer<typeof Seance>
