@@ -481,17 +481,19 @@
       // Restrictions de salle : pas de pas propre → aucune correction
       // (CD 6850). L'utilisateur saisit une plage brute, à respecter.
       parsed.salles.forEach((s) =>
-        s.restrictions.forEach((r) => appliquerCorrectionFinSaisie(r, null)),
+        s.restrictions.forEach((r) => appliquerCorrectionFinSaisie(r, null, undefined)),
       )
       Object.assign(lieu, parsed)
       lieu.salles.splice(0, lieu.salles.length, ...parsed.salles)
     }
     if (patch.session) {
       const parsed = Session.parse(patch.session)
-      // Règles de grille : le critère est le `pas_minutes` de la règle
-      // elle-même. Une valeur qui tombe sur une frontière du pas est
-      // corrigée (CD 6850).
-      parsed.grille.forEach((r) => appliquerCorrectionFinSaisie(r, r.pas_minutes))
+      // Règles de grille : le critère est le multiple du pas RELATIF
+      // AU DÉBUT (CD 6853). Une valeur telle que `(fin − debut) % pas
+      // === 0` est convertie ; sinon intact.
+      parsed.grille.forEach((r) =>
+        appliquerCorrectionFinSaisie(r, r.pas_minutes, r.debut),
+      )
       Object.assign(session, parsed)
       session.grille.splice(0, session.grille.length, ...parsed.grille)
     }
@@ -500,10 +502,10 @@
       // correction (CD 6850). Le patch peut avoir `fin` optionnel côté
       // Indispo — le helper court-circuite proprement dans ce cas.
       patch.inscriptions.personnes.forEach((p) =>
-        p.indispos.forEach((i) => appliquerCorrectionFinSaisie(i, null)),
+        p.indispos.forEach((i) => appliquerCorrectionFinSaisie(i, null, undefined)),
       )
       patch.inscriptions.imposes.forEach((imp) =>
-        imp.seances.forEach((s) => appliquerCorrectionFinSaisie(s, null)),
+        imp.seances.forEach((s) => appliquerCorrectionFinSaisie(s, null, undefined)),
       )
       inscriptions = patch.inscriptions
     }

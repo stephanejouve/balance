@@ -44,13 +44,18 @@
      */
     original: string | undefined
     /**
-     * Pas de créneau du contexte (CD 6850). Le critère de conversion
-     * dépend du pas — une saisie n'est corrigée que si elle tombe pile
-     * sur une frontière de créneau (`totalMin % pasMinutes === 0`).
-     * `null` court-circuite toute correction pour les contextes sans
-     * pas propre.
+     * Pas de créneau du contexte (CD 6850). `null` court-circuite toute
+     * correction pour les contextes sans pas propre.
      */
     pasMinutes: number | null
+    /**
+     * Début de la plage (`HH:MM`), requis avec `pasMinutes` (CD 6853).
+     * Le critère de conversion est
+     * `(finMinutes − debutMinutes) % pasMinutes === 0` : frontière
+     * relative au début, pas depuis minuit. Vide/undefined court-circuite
+     * la correction (impossible sans début).
+     */
+    debut?: string | undefined
     /** Notifie le parent qu'une valeur a changé (invalide solveur, etc.). */
     onchange: () => void
     /** Placeholder facultatif — utile pour Indispos.svelte où fin est optionnel. */
@@ -61,20 +66,30 @@
     valeur = $bindable(),
     original = $bindable(),
     pasMinutes,
+    debut,
     onchange,
     placeholder = '',
   }: Props = $props()
 
   function auChangement(e: Event) {
     const raw = (e.currentTarget as HTMLInputElement).value
-    if (pasMinutes === null) {
-      // Contexte sans pas propre — aucune correction, valeur brute.
+    if (pasMinutes === null || !debut) {
+      // Contexte sans pas propre (ou sans début) — aucune correction,
+      // valeur brute.
       valeur = raw === '' ? undefined : raw
       original = undefined
       onchange()
       return
     }
-    const r = corrigerSaisieFin(raw, pasMinutes)
+    const parts = debut.split(':')
+    if (parts.length !== 2) {
+      valeur = raw === '' ? undefined : raw
+      original = undefined
+      onchange()
+      return
+    }
+    const debutMin = Number(parts[0]) * 60 + Number(parts[1])
+    const r = corrigerSaisieFin(raw, pasMinutes, debutMin)
     // Chaîne vide → `undefined` pour aligner sur les schémas optionnels
     // (Indispo.fin). Sur les champs obligatoires (RegleCreneau.fin) le
     // parent garde un `string`, la valeur '' reste vide côté modèle mais
