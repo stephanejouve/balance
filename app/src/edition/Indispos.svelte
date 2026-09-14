@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Personne } from '../domain/model'
   import { libellePersonne } from '../domain/model'
-  import InputFinBorne from './InputFinBorne.svelte'
 
   interface Props {
     personnesAvecIndispo: Personne[]
@@ -56,11 +55,14 @@
             />
             <input type="time" bind:value={ind.debut} onchange={onInvalider} placeholder="début" />
             <span>→</span>
-            <InputFinBorne
-              bind:valeur={ind.fin}
-              bind:original={ind.fin_saisie_original}
-              pasMinutes={null}
-              onchange={onInvalider}
+            <input
+              type="time"
+              value={ind.fin ?? ''}
+              oninput={(e) => {
+                const v = (e.currentTarget as HTMLInputElement).value
+                ind.fin = v || undefined
+                onInvalider()
+              }}
               placeholder="fin (vide = match exact)"
             />
             <input
