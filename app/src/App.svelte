@@ -102,21 +102,30 @@
     }),
   )
   let session = $state(
-    Session.parse({
-      id: 'session-5',
-      nom: 'Session 5 — Musiques Festives',
-      lieu_id: 'musiques-festives',
-      date_debut: '2026-08-24',
-      date_fin: '2026-08-28',
-      date_butoir: '2026-08-26',
-      butoir_heure: '18:30',
-      grille: [
-        { debut: '09:00', fin: '12:00', pas_minutes: 60 },
-        { debut: '13:30', fin: '18:30', pas_minutes: 60 },
-        { debut: '22:00', fin: '23:59', pas_minutes: 60 },
-      ],
-      repetitions_visees: 3,
-    }),
+    (() => {
+      const s = Session.parse({
+        id: 'session-5',
+        nom: 'Session 5 — Musiques Festives',
+        lieu_id: 'musiques-festives',
+        date_debut: '2026-08-24',
+        date_fin: '2026-08-28',
+        date_butoir: '2026-08-26',
+        butoir_heure: '18:30',
+        grille: [
+          { debut: '09:00', fin: '12:00', pas_minutes: 60 },
+          { debut: '13:30', fin: '18:30', pas_minutes: 60 },
+          { debut: '22:00', fin: '23:59', pas_minutes: 60 },
+        ],
+        repetitions_visees: 3,
+      })
+      // Applique la conversion « fin sur frontière → dernière minute »
+      // (CD msg 6858) aux règles par défaut. Sans cette pass, l'état
+      // initial affiche `18:30` sans mention, laissant l'utilisateur
+      // dans l'incohérence : la saisie corrigerait, mais l'état chargé
+      // ne l'était pas.
+      s.grille.forEach((r) => appliquerCorrectionFinSaisie(r, r.pas_minutes, r.debut))
+      return s
+    })(),
   )
 
   function chargerDemo(): Inscriptions {
@@ -360,6 +369,10 @@
       { jours: [], debut: '09:00', fin: '12:00', pas_minutes: 60, salles: [], bloque: false },
       { jours: [], debut: '14:00', fin: '18:00', pas_minutes: 60, salles: [], bloque: false },
     )
+    // Applique la conversion inclusive sur les règles nouvellement
+    // créées (CD 6858) — sinon `fin: '12:00'` reste sans mention alors
+    // qu'elle est bien une frontière convertible.
+    session.grille.forEach((r) => appliquerCorrectionFinSaisie(r, r.pas_minutes, r.debut))
     // Inscriptions vides (personnes + groupes + imposés)
     inscriptions = { session_id: 'nouvelle-session', personnes: [], groupes: [], imposes: [], refus: [] }
     sourceLabel = `nouvelle session dans « ${lieu.nom} »`
@@ -675,14 +688,20 @@
   /* --- Édition Session --------------------------------------------------- */
 
   function ajouterRegle() {
-    session.grille.push({
+    const regle = {
       jours: [],
       debut: '09:00',
       fin: '10:00',
       pas_minutes: 60,
       salles: [],
       bloque: false,
-    })
+    }
+    // Convention Stéphane CD 6858 : la nouvelle règle affiche
+    // `09:59` avec mention plutôt que `10:00` sans conversion — le
+    // comportement doit être identique quel que soit le chemin par
+    // lequel la règle est apparue.
+    appliquerCorrectionFinSaisie(regle, regle.pas_minutes, regle.debut)
+    session.grille.push(regle)
     resetSolution()
   }
   function supprimerRegle(i: number) {
