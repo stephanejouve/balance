@@ -1,30 +1,32 @@
 <script lang="ts">
   /**
    * Input `<input type="time">` pour une borne de fin de plage saisie
-   * par l'utilisateur — applique la convention Stéphane (CD msg 6798 /
-   * 6832) : toute borne non finale `H:00` / `H:30` / etc. est convertie
-   * silencieusement vers la dernière minute effectivement occupée
-   * (`(H−1):59`, `H:29`, etc.), et l'écart est affiché sous forme de
-   * mention persistante informative tant que la correction est en
-   * vigueur.
+   * par l'utilisateur — applique la convention Stéphane (CD msgs 6798 /
+   * 6832 / 6850) : une borne qui coïncide avec une frontière de créneau
+   * (`totalMin % pasMinutes === 0`, donc exclusive) est convertie vers
+   * la dernière minute effectivement occupée. Une borne déjà inclusive
+   * (une minute avant frontière) ou hors-cycle est laissée intacte.
    *
    * Utilisé aux 4 points de saisie de fin de plage :
-   *  - `Session.svelte` : règles de grille (`regle.fin`)
-   *  - `Lieu.svelte` : restrictions de salle (`restriction.fin`)
-   *  - `Imposes.svelte` : séances imposées (`seance.fin`)
-   *  - `Indispos.svelte` : plages d'indisponibilité (`indispo.fin`)
+   *  - `Session.svelte` : règles de grille (`regle.fin`, pas = `regle.pas_minutes`)
+   *  - `Lieu.svelte` : restrictions de salle (`restriction.fin`, pas = `null`)
+   *  - `Imposes.svelte` : séances imposées (`seance.fin`, pas = `null`)
+   *  - `Indispos.svelte` : plages d'indisponibilité (`indispo.fin`, pas = `null`)
+   *
+   * `pasMinutes = null` court-circuite toute correction — les contextes
+   * sans pas propre (restriction, imposé, indispo) délimitent un range
+   * temporel brut, pas un créneau à convertir.
    *
    * Cadrage non négociable (CD 6832) :
-   *  - **Registre informatif, pas alerte** : « on a interprété », pas
-   *    « erreur » ni « attention ». La saisie n'est pas une faute, elle
-   *    est simplement écrite autrement que ce que le modèle retient.
-   *  - **Persistance** : la mention reste tant que la valeur corrigée
-   *    est là. Elle disparaît quand l'utilisateur ré-édite vers un
-   *    `H:59` naturel (ou vide le champ).
-   *  - **Auto-apprentissage** (raison Stéphane) : voir 12:00 devenir
-   *    11:59 avec l'explication apprend à l'organisateur ce que
-   *    l'application entend. Une mention qui devient inutile à force
-   *    d'être lue a fait son travail.
+   *  - **Registre informatif, pas alerte**
+   *  - **Persistance** : mention reste tant que la valeur corrigée est là
+   *  - **Auto-apprentissage** (raison Stéphane)
+   *
+   * Incident PR #125 (CD 6850) : la version précédente convertissait
+   * toute valeur ne finissant pas par `:59`, dégradant `18:29` (pas 30,
+   * déjà inclusive) en `18:28` et dérivant à chaque ré-édition. Le
+   * critère du pas résout : `18:29` reste `18:29` car
+   * `1109 % 30 !== 0`.
    */
   import { corrigerSaisieFin } from '../domain/grille'
 
@@ -36,11 +38,19 @@
     valeur: string | undefined
     /**
      * Saisie utilisateur brute AVANT correction, `undefined` quand la
-     * valeur canonique n'a pas été convertie (saisie déjà en `H:59` ou
+     * valeur canonique n'a pas été convertie (saisie déjà inclusive ou
      * champ vide). Persisté au même endroit que `valeur` pour survivre
      * aux imports / exports JSON.
      */
     original: string | undefined
+    /**
+     * Pas de créneau du contexte (CD 6850). Le critère de conversion
+     * dépend du pas — une saisie n'est corrigée que si elle tombe pile
+     * sur une frontière de créneau (`totalMin % pasMinutes === 0`).
+     * `null` court-circuite toute correction pour les contextes sans
+     * pas propre.
+     */
+    pasMinutes: number | null
     /** Notifie le parent qu'une valeur a changé (invalide solveur, etc.). */
     onchange: () => void
     /** Placeholder facultatif — utile pour Indispos.svelte où fin est optionnel. */
@@ -50,13 +60,21 @@
   let {
     valeur = $bindable(),
     original = $bindable(),
+    pasMinutes,
     onchange,
     placeholder = '',
   }: Props = $props()
 
   function auChangement(e: Event) {
     const raw = (e.currentTarget as HTMLInputElement).value
-    const r = corrigerSaisieFin(raw)
+    if (pasMinutes === null) {
+      // Contexte sans pas propre — aucune correction, valeur brute.
+      valeur = raw === '' ? undefined : raw
+      original = undefined
+      onchange()
+      return
+    }
+    const r = corrigerSaisieFin(raw, pasMinutes)
     // Chaîne vide → `undefined` pour aligner sur les schémas optionnels
     // (Indispo.fin). Sur les champs obligatoires (RegleCreneau.fin) le
     // parent garde un `string`, la valeur '' reste vide côté modèle mais

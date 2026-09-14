@@ -101,6 +101,7 @@
                   <InputFinBorne
                     bind:valeur={res.fin}
                     bind:original={res.fin_saisie_original}
+                    pasMinutes={null}
                     onchange={onInvalider}
                   />
                   <select bind:value={res.contrainte} onchange={onInvalider}>

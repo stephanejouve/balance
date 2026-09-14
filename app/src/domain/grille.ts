@@ -130,32 +130,50 @@ export function finInclusive(t: HhMm): HhMm {
 }
 
 /**
- * Applique la convention Stéphane (CD msg 6798 / 6832) à une valeur
- * saisie utilisateur : convertit une borne non finale (`H:00`, `H:30`,
- * etc.) vers la dernière minute effectivement occupée (`(H−1):59`,
- * `H:29`), en signalant l'écart pour que l'UI affiche une mention
- * persistante informative.
+ * Applique la convention Stéphane (CD msg 6798 / 6832 / 6850) à une
+ * valeur saisie utilisateur : convertit une borne qui tombe **pile sur
+ * une frontière du pas** (donc exclusive) vers la dernière minute
+ * effectivement occupée (`(H−1):59`, `H:29`, etc.), en signalant
+ * l'écart pour que l'UI affiche une mention persistante informative.
+ *
+ * **Critère** (CD 6850, arbitré par Stéphane après incident PR #125) :
+ * le pas décide. Une saisie est corrigée UNIQUEMENT si son total en
+ * minutes est un multiple du pas — c'est-à-dire si elle coïncide avec
+ * une frontière de créneau. Toute autre saisie est laissée intacte :
+ * la précédente version convertissait `18:29` (déjà inclusive pour un
+ * pas de 30) en `18:28` et dérivait à chaque ré-édition.
  *
  * Contrat :
- *  - Chaîne vide → renvoyée telle quelle (l'utilisateur n'a pas encore
- *    saisi, aucune correction à porter).
- *  - Borne déjà finale (finissant par `:59`) → renvoyée telle quelle,
- *    `original = null` (pas de mention à afficher).
- *  - Toute autre borne → `valeur = finInclusive(saisie)`, `original =
- *    saisie`. L'UI persiste `original` tant que `valeur` est là ; le
- *    jour où l'utilisateur ré-édite vers un H:59 naturel, l'original
- *    disparaît.
+ *  - Chaîne vide → renvoyée telle quelle, `original = null`.
+ *  - Saisie sur frontière du pas (`totalMin % pasMinutes === 0`) →
+ *    convertie via `finInclusive`, `original = saisie` (mention à
+ *    afficher).
+ *  - Saisie une minute avant frontière (`(totalMin+1) % pasMinutes === 0`)
+ *    → déjà inclusive, laissée telle quelle, `original = null`.
+ *  - Saisie qui ne tombe ni sur ni juste avant une frontière → laissée
+ *    telle quelle (CD 6850 « n'invente pas de correction pour ce cas »).
  *
  * Fonction pure. Utilisée par les 4 inputs `<input type="time">` de la
- * fin de plage : Session.grille[i].fin, Lieu.salles[j].restrictions[k].fin,
- * inscriptions.imposes[l].fin, Personne.indispos[m].fin. Aussi appelée
- * par `appliquerImportJson` pour corriger silencieusement à l'import
- * les JSON produits avant l'entrée en vigueur de la convention.
+ * fin de plage (Session grille, Lieu restrictions, Imposes seances,
+ * Indispos). Aussi par `appliquerImportJson` pour rattraper les JSON
+ * produits avant l'entrée en vigueur.
  */
-export function corrigerSaisieFin(saisie: string): { valeur: string; original: string | null } {
+export function corrigerSaisieFin(
+  saisie: string,
+  pasMinutes: number,
+): { valeur: string; original: string | null } {
   if (saisie === '') return { valeur: saisie, original: null }
-  if (saisie.endsWith(':59')) return { valeur: saisie, original: null }
-  return { valeur: finInclusive(saisie as HhMm), original: saisie }
+  if (pasMinutes <= 0) return { valeur: saisie, original: null }
+  const parts = saisie.split(':')
+  if (parts.length !== 2) return { valeur: saisie, original: null }
+  const h = Number(parts[0])
+  const m = Number(parts[1])
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return { valeur: saisie, original: null }
+  const totalMin = h * 60 + m
+  if (totalMin % pasMinutes === 0) {
+    return { valeur: finInclusive(saisie as HhMm), original: saisie }
+  }
+  return { valeur: saisie, original: null }
 }
 
 /**
@@ -169,15 +187,23 @@ export function corrigerSaisieFin(saisie: string): { valeur: string; original: s
  * appliquée. Sinon la correction s'applique et écrit les deux champs
  * de façon cohérente.
  *
+ * `pasMinutes` est requis (CD 6850) : le critère de conversion dépend
+ * du pas du contexte. Pour une règle de grille, c'est `regle.pas_minutes`
+ * ; pour un contexte sans pas propre (restriction de salle, séance
+ * imposée, indispo), passer `null` court-circuite la correction et
+ * laisse la valeur intacte — la saisie utilisateur seule fait foi.
+ *
  * Mute l'objet en place. Utilisé sur des `$state` Svelte 5 dans
  * `appliquerImportJson` App.svelte.
  */
 export function appliquerCorrectionFinSaisie(
   o: { fin?: string; fin_saisie_original?: string },
+  pasMinutes: number | null,
 ): void {
   if (o.fin_saisie_original !== undefined) return
   if (o.fin === undefined || o.fin === '') return
-  const r = corrigerSaisieFin(o.fin)
+  if (pasMinutes === null) return
+  const r = corrigerSaisieFin(o.fin, pasMinutes)
   o.fin = r.valeur === '' ? undefined : r.valeur
   if (r.original !== null) o.fin_saisie_original = r.original
 }
