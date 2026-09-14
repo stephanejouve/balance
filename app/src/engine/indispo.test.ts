@@ -338,3 +338,62 @@ describe('indispoBloque — champ jours (fix ticket #86)', () => {
     expect(indispoBloque(p, creneau('09:00', '10:00', lundi), [])).toBe(false)
   })
 })
+
+// ─── Invariant transversal cap durée (CD 6858, verrou classe pour PR D) ───
+// Objet post-cap : `duree_minutes` seul, sans `fin`. Verrouille que la
+// classe des indispos post-cap traverse `indispoBloque` avec la même
+// sémantique que l'équivalent legacy avec `fin`. Sans ce verrou, un
+// retrait du champ `fin` en PR D pourrait masquer un consommateur qui
+// s'appuie encore sur `ind.fin` au lieu de passer par `finMinutesDe`.
+describe('indispoBloque — invariant cap durée (CD 6858)', () => {
+  it('objet cap-durée (duree_minutes seul) bloque identiquement à son équivalent fin legacy', () => {
+    // Legacy : plage [09:00, 11:00[ exclusive = 120 min occupées.
+    const pLegacy = personne([{ jours: [], debut: '09:00', fin: '11:00', roles: [], motif: '' }])
+    // Cap : mêmes 120 min via duree seule, PAS de fin (simule post-PR D).
+    const pCap = personne([
+      { jours: [], debut: '09:00', duree_minutes: 120, roles: [], motif: '' },
+    ])
+
+    // Créneaux inclus dans la plage : les 2 bloquent identiquement.
+    for (const c of [creneau('09:00', '10:00'), creneau('10:00', '11:00')]) {
+      expect(indispoBloque(pLegacy, c, [])).toBe(true)
+      expect(indispoBloque(pCap, c, [])).toBe(true)
+    }
+    // Créneau chevauchant le début — les 2 bloquent.
+    expect(indispoBloque(pLegacy, creneau('08:30', '09:30'), [])).toBe(true)
+    expect(indispoBloque(pCap, creneau('08:30', '09:30'), [])).toBe(true)
+    // Créneau collé à la fin (11:00) — aucun ne bloque (convention exclusive).
+    expect(indispoBloque(pLegacy, creneau('11:00', '12:00'), [])).toBe(false)
+    expect(indispoBloque(pCap, creneau('11:00', '12:00'), [])).toBe(false)
+    // Créneau totalement en dehors — aucun ne bloque.
+    expect(indispoBloque(pLegacy, creneau('14:00', '15:00'), [])).toBe(false)
+    expect(indispoBloque(pCap, creneau('14:00', '15:00'), [])).toBe(false)
+  })
+
+  it('objet cap-durée traverse aussi estIndispoInterpretable (garde imposé)', () => {
+    // Un `Indispo` construit programmatiquement avec `duree_minutes`
+    // seule (comme le fera `enrichirIndispos` post retrait de `fin`)
+    // doit passer la garde imposé sans être marqué non-interprétable.
+    const ind = {
+      jours: [],
+      debut: '09:00',
+      duree_minutes: 60,
+      roles: [],
+      motif: 'Imposé : Blue Bossa',
+    }
+    expect(estIndispoInterpretable(ind)).toBe(true)
+  })
+
+  it('duree_minutes = 0 (plage vide, cas frontière migration debut === fin) → ne bloque rien', () => {
+    // La formule de migration sans `+1` produit `duree = 0` quand
+    // `debut === fin` dans le JSON legacy. Sémantique : plage vide,
+    // aucun créneau bloqué — cohérent avec le fait qu'`indispoBloque`
+    // compare `creneau.debut < ind.fin_exclusive = debut + duree =
+    // debut` → toujours false.
+    const p = personne([
+      { jours: [], debut: '10:00', duree_minutes: 0, roles: [], motif: '' },
+    ])
+    expect(indispoBloque(p, creneau('10:00', '11:00'), [])).toBe(false)
+    expect(indispoBloque(p, creneau('09:30', '10:30'), [])).toBe(false)
+  })
+})

@@ -220,6 +220,12 @@ export function indispoBloque(
     const creneauDebutMin = toMinutes(creneau.debut)
     const creneauFinExclMin = toMinutes(creneau.fin)
     const indDebutMin = toMinutes(ind.debut!)
+    // Plage vide (`duree_minutes = 0` avec `debut === fin` legacy) :
+    // `indFinInclusiveMin = debut − 1` est INFÉRIEUR à `indDebutMin`, la
+    // plage est dégénérée et ne bloque rien. Sans ce garde, l'intersection
+    // avec un créneau qui commence avant `debut` mais finit après serait
+    // à tort marquée non-vide.
+    if (indFinInclusiveMin! < indDebutMin) return false
     return creneauDebutMin <= indFinInclusiveMin! && indDebutMin < creneauFinExclMin
   })
 }
