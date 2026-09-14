@@ -154,6 +154,31 @@ describe('csvParSalle', () => {
     expect(alice[1]).toContain('10:00')
   })
 
+  it('affiche l’horaire avec la borne de fin inclusive (convention Stéphane CD 6832)', () => {
+    // Le créneau interne porte `fin` en borne exclusive (`10:00` pour un
+    // tour 09:00→10:00 de pas 60). L'affichage doit montrer la dernière
+    // minute effectivement occupée (`09:59`) pour que deux créneaux
+    // consécutifs ne partagent pas visuellement leur frontière.
+    const { session, lieu, inscriptions, creneaux } = fixture()
+    const assignations: Assignation[] = [
+      { groupe_id: 'g1', creneau_id: creneaux[0].id, salle_id: 'A' },
+      { groupe_id: 'g1', creneau_id: creneaux[1].id, salle_id: 'B' },
+    ]
+    const csvG = csvParGroupe(session, lieu, inscriptions, creneaux, assignations)
+    const csvS = csvParSalle(lieu, inscriptions, creneaux, assignations)
+    const csvM = csvParMusicien(lieu, inscriptions, creneaux, assignations)
+    // Fixture : grille 09:00→11:00 pas 60 → tours 09:00→10:00, 10:00→11:00.
+    // Affichage inclusif : 09:00-09:59, 10:00-10:59.
+    for (const csv of [csvG, csvS, csvM]) {
+      expect(csv).toContain('09:00-09:59')
+      expect(csv).toContain('10:00-10:59')
+      // Contre-exemple : la forme borne exclusive interne ne doit PAS
+      // apparaître dans l'export utilisateur.
+      expect(csv).not.toContain('09:00-10:00')
+      expect(csv).not.toContain('10:00-11:00')
+    }
+  })
+
   it('échappe les valeurs contenant ; ou "', () => {
     const { lieu, inscriptions, creneaux } = fixture()
     const inscMod = Inscriptions.parse({

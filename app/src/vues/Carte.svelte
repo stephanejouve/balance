@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { butoirDeGroupe, type Creneau } from '../domain/grille'
+  import { butoirDeGroupe, finInclusive, type Creneau } from '../domain/grille'
   import type { Groupe, Inscriptions, Lieu, Salle, Session } from '../domain/model'
   import { ciblesValides } from '../engine/manuel'
   import type { Assignation } from '../engine/types'
@@ -91,7 +91,7 @@
       {@const nbOuvertes = sallesAffichees.filter((s) => salleOuverte.has(s.id)).length}
       {@const nbOccupees = assCr.length}
       <tr>
-        <td class="mono">{c.date.slice(5).replace('-', '/')} · {c.debut}–{c.fin}</td>
+        <td class="mono">{c.date.slice(5).replace('-', '/')} · {c.debut}–{finInclusive(c.fin)}</td>
         {#each sallesAffichees as s}
           {@const ass = parSalle.get(s.id)}
           {@const ouvert = salleOuverte.has(s.id)}
@@ -128,7 +128,7 @@
   {@const c = creneauxParId.get(inspecteCase.creneauId)}
   {@const s = sallesParId.get(inspecteCase.salleId)}
   <div class="candidats">
-    <b>{s?.nom} · {c?.date.slice(5).replace('-', '/')} · {c?.debut}–{c?.fin}</b>
+    <b>{s?.nom} · {c?.date.slice(5).replace('-', '/')} · {c?.debut}–{c?.fin ? finInclusive(c.fin) : ''}</b>
     <span class="ink-soft mono"> — {candidatsCase.length} groupe(s) compatible(s)</span>
     {#if candidatsCase.length > 0}
       <p class="hint" style="margin-top:6px">
