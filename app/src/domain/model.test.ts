@@ -295,34 +295,37 @@ describe('nouvelIdPersonne / Groupe / Salle / Impose (Sujet A id stable)', () =>
   })
 })
 
-describe('Cap durée (CD 6876+6885) — preprocess Zod fin → duree_minutes', () => {
-  // Formule : `duree = toFinMinutes(fin) − toMinutes(debut) + 1`
-  //           = 60 pour `18:00 → 18:59`, 120 pour `22:00 → 23:59`,
-  //             1 pour `13:30 → 13:30` (une minute occupée).
+describe('Cap durée (CD 6876+6891) — preprocess Zod fin → duree_minutes', () => {
+  // Formule (CD 6891) : `duree = toFinMinutes(fin) − toMinutes(debut)`
+  //   convention EXCLUSIVE — la fin d'indispo a toujours été traitée
+  //   `<` (creneau.debut < ind.fin) dans `indispoBloque`. La durée
+  //   représente le nombre de minutes effectivement bloquées.
+  // Ex : `18:00 → 19:00` = 60 min, `22:00 → 00:00` = 119 min (00:00 =
+  //   fin de journée = 1439), `debut === fin` = 0 (plage vide).
 
   describe('Indispo', () => {
     it('calcule duree_minutes depuis fin+debut à l’import (JSON legacy)', () => {
-      // `18:00 → 18:59` = 60 min (borne inclusive)
-      const parsed = Indispo.parse({ debut: '18:00', fin: '18:59' })
+      // `18:00 → 19:00` = 60 min (convention exclusive : 60 minutes
+      // occupées, dernière minute = 18:59)
+      const parsed = Indispo.parse({ debut: '18:00', fin: '19:00' })
       expect(parsed.duree_minutes).toBe(60)
-      expect(parsed.fin).toBe('18:59') // fin conservée pendant la migration
+      expect(parsed.fin).toBe('19:00') // fin conservée pendant la migration
     })
 
     it('gère la fin de journée 00:00 → 1439 min', () => {
-      // `22:00 → 00:00` = 120 min. `toFinMinutes('00:00') = 1439` → 1439-1320+1
+      // `22:00 → 00:00` : `toFinMinutes('00:00') = 1439` → 1439−1320 = 119
       const parsed = Indispo.parse({ debut: '22:00', fin: '00:00' })
-      expect(parsed.duree_minutes).toBe(120)
+      expect(parsed.duree_minutes).toBe(119)
     })
 
-    it('gère debut === fin = 1 minute (pas 0)', () => {
+    it('gère debut === fin = 0 minute (plage vide, cohérent convention exclusive)', () => {
       const parsed = Indispo.parse({ debut: '13:30', fin: '13:30' })
-      expect(parsed.duree_minutes).toBe(1)
+      expect(parsed.duree_minutes).toBe(0)
     })
 
     it('respecte duree_minutes déjà fournie (canonique, pas de recalcul)', () => {
-      // JSON post-cap : durée déjà là, ne PAS recalculer depuis fin.
-      const parsed = Indispo.parse({ debut: '18:00', fin: '19:00', duree_minutes: 60 })
-      expect(parsed.duree_minutes).toBe(60)
+      const parsed = Indispo.parse({ debut: '18:00', fin: '19:00', duree_minutes: 45 })
+      expect(parsed.duree_minutes).toBe(45)
     })
 
     it('ne calcule pas duree quand fin absent (indispo journée entière ou match exact)', () => {
@@ -340,10 +343,11 @@ describe('Cap durée (CD 6876+6885) — preprocess Zod fin → duree_minutes', (
     it('calcule duree_minutes à l’import pour restriction de salle', () => {
       const parsed = RestrictionHoraire.parse({
         debut: '22:00',
-        fin: '23:59',
+        fin: '00:00',
         contrainte: 'interdit',
       })
-      expect(parsed.duree_minutes).toBe(120)
+      // `22:00 → 00:00` = 119 min (00:00 = fin de journée = 1439, exclusive).
+      expect(parsed.duree_minutes).toBe(119)
     })
   })
 
@@ -352,15 +356,15 @@ describe('Cap durée (CD 6876+6885) — preprocess Zod fin → duree_minutes', (
       const parsed = Seance.parse({
         date: '2026-08-25',
         debut: '13:30',
-        fin: '13:59',
+        fin: '14:00',
       })
+      // 30 min occupées (convention exclusive).
       expect(parsed.duree_minutes).toBe(30)
     })
   })
 
   describe('Non-régression : fin_saisie_original retiré des 3 schémas', () => {
     it('Indispo accepte un JSON sans fin_saisie_original (strip mode par défaut)', () => {
-      // Un JSON qui n'aurait plus ce champ passe sans erreur.
       const parsed = Indispo.parse({ debut: '18:00' })
       expect(parsed).not.toHaveProperty('fin_saisie_original')
     })

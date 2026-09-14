@@ -21,10 +21,16 @@ export function enrichirIndispos(inscriptions: Inscriptions): Inscriptions {
       const p = parId.get(pid)
       if (!p) continue
       for (const s of im.seances) {
+        // Cap durée (CD 6876+6885) : recopie fin ET duree_minutes.
+        // Le preprocess Zod garantit qu'après parse, si `fin` était
+        // présent, `duree_minutes` l'est aussi. `Indispo` en dérivée
+        // porte les deux — les consommateurs consultent l'un ou l'autre
+        // via `finMinutesDe`.
         const ind: Indispo = {
           jours: [s.date],
           debut: s.debut,
           fin: s.fin,
+          duree_minutes: s.duree_minutes,
           roles: [],
           motif: `Imposé : ${im.morceau}`,
         }

@@ -1,5 +1,12 @@
 import type { Creneau } from '../domain/grille'
+import { finMinutesDe } from '../domain/grille'
 import type { Indispo, Personne, Pupitre } from '../domain/model'
+
+/** Helper local — `toMinutes` de `domain/grille.ts` est privé au module. */
+function toMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
+}
 
 /**
  * Prédicat unifié : est-ce qu'une indisponibilité de la personne bloque
@@ -47,16 +54,18 @@ import type { Indispo, Personne, Pupitre } from '../domain/model'
  *     Le check résiduel est court-circuité par la garde `debut && fin`.
  */
 export function estIndispoInterpretable(ind: Indispo): boolean {
-  const aHoraire = Boolean(ind.debut || ind.fin)
+  // Cap durée (CD 6876+6885) : `duree_minutes` compte comme une info
+  // horaire structurée, au même titre que `fin`.
+  const aHoraire = Boolean(ind.debut || ind.fin || ind.duree_minutes !== undefined)
   const aJours = ind.jours.length > 0
   const aRoles = ind.roles.length > 0
   if (!aHoraire && !aJours && !aRoles) return false
 
-  // Garde imposé/parser-complet : quand debut ET fin sont posés, l'intention
-  // est structurée (parser complet ou construction programmatique via
-  // enrichirIndispos). Le motif peut contenir n'importe quel texte libre
-  // (nom de morceau imposé, phrase de contexte) — pas de check résiduel.
-  if (ind.debut && ind.fin) return true
+  // Garde imposé/parser-complet : quand debut ET une borne (fin OU durée)
+  // sont posés, l'intention est structurée (parser complet ou construction
+  // programmatique via enrichirIndispos). Le motif peut contenir n'importe
+  // quel texte libre — pas de check résiduel.
+  if (ind.debut && (ind.fin || ind.duree_minutes !== undefined)) return true
   // Pas de texte libre à résidu-vérifier (structuré pur côté écran de
   // relecture, ou champ motif absent).
   if (!ind.motif) return true
@@ -201,10 +210,16 @@ export function indispoBloque(
     if (!estIndispoInterpretable(ind)) return false
     if (!indispoJoursMatche(ind.jours, creneau.date, jourSem)) return false
     if (ind.roles.length > 0 && !pupitres.some((r) => ind.roles.includes(r))) return false
-    if (!ind.debut && !ind.fin) return true
-    if (ind.debut && !ind.fin) return creneau.debut === ind.debut
-    // Intersection [creneau.debut, creneau.fin[ ∩ [ind.debut, ind.fin[ non vide.
-    // Note : les early returns ci-dessus garantissent ind.debut && ind.fin ici.
-    return creneau.debut < ind.fin! && ind.debut! < creneau.fin
+    if (!ind.debut && !ind.fin && ind.duree_minutes === undefined) return true
+    // Cap durée (CD 6876+6885) : la fin en minutes vient de `finMinutesDe`
+    // qui prend `duree_minutes` en priorité, retombe sur `fin` legacy.
+    const indFinInclusiveMin = finMinutesDe(ind)
+    if (ind.debut && indFinInclusiveMin === null) return creneau.debut === ind.debut
+    // Intersection [creneau.debut, creneau.fin[ ∩ [ind.debut, ind.fin_inclusive]
+    // non vide — convention inclusive côté indispo post-cap.
+    const creneauDebutMin = toMinutes(creneau.debut)
+    const creneauFinExclMin = toMinutes(creneau.fin)
+    const indDebutMin = toMinutes(ind.debut!)
+    return creneauDebutMin <= indFinInclusiveMin! && indDebutMin < creneauFinExclMin
   })
 }
