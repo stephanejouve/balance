@@ -1,6 +1,6 @@
 <script lang="ts">
   import { butoirDeGroupe, diagnostiquerGrille, genererCreneaux } from './domain/grille'
-  import { parseMaintenantUrlParam } from './domain/maintenant'
+  import { parseMaintenantUrlParam, propositionRejouer } from './domain/maintenant'
   import { parseLegacyInscriptions } from './domain/legacy'
   import { migrerInscriptions } from './domain/migrate'
   import {
@@ -28,6 +28,7 @@
   import ImportUnique from './edition/ImportUnique.svelte'
   import { analyserIdentitesCandidat, type AnalyseIdentitesImport } from './io/alertes-import'
   import BandeauMaintenantFixe from './edition/BandeauMaintenantFixe.svelte'
+  import BandeauSessionTerminee from './edition/BandeauSessionTerminee.svelte'
   import MiseAJourBandeau from './edition/MiseAJourBandeau.svelte'
   import PiedDePage from './edition/PiedDePage.svelte'
   import Carte from './vues/Carte.svelte'
@@ -211,6 +212,24 @@
     } catch {
       return []
     }
+  })
+  /**
+   * Proposition de rejeu quand une session chargée a ses dates entièrement
+   * passées et qu'on n'est pas déjà en mode `?maintenant=` fixé — CD msg
+   * 6833. Le calcul est pur ; le bandeau `BandeauSessionTerminee` expose
+   * la proposition et laisse Stéphane cliquer, la proposition NE
+   * S'APPLIQUE PAS TOUTE SEULE.
+   *
+   * `new Date()` réelle (pas `maintenantFixe`) : sinon la proposition
+   * serait circulaire — un `?maintenant=` déjà présent masquerait le
+   * critère d'obsolescence.
+   */
+  const propositionRejouerCourante = $derived.by(() => {
+    if (maintenantFixe !== null) return null
+    const now = new Date()
+    const aujourdhuiIso =
+      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    return propositionRejouer(session.date_debut, session.date_fin, aujourdhuiIso)
   })
   // Pool d'arbitrage effectif — issue #96, PR 3/6 chantier §D+§E. Consomme
   // la fonction pure `calculerPool` (PR 1) et les refus persistants (PR 2).
@@ -1586,6 +1605,7 @@
 </main>
 
 <BandeauMaintenantFixe {maintenantFixe} />
+<BandeauSessionTerminee proposition={propositionRejouerCourante} />
 
 <MiseAJourBandeau />
 
