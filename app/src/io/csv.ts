@@ -1,4 +1,5 @@
 import type { Creneau } from '../domain/grille'
+import { finInclusive } from '../domain/grille'
 import type { Inscriptions, Lieu, Session } from '../domain/model'
 import { libellePersonne } from '../domain/model'
 import type { Assignation } from '../engine/types'
@@ -75,7 +76,7 @@ export function tableauParGroupe(
     for (let i = 0; i < cible; i++) {
       const item = list[i]
       if (item) {
-        row.push(item.c.date, `${item.c.debut}-${item.c.fin}`, sallesParId.get(item.a.salle_id)?.nom ?? item.a.salle_id)
+        row.push(item.c.date, `${item.c.debut}-${finInclusive(item.c.fin)}`, sallesParId.get(item.a.salle_id)?.nom ?? item.a.salle_id)
       } else {
         row.push('', '', '')
       }
@@ -123,9 +124,9 @@ export function tableauParSalle(
         const g = groupesParId.get(a.groupe_id)
         const respPersonne = g ? personnesParId.get(g.responsable_id) : undefined
         const respLibelle = respPersonne ? libellePersonne(respPersonne) : g?.responsable_id ?? ''
-        rows.push([salle.nom, c.date, `${c.debut}-${c.fin}`, g?.titre ?? a.groupe_id, respLibelle, 'occupée'])
+        rows.push([salle.nom, c.date, `${c.debut}-${finInclusive(c.fin)}`, g?.titre ?? a.groupe_id, respLibelle, 'occupée'])
       } else {
-        rows.push([salle.nom, c.date, `${c.debut}-${c.fin}`, '', '', 'libre'])
+        rows.push([salle.nom, c.date, `${c.debut}-${finInclusive(c.fin)}`, '', '', 'libre'])
       }
     }
   }
@@ -181,7 +182,7 @@ export function tableauParMusicien(
       rows.push([
         libellePersonne(p),
         c.date,
-        `${c.debut}-${c.fin}`,
+        `${c.debut}-${finInclusive(c.fin)}`,
         g?.titre ?? a.groupe_id,
         sallesParId.get(a.salle_id)?.nom ?? a.salle_id,
       ])

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Creneau } from '../domain/grille'
+  import { finInclusive } from '../domain/grille'
   import type { Groupe, Inscriptions, Lieu, Personne, Salle } from '../domain/model'
   import { libellePersonne } from '../domain/model'
   import type { Assignation } from '../engine/types'
@@ -60,7 +61,7 @@
           class:cible={deplacementEnCours && estCibleValide(c.id, salle.id)}
         >
           <td>{salle.nom}</td>
-          <td class="mono">{c.date.slice(5).replace('-', '/')} · {c.debut}–{c.fin}</td>
+          <td class="mono">{c.date.slice(5).replace('-', '/')} · {c.debut}–{finInclusive(c.fin)}</td>
           <td>{g ? g.titre : '—'}</td>
           <td>{resp ? libellePersonne(resp) : g?.responsable_id ?? ''}</td>
           <td class="center">
