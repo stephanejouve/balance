@@ -1,5 +1,5 @@
 import type { Creneau } from '../domain/grille'
-import { normaliserFinBorne } from '../domain/grille'
+import { toFinMinutes } from '../domain/grille'
 import type { Groupe, Inscriptions, Lieu, Personne, Pupitre, Salle, Session } from '../domain/model'
 import { libellePersonne } from '../domain/model'
 import type { RegistreContraintes } from './contraintes'
@@ -58,6 +58,16 @@ function dureeCreneauMin(c: Creneau): number {
 }
 
 /**
+ * Helper local — les créneaux générés par `decouper` portent `debut` en
+ * borne exclusive `H:MM`, `fin` en exclusive interne (post-`+pas`).
+ * On ne veut ici que le `debut` en minutes.
+ */
+function toMinutesLocal(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + m
+}
+
+/**
  * Renvoie le type de restriction bloquante pour ce couple (salle, créneau),
  * ou `null` si la salle est utilisable sans réserve.
  *
@@ -75,8 +85,12 @@ export function salleRestreinte(
 ): 'interdit' | 'acoustique_seulement' | 'pas_reduit' | null {
   for (const r of salle.restrictions) {
     if (r.jours.length > 0 && !r.jours.includes(creneau.date)) continue
-    const finNorm = normaliserFinBorne(r.fin)
-    if (creneau.debut < r.debut || creneau.debut >= finNorm) continue
+    // Convention inclusive (CD 6856) : la restriction s'applique quand
+    // le début du créneau tombe dans `[r.debut, r.fin]` inclusive.
+    const debutCreneauMin = toMinutesLocal(creneau.debut)
+    const debutResMin = toMinutesLocal(r.debut)
+    const finResMin = toFinMinutes(r.fin)
+    if (debutCreneauMin < debutResMin || debutCreneauMin > finResMin) continue
     if (r.contrainte === 'interdit') return 'interdit'
     if (r.contrainte === 'pas_reduit') {
       const max = r.pas_max_minutes ?? Infinity

@@ -7,7 +7,7 @@ import {
   finInclusive,
   genererCreneaux,
   joursDeSession,
-  normaliserFinBorne,
+  toFinMinutes,
 } from './grille'
 import { Lieu, Session } from './model'
 
@@ -506,19 +506,21 @@ describe('finInclusive', () => {
     expect(finInclusive('00:00')).toBe('23:59')
   })
 
-  it('compose avec normaliserFinBorne pour toute saisie utilisateur', () => {
-    // La convention Stéphane (CD 6832) veut que la saisie 12:00 soit
-    // convertie en 11:59. La double transformation
-    // `finInclusive(normaliserFinBorne(...))` doit être l'identité sur
-    // toute saisie utilisateur valide.
-    for (const saisie of ['09:00', '12:00', '18:30', '23:59', '00:00']) {
-      const affichee = finInclusive(normaliserFinBorne(saisie))
-      // Ce que l'utilisateur écrit doit correspondre à ce que l'app
-      // décide d'afficher (ou déjà écrit dans la convention Stéphane).
-      const attendu =
-        saisie === '00:00' ? '23:59' : saisie.endsWith(':59') ? saisie : finInclusive(saisie)
-      expect(affichee).toBe(attendu)
-    }
+})
+
+describe('toFinMinutes (helper convention inclusive — CD 6856)', () => {
+  it('traduit HH:MM en total de minutes', () => {
+    expect(toFinMinutes('09:00')).toBe(540)
+    expect(toFinMinutes('11:59')).toBe(719)
+    expect(toFinMinutes('18:30')).toBe(1110)
+    expect(toFinMinutes('23:59')).toBe(1439)
+  })
+
+  it('traite 00:00 comme fin de journée (23:59 = 1439 min)', () => {
+    // Cas legacy `fin: '00:00'` = 22:00→minuit. Impossible d'exprimer
+    // en modulo positif sur le même jour, donc replié sur la dernière
+    // minute du jour.
+    expect(toFinMinutes('00:00')).toBe(1439)
   })
 })
 
@@ -709,58 +711,74 @@ describe('appliquerCorrectionFinSaisie', () => {
   })
 })
 
-describe('normaliserFinBorne', () => {
-  it('convertit minuit fin de journée : 00:00 → 24:00', () => {
-    expect(normaliserFinBorne('00:00')).toBe('24:00')
+describe('decouper — convention fin inclusive (CD 6856)', () => {
+  // **Invariant du chantier (CD 6856)** : le compte de créneaux doit être
+  // IDENTIQUE avant et après conversion de la saisie. `13:30 → 18:30` et
+  // `13:30 → 18:29` désignent la même plage, donc les mêmes 5 créneaux.
+
+  it('13:30 → 18:30 pas 60 donne 5 tours', () => {
+    const tours = decouper('13:30', '18:30', 60)
+    expect(tours).toHaveLength(5)
+    expect(tours[0]).toEqual({ debut: '13:30', fin: '14:30' })
+    expect(tours[4]).toEqual({ debut: '17:30', fin: '18:30' })
   })
 
-  it('convertit H:59 en (H+1):00 pour toute heure', () => {
-    expect(normaliserFinBorne('23:59')).toBe('24:00')
-    expect(normaliserFinBorne('11:59')).toBe('12:00')
-    expect(normaliserFinBorne('00:59')).toBe('01:00')
-    expect(normaliserFinBorne('08:59')).toBe('09:00')
+  it('13:30 → 18:29 pas 60 donne 5 tours aussi (invariant de conversion)', () => {
+    // Cas critique CD 6856 : après conversion `18:30 → 18:29`, le compte
+    // ne doit pas baisser. Bug main #129 : donnait 4 tours au lieu de 5.
+    const tours = decouper('13:30', '18:29', 60)
+    expect(tours).toHaveLength(5)
+    expect(tours[0]).toEqual({ debut: '13:30', fin: '14:30' })
+    expect(tours[4]).toEqual({ debut: '17:30', fin: '18:30' })
   })
 
-  it('laisse les autres valeurs inchangées', () => {
-    expect(normaliserFinBorne('10:00')).toBe('10:00')
-    expect(normaliserFinBorne('09:30')).toBe('09:30')
-    expect(normaliserFinBorne('12:00')).toBe('12:00')
-    expect(normaliserFinBorne('23:00')).toBe('23:00')
+  it('SNCF 13:37 → 18:37 pas 60 donne 5 tours', () => {
+    const tours = decouper('13:37', '18:37', 60)
+    expect(tours).toHaveLength(5)
+    expect(tours[0]).toEqual({ debut: '13:37', fin: '14:37' })
+    expect(tours[4]).toEqual({ debut: '17:37', fin: '18:37' })
   })
-})
 
-describe('decouper — convention borne fin (#82)', () => {
-  // Garde-fou négatif : sans normalisation de la borne de fin,
-  // decouper('22:00', '23:59', 60) donnerait 1 seul tour (Math.floor(119/60)).
-  // Le fait que genererCreneaux passe par normaliserFinBorne rend la démo
-  // Session 5 nocturne cohérente avec la saisie utilisateur.
-  it('decouper brut : 22:00 → 23:59 pas 60 donne 1 tour (borne exclusive)', () => {
-    // Ce cas documente le comportement de decouper appelé DIRECTEMENT.
-    // La correction du défaut passe par normaliserFinBorne EN AMONT (cf test
-    // ci-dessous « démo Session 5 nocturne » qui vérifie 2 tours après
-    // normalisation).
+  it('SNCF 13:37 → 18:36 pas 60 donne 5 tours aussi', () => {
+    // Ni :59 ni :29 — seul le multiple relatif du pas garantit la
+    // symétrie avec et sans conversion.
+    const tours = decouper('13:37', '18:36', 60)
+    expect(tours).toHaveLength(5)
+    expect(tours[0]).toEqual({ debut: '13:37', fin: '14:37' })
+  })
+
+  it('09:00 → 12:00 pas 60 donne 3 tours', () => {
+    const tours = decouper('09:00', '12:00', 60)
+    expect(tours).toHaveLength(3)
+    expect(tours[2]).toEqual({ debut: '11:00', fin: '12:00' })
+  })
+
+  it('09:00 → 11:59 pas 60 donne 3 tours (symétrie inclusive)', () => {
+    const tours = decouper('09:00', '11:59', 60)
+    expect(tours).toHaveLength(3)
+  })
+
+  it('22:00 → 23:59 pas 60 donne 2 tours (démo Session 5)', () => {
+    // Régression du chantier #82 : la démo passait de 0 (fin vide) à 1
+    // (fin='23:59' sans support) puis à 2 après le correctif inclusif.
     const tours = decouper('22:00', '23:59', 60)
-    expect(tours).toHaveLength(1)
-  })
-
-  it('après normaliserFinBorne : 22:00 → 23:59 pas 60 donne 2 tours', () => {
-    const tours = decouper('22:00', normaliserFinBorne('23:59'), 60)
     expect(tours).toHaveLength(2)
     expect(tours[0]).toEqual({ debut: '22:00', fin: '23:00' })
     expect(tours[1]).toEqual({ debut: '23:00', fin: '24:00' })
   })
 
-  it('après normaliserFinBorne : 09:00 → 11:59 pas 30 donne 6 tours (dernier 11:30)', () => {
-    const tours = decouper('09:00', normaliserFinBorne('11:59'), 30)
-    expect(tours).toHaveLength(6)
-    expect(tours[0]).toEqual({ debut: '09:00', fin: '09:30' })
-    expect(tours[5]).toEqual({ debut: '11:30', fin: '12:00' })
+  it('22:00 → 00:00 pas 60 donne 2 tours (legacy fin de journée)', () => {
+    // Cas JSON legacy : `fin: '00:00'` traité comme fin de journée
+    // (23:59 = 1439 min) via `toFinMinutes`. Compte identique à
+    // `fin: '23:59'`.
+    const tours = decouper('22:00', '00:00', 60)
+    expect(tours).toHaveLength(2)
   })
 
-  it('après normaliserFinBorne : 09:00 → 12:00 pas 60 donne 3 tours (comportement inchangé)', () => {
-    const tours = decouper('09:00', normaliserFinBorne('12:00'), 60)
-    expect(tours).toHaveLength(3)
-    expect(tours[2]).toEqual({ debut: '11:00', fin: '12:00' })
+  it('09:00 → 11:59 pas 30 donne 6 tours (dernier 11:30-12:00)', () => {
+    const tours = decouper('09:00', '11:59', 30)
+    expect(tours).toHaveLength(6)
+    expect(tours[5]).toEqual({ debut: '11:30', fin: '12:00' })
   })
 })
 
