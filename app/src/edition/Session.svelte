@@ -182,6 +182,7 @@
               <InputFinBorne
                 bind:valeur={regle.fin}
                 bind:original={regle.fin_saisie_original}
+                pasMinutes={regle.pas_minutes}
                 onchange={onInvalider}
               />
             </td>

@@ -59,6 +59,7 @@
             <InputFinBorne
               bind:valeur={ind.fin}
               bind:original={ind.fin_saisie_original}
+              pasMinutes={null}
               onchange={onInvalider}
               placeholder="fin (vide = match exact)"
             />

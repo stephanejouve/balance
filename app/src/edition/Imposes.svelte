@@ -69,6 +69,7 @@
                   <InputFinBorne
                     bind:valeur={s.fin}
                     bind:original={s.fin_saisie_original}
+                    pasMinutes={null}
                     onchange={onInvalider}
                   />
                 </td>

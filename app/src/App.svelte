@@ -478,29 +478,32 @@
     const patch = construireCandidatJson(detection, session.id)
     if (patch.lieu) {
       const parsed = Lieu.parse(patch.lieu)
-      // Convention Stéphane (CD 6832) — corrige à l'import les fins de
-      // restriction produites avant l'entrée en vigueur de la règle
-      // « dernière unité affichée = fin ». Idempotent, ne re-corrige
-      // pas un JSON déjà propre.
-      parsed.salles.forEach((s) => s.restrictions.forEach(appliquerCorrectionFinSaisie))
+      // Restrictions de salle : pas de pas propre → aucune correction
+      // (CD 6850). L'utilisateur saisit une plage brute, à respecter.
+      parsed.salles.forEach((s) =>
+        s.restrictions.forEach((r) => appliquerCorrectionFinSaisie(r, null)),
+      )
       Object.assign(lieu, parsed)
       lieu.salles.splice(0, lieu.salles.length, ...parsed.salles)
     }
     if (patch.session) {
       const parsed = Session.parse(patch.session)
-      // Idem sur les règles de grille.
-      parsed.grille.forEach(appliquerCorrectionFinSaisie)
+      // Règles de grille : le critère est le `pas_minutes` de la règle
+      // elle-même. Une valeur qui tombe sur une frontière du pas est
+      // corrigée (CD 6850).
+      parsed.grille.forEach((r) => appliquerCorrectionFinSaisie(r, r.pas_minutes))
       Object.assign(session, parsed)
       session.grille.splice(0, session.grille.length, ...parsed.grille)
     }
     if (patch.inscriptions) {
-      // Idem sur les indisponibilités individuelles et les séances
-      // imposées. Le patch peut avoir `fin` optionnel côté Indispo
-      // (match exact sur `debut` seul) — le helper court-circuite
-      // proprement dans ce cas.
-      patch.inscriptions.personnes.forEach((p) => p.indispos.forEach(appliquerCorrectionFinSaisie))
+      // Indispos & séances imposées : pas de pas propre → aucune
+      // correction (CD 6850). Le patch peut avoir `fin` optionnel côté
+      // Indispo — le helper court-circuite proprement dans ce cas.
+      patch.inscriptions.personnes.forEach((p) =>
+        p.indispos.forEach((i) => appliquerCorrectionFinSaisie(i, null)),
+      )
       patch.inscriptions.imposes.forEach((imp) =>
-        imp.seances.forEach(appliquerCorrectionFinSaisie),
+        imp.seances.forEach((s) => appliquerCorrectionFinSaisie(s, null)),
       )
       inscriptions = patch.inscriptions
     }
