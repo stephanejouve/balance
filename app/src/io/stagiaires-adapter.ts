@@ -105,16 +105,41 @@ export function parserIndispoLibre(brut: string): Indispo | null {
 
   let debut: string | undefined
   let fin: string | undefined
+  let duree_minutes: number | undefined
+
+  // Grammaire 1 (plage) : `9h-10h`, `9:00-10:00`, `09h30-10h`
   const plage = norm.match(/(\d{1,2})[h:.]?(\d{0,2})\s*[-–à]\s*(\d{1,2})[h:.]?(\d{0,2})/)
   if (plage) {
     debut = parseHeure(plage[1], plage[2])
     fin = parseHeure(plage[3], plage[4])
+  } else {
+    // Grammaire 2 (cap durée CD 6902+6904) : `9h + 60min`, `9h30 + 1h`,
+    // `9h + 1h30`. Le séparateur `+` désambigue le rôle des `h` : avant
+    // le `+`, `h` sépare heure/minute du DÉBUT ; après le `+`, `h` est
+    // l'unité de durée (avec éventuellement des minutes en suffixe).
+    const duree = norm.match(
+      /(\d{1,2})[h:.]?(\d{0,2})\s*\+\s*(\d{1,3})\s*(?:h(\d{0,2})|min)/,
+    )
+    if (duree) {
+      debut = parseHeure(duree[1], duree[2])
+      const [, , , n, mm] = duree
+      // Unité : si `mm` est capturé, c'est `NNhMM` (heures + minutes) ;
+      // sinon regarder le contexte pour distinguer `NNh` seul et `NN min`.
+      if (mm !== undefined) {
+        // `1h30` → 90 min, `2h` → 120 min (mm = '')
+        duree_minutes = Number(n) * 60 + (mm ? Number(mm) : 0)
+      } else {
+        // `60 min` → 60 min
+        duree_minutes = Number(n)
+      }
+    }
   }
 
   return {
     jours,
     debut,
     fin,
+    duree_minutes,
     roles,
     motif: t,
   }

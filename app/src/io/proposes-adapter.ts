@@ -31,6 +31,13 @@ export interface MappingProposes {
   colonneDate: string
   colonneDebut: string
   colonneFin: string
+  /**
+   * Colonne « Durée (min) » — cap durée (CD 6902+6904). Facultative :
+   * l'organisateur remplit Fin OU Durée (ou les deux). Si les deux sont
+   * renseignées et cohérentes (`fin − debut = duree`), pas d'alarme.
+   * Si divergentes, la durée l'emporte (canonique post-cap, CD 6885).
+   */
+  colonneDuree?: string
   colonneSalle?: string
 }
 
@@ -41,6 +48,7 @@ export const MAPPING_PROPOSES_DEFAUT: MappingProposes = {
   colonneDate: 'Date',
   colonneDebut: 'Début',
   colonneFin: 'Fin',
+  colonneDuree: 'Durée (min)',
   colonneSalle: 'Salle',
 }
 
@@ -61,6 +69,16 @@ function texte(c: Cellule): string {
     return `${hh}:${mm}`
   }
   return String(c).trim()
+}
+
+/**
+ * Parse un entier strict (durée en minutes). Renvoie `undefined` si la
+ * valeur n'est pas un entier positif ou nul. Tolère les espaces autour.
+ */
+function parseIntStrict(s: string): number | undefined {
+  const trimmed = s.trim()
+  if (!/^\d+$/.test(trimmed)) return undefined
+  return Number(trimmed)
 }
 
 function indexerColonnes(entete: Cellule[]): Map<string, number> {
@@ -137,7 +155,7 @@ export function extraireProposes(
     ['colonneMembres', mapping.colonneMembres],
     ['colonneDate', mapping.colonneDate],
     ['colonneDebut', mapping.colonneDebut],
-    ['colonneFin', mapping.colonneFin],
+    // Cap durée : Fin devient facultative si Durée est présente.
   ]
   for (const [_, name] of requis) {
     if (cols.get(name) === undefined) {
@@ -148,7 +166,17 @@ export function extraireProposes(
   const iMembres = cols.get(mapping.colonneMembres)!
   const iDate = cols.get(mapping.colonneDate)!
   const iDebut = cols.get(mapping.colonneDebut)!
-  const iFin = cols.get(mapping.colonneFin)!
+  const iFin = cols.get(mapping.colonneFin)
+  const iDuree = mapping.colonneDuree ? cols.get(mapping.colonneDuree) : undefined
+  // Au moins une des deux colonnes Fin / Durée doit être présente.
+  if (iFin === undefined && iDuree === undefined) {
+    return {
+      imposes: [],
+      warnings: [
+        `colonne « ${mapping.colonneFin} » ou « ${mapping.colonneDuree ?? 'Durée (min)'} » introuvable — au moins une des deux est requise pour délimiter les séances`,
+      ],
+    }
+  }
   const iSalle = mapping.colonneSalle ? cols.get(mapping.colonneSalle) : undefined
 
   // Index des personnes par id résolu (slug de nom + discriminant)
@@ -165,13 +193,52 @@ export function extraireProposes(
 
     const date = normaliserDate(texte(row[iDate]))
     const debut = normaliserHeure(texte(row[iDebut]))
-    const fin = normaliserHeure(texte(row[iFin]))
-    if (!date || !debut || !fin) {
-      warnings.push(`ligne ${r + 1} (${titre}) : date/début/fin incomplet — séance ignorée`)
+    const finRaw = iFin !== undefined ? texte(row[iFin]) : ''
+    const fin = finRaw ? normaliserHeure(finRaw) : undefined
+    // Cap durée (CD 6902+6904) : colonne Durée facultative en minutes.
+    const dureeRaw = iDuree !== undefined ? texte(row[iDuree]) : ''
+    const duree_minutes = dureeRaw ? parseIntStrict(dureeRaw) : undefined
+
+    if (!date || !debut) {
+      warnings.push(`ligne ${r + 1} (${titre}) : date/début incomplet — séance ignorée`)
+      continue
+    }
+    if (fin === undefined && duree_minutes === undefined) {
+      warnings.push(
+        `ligne ${r + 1} (${titre}) : ni Fin ni Durée renseignée — séance ignorée`,
+      )
       continue
     }
 
-    const seance: Seance = { date, debut, fin }
+    // Divergence fin ↔ durée : durée canonique (CD 6885 raison
+    // structurelle). Pas d'alarme sur écart d'une minute — le cas
+    // fréquent `18:00 → 19:00 + 60` est cohérent avec la formule
+    // exclusive `fin − debut = duree` post-#134.
+    let finCanonique: string
+    if (fin !== undefined && duree_minutes !== undefined) {
+      // Les deux présents. Vérif cohérence silencieuse : sinon la
+      // durée l'emporte, `fin` recalculée.
+      const [dh, dm] = debut.split(':').map(Number)
+      const [fh, fm] = fin.split(':').map(Number)
+      const dureeCalc = fh * 60 + fm - (dh * 60 + dm)
+      if (dureeCalc !== duree_minutes) {
+        // Recalcule fin depuis durée pour canoniser (silencieux).
+        const finMin = dh * 60 + dm + duree_minutes
+        finCanonique = `${String(Math.floor(finMin / 60) % 24).padStart(2, '0')}:${String(finMin % 60).padStart(2, '0')}`
+      } else {
+        finCanonique = fin
+      }
+    } else if (fin !== undefined) {
+      finCanonique = fin
+    } else {
+      // Seule la durée est renseignée → dériver la fin.
+      const [dh, dm] = debut.split(':').map(Number)
+      const finMin = dh * 60 + dm + (duree_minutes as number)
+      finCanonique = `${String(Math.floor(finMin / 60) % 24).padStart(2, '0')}:${String(finMin % 60).padStart(2, '0')}`
+    }
+
+    const seance: Seance = { date, debut, fin: finCanonique }
+    if (duree_minutes !== undefined) seance.duree_minutes = duree_minutes
     const salle = iSalle !== undefined ? texte(row[iSalle]) : ''
     if (salle) seance.salle_id = salle
 

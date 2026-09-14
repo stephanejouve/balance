@@ -130,4 +130,86 @@ describe('extraireProposes', () => {
       fin: '10:30',
     })
   })
+
+  // ─── Colonne Durée (cap durée CD 6902+6904) ───────────────────────────
+  it('accepte la colonne « Durée (min) » et la stocke dans duree_minutes', () => {
+    const rows = [
+      ['Morceau', 'Membres', 'Date', 'Début', 'Fin', 'Durée (min)'],
+      ['Blowin', 'karl', '2026-08-28', '09:00', '10:00', '60'],
+    ]
+    const { imposes } = extraireProposes(rows, MAPPING_PROPOSES_DEFAUT, personnes(['karl']))
+    expect(imposes[0].seances[0]).toEqual({
+      date: '2026-08-28',
+      debut: '09:00',
+      fin: '10:00',
+      duree_minutes: 60,
+    })
+  })
+
+  it('dérive fin depuis durée quand Fin est vide (seule Durée renseignée)', () => {
+    const rows = [
+      ['Morceau', 'Membres', 'Date', 'Début', 'Fin', 'Durée (min)'],
+      ['Blowin', 'karl', '2026-08-28', '09:00', '', '60'],
+    ]
+    const { imposes } = extraireProposes(rows, MAPPING_PROPOSES_DEFAUT, personnes(['karl']))
+    expect(imposes[0].seances[0].fin).toBe('10:00')
+    expect(imposes[0].seances[0].duree_minutes).toBe(60)
+  })
+
+  it('divergence fin/durée : durée l’emporte, fin recalculée silencieusement (CD 6885)', () => {
+    // `18:00 → 19:00 + 90` : la fin donnée (60 min) diverge de la durée
+    // (90). Canonique post-cap = durée. Fin réécrite en 19:30. Pas
+    // d'alarme sur divergence (CD 6885 : ne pas sonner sur chaque ligne).
+    const rows = [
+      ['Morceau', 'Membres', 'Date', 'Début', 'Fin', 'Durée (min)'],
+      ['Blowin', 'karl', '2026-08-28', '18:00', '19:00', '90'],
+    ]
+    const { imposes, warnings } = extraireProposes(
+      rows,
+      MAPPING_PROPOSES_DEFAUT,
+      personnes(['karl']),
+    )
+    expect(imposes[0].seances[0].fin).toBe('19:30')
+    expect(imposes[0].seances[0].duree_minutes).toBe(90)
+    expect(warnings.filter((w) => w.includes('divergen'))).toEqual([])
+  })
+
+  it('cohérence fin/durée : les deux préservés tels quels', () => {
+    // Cas fréquent CD 6891 : `18:00 → 19:00 + 60` cohérent naturellement
+    // avec la formule exclusive `fin − debut = duree`, aucune canonisation.
+    const rows = [
+      ['Morceau', 'Membres', 'Date', 'Début', 'Fin', 'Durée (min)'],
+      ['Blowin', 'karl', '2026-08-28', '18:00', '19:00', '60'],
+    ]
+    const { imposes } = extraireProposes(rows, MAPPING_PROPOSES_DEFAUT, personnes(['karl']))
+    expect(imposes[0].seances[0].fin).toBe('19:00')
+    expect(imposes[0].seances[0].duree_minutes).toBe(60)
+  })
+
+  it('warning si ni Fin ni Durée renseignée pour une séance', () => {
+    const rows = [
+      ['Morceau', 'Membres', 'Date', 'Début', 'Fin', 'Durée (min)'],
+      ['Blowin', 'karl', '2026-08-28', '09:00', '', ''],
+    ]
+    const { imposes, warnings } = extraireProposes(
+      rows,
+      MAPPING_PROPOSES_DEFAUT,
+      personnes(['karl']),
+    )
+    expect(imposes).toEqual([])
+    expect(warnings.some((w) => w.includes('ni Fin ni Durée'))).toBe(true)
+  })
+
+  it('rétro-compat : template sans colonne Durée fonctionne (Fin seule)', () => {
+    const rows = [
+      ['Morceau', 'Membres', 'Date', 'Début', 'Fin'],
+      ['Blowin', 'karl', '2026-08-28', '09:00', '10:00'],
+    ]
+    const { imposes } = extraireProposes(rows, MAPPING_PROPOSES_DEFAUT, personnes(['karl']))
+    expect(imposes[0].seances[0]).toEqual({
+      date: '2026-08-28',
+      debut: '09:00',
+      fin: '10:00',
+    })
+  })
 })

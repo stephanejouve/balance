@@ -209,6 +209,62 @@ describe('parserIndispoLibre', () => {
     expect(parserIndispoLibre('')).toBeNull()
     expect(parserIndispoLibre('   ')).toBeNull()
   })
+
+  // ─── Grammaire durée (cap durée CD 6902+6904) ────────────────────────────
+  // Format libre étendu : `9h + 60min`, `9h + 1h`, `9h30 + 1h30`. Le `+`
+  // désambigue le rôle des `h` (séparateur heure/minute avant, unité de
+  // durée après). Pas de colonne séparée dans le template — le format
+  // libre gère plusieurs indispos par cellule (séparateur `;`/`\n`).
+
+  it('extrait duree_minutes depuis « 9h + 60min »', () => {
+    const ind = parserIndispoLibre('9h + 60min')!
+    expect(ind.debut).toBe('09:00')
+    expect(ind.duree_minutes).toBe(60)
+    expect(ind.fin).toBeUndefined()
+  })
+
+  it('extrait duree_minutes depuis « 9h + 1h » (unité heures pleines)', () => {
+    const ind = parserIndispoLibre('9h + 1h')!
+    expect(ind.debut).toBe('09:00')
+    expect(ind.duree_minutes).toBe(60)
+  })
+
+  it('extrait duree_minutes depuis « 9h + 1h30 » (heures + minutes composées)', () => {
+    const ind = parserIndispoLibre('9h + 1h30')!
+    expect(ind.debut).toBe('09:00')
+    expect(ind.duree_minutes).toBe(90)
+  })
+
+  it('extrait duree_minutes depuis « 9h30 + 1h30 » (le premier h est séparateur, le second unité — piège CD 6904)', () => {
+    // Contre-exemple du piège : la regex ne doit PAS confondre le `h` de
+    // début (`9h30` = 09:30) avec l'unité de durée (`1h30` = 1h30min).
+    // Le `+` fait la disambiguation.
+    const ind = parserIndispoLibre('9h30 + 1h30')!
+    expect(ind.debut).toBe('09:30')
+    expect(ind.duree_minutes).toBe(90)
+  })
+
+  it('extrait duree_minutes depuis « 9h30 + 2h » (heures pleines après début non-aligné)', () => {
+    const ind = parserIndispoLibre('9h30 + 2h')!
+    expect(ind.debut).toBe('09:30')
+    expect(ind.duree_minutes).toBe(120)
+  })
+
+  it('extrait duree_minutes depuis « mardi 9h + 90 min » (jour + durée)', () => {
+    const ind = parserIndispoLibre('mardi 9h + 90 min')!
+    expect(ind.jours).toEqual(['mardi'])
+    expect(ind.debut).toBe('09:00')
+    expect(ind.duree_minutes).toBe(90)
+  })
+
+  it('grammaire plage prend priorité si les deux séparateurs présents (« 9h-10h »)', () => {
+    // Pas d'ambiguïté : `-` prime, la grammaire durée n'est même pas
+    // évaluée si la plage matche. Cohérent avec l'existant.
+    const ind = parserIndispoLibre('9h-10h')!
+    expect(ind.debut).toBe('09:00')
+    expect(ind.fin).toBe('10:00')
+    expect(ind.duree_minutes).toBeUndefined()
+  })
 })
 
 // ─── Warning « indisponibilité non interprétable » (bug smoke #1) ─────────
