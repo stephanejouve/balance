@@ -63,6 +63,9 @@ function ongletProposes(mapping: MappingProposes): SheetCell[][] {
     mapping.colonneDate,
     mapping.colonneDebut,
     mapping.colonneFin,
+    // Cap durée (CD 6902+6904) : colonne Durée facultative, l'organisateur
+    // remplit Fin OU Durée (ou les deux, cohérent = pas d'alarme).
+    ...(mapping.colonneDuree ? [mapping.colonneDuree] : []),
     ...(mapping.colonneSalle ? [mapping.colonneSalle] : []),
   ]
   return [ligneEnTete(colonnes)]
@@ -101,6 +104,14 @@ function ongletModeEmploi(): SheetCell[][] {
     [v('mercredi 09h-10h chant'), v('Jour de la semaine + plage horaire + rôle ciblé')],
     [v('mardi 14:30 - 16:00'), v('Jour et plage horaire seuls')],
     [
+      v('mardi 9h + 60min'),
+      v("Alternative : heure de début + durée (min ou h). « 9h + 1h » ou « 9h30 + 1h30 » également reconnus."),
+    ],
+    [
+      v('Écrivez « 9h-10h »'),
+      v("L'application affichera « 9h-9h59 » — c'est la même plage, la dernière minute occupée (borne fin exclusive côté saisie, inclusive à l'affichage)."),
+    ],
+    [
       v('(champ jours vide)'),
       v("L'indisponibilité s'applique à toute la session — préciser un jour pour la restreindre"),
     ],
@@ -127,6 +138,10 @@ function ongletModeEmploi(): SheetCell[][] {
       v('ISO ou format FR — les deux sont tolérés à l\'import'),
     ],
     [v('Heure : 09:00 ou 9h30'), v('HH:MM ou format libre avec « h »')],
+    [
+      v('Fin OU Durée (min)'),
+      v("Remplissez la colonne qui vous parle : Fin (10:00) ou Durée (60). Si les deux sont renseignées et cohérentes, aucune alerte. La Fin est exclusive : « 09:00 → 10:00 » = 60 minutes."),
+    ],
     [v(null), v(null)],
     [g('— Exemple concret d\'une ligne Liste —'), v(null)],
     [v('Morceau'), v('Love')],
