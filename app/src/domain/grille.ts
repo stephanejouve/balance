@@ -339,6 +339,7 @@ export interface DefautRegle {
 export type CategorieDefautGlobal =
   | 'aucune-regle-creatrice'
   | 'session-sans-jour'
+  | 'session-terminee'
 
 /**
  * Résultat de `diagnostiquerGrille`. `configurable === true` ssi le générateur
@@ -372,10 +373,40 @@ export interface DiagnosticGrille {
  *    la cause. `defauts_globaux` d'abord (raisons plus hautes que la
  *    grille), `defauts_regles` ensuite (chaque règle pathologique).
  *
+ * Le paramètre optionnel `options.maintenantIso` (`YYYY-MM-DD`) permet
+ * d'identifier le cas « session terminée » (CD msg 6839) : quand la
+ * grille est saine mais que `date_fin` est strictement antérieure à
+ * `maintenantIso`, le filtre `maintenant` de `genererCreneaux` écrase
+ * tous les créneaux — le diagnostic doit le dire au lieu de pointer
+ * vers des règles pathologiques inexistantes.
+ *
  * Fonction pure — ne mute rien. Réutilise `genererCreneaux` pour le compte
  * final (garantie que le diagnostic reste cohérent si le générateur change).
  */
-export function diagnostiquerGrille(session: Session, lieu: Lieu): DiagnosticGrille {
+export function diagnostiquerGrille(
+  session: Session,
+  lieu: Lieu,
+  options: { maintenantIso?: string } = {},
+): DiagnosticGrille {
+  // Défaut global prioritaire : session terminée (CD msg 6839). Quand
+  // `maintenantIso > session.date_fin`, l'utilisateur ne verra AUCUN
+  // créneau au présent — court-circuit AVANT d'appeler `genererCreneaux`
+  // et AVANT tout diagnostic de règle. La grille peut être parfaitement
+  // saine (ou pas), peu importe : le vrai remède est de rejouer à une
+  // date antérieure, pas de corriger la grille.
+  //
+  // Note : `nb_creneaux` est mis à 0 par convention (aucun placement
+  // possible au présent), pas le résultat brut de `genererCreneaux`
+  // sans filtre — le filtre `maintenant` est justement ce qui écrase.
+  if (options.maintenantIso && session.date_fin < options.maintenantIso) {
+    return {
+      configurable: false,
+      nb_creneaux: 0,
+      defauts_regles: [],
+      defauts_globaux: ['session-terminee'],
+    }
+  }
+
   const nb_creneaux = genererCreneaux(session, lieu).length
   if (nb_creneaux > 0) {
     return { configurable: true, nb_creneaux, defauts_regles: [], defauts_globaux: [] }
