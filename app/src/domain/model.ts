@@ -11,9 +11,14 @@ import { z } from 'zod'
  * Chaque jeu est parsable / sérialisable indépendamment.
  */
 
-/** Accepte 24:00 pour représenter la fin de journée (repris du prototype). */
-const HH_MM_RE = /^(([01]\d|2[0-3]):[0-5]\d|24:00)$/
-export const HhMm = z.string().regex(HH_MM_RE, 'attendu HH:MM (ou 24:00 pour minuit)')
+/**
+ * Format HH:MM strict (00:00 → 23:59). `24:00` n'est PLUS accepté : la fin de
+ * journée s'exprime `23:59` côté saisie utilisateur (le sélecteur horaire HTML
+ * natif n'expose pas `24:00`). La conversion vers borne exclusive interne se
+ * fait via `normaliserFinBorne` (domain/grille.ts).
+ */
+const HH_MM_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+export const HhMm = z.string().regex(HH_MM_RE, 'attendu HH:MM')
 export type HhMm = z.infer<typeof HhMm>
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/

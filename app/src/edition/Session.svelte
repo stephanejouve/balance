@@ -141,8 +141,8 @@
       Chaque règle génère des créneaux sur les jours ciblés (colonne <b>Jours</b> —
       vide = tous les jours de la session). Accepte des dates ISO (<code>2026-08-26</code>)
       ou des noms de jour FR (<code>mercredi</code>, <code>lundi</code>…).
-      « Bloque » retire les créneaux qui tombent dans la plage. Pour minuit, saisis
-      <code>24:00</code> plutôt que <code>00:00</code> (mieux compris par le solveur).
+      « Bloque » retire les créneaux qui tombent dans la plage. Pour aller jusqu'à
+      minuit, saisis <code>23:59</code> comme fin (dernière minute du jour).
     </p>
     <table>
       <thead>
