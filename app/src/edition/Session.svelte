@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { DiagnosticGrille } from '../domain/grille'
   import type { Session } from '../domain/model'
+  import InputFinBorne from './InputFinBorne.svelte'
 
   interface Props {
     session: Session
@@ -172,7 +173,13 @@
               />
             </td>
             <td><input type="time" bind:value={regle.debut} onchange={onInvalider} /></td>
-            <td><input type="time" bind:value={regle.fin} onchange={onInvalider} /></td>
+            <td>
+              <InputFinBorne
+                bind:valeur={regle.fin}
+                bind:original={regle.fin_saisie_original}
+                onchange={onInvalider}
+              />
+            </td>
             <td><input type="number" min="10" max="240" step="15" bind:value={regle.pas_minutes} onchange={onInvalider} /></td>
             <td class="center"><input type="checkbox" bind:checked={regle.bloque} onchange={onInvalider} /></td>
             <td class="center"><button class="mini" onclick={() => onSupprimerRegle(i)}>×</button></td>

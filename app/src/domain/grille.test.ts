@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { decouper, diagnostiquerGrille, genererCreneaux, joursDeSession, normaliserFinBorne } from './grille'
+import {
+  appliquerCorrectionFinSaisie,
+  corrigerSaisieFin,
+  decouper,
+  diagnostiquerGrille,
+  finInclusive,
+  genererCreneaux,
+  joursDeSession,
+  normaliserFinBorne,
+} from './grille'
 import { Lieu, Session } from './model'
 
 describe('decouper', () => {
@@ -386,6 +395,119 @@ describe('diagnostiquerGrille (issues #110 + #111)', () => {
     expect(indexes).toEqual([0, 2])
     const cats = diag.defauts_regles.map((d) => d.categorie)
     expect(cats).toEqual(['plage-vide', 'pas-trop-grand'])
+  })
+})
+
+describe('finInclusive', () => {
+  it('recule d’une minute pour une borne H:00 (pas 60)', () => {
+    expect(finInclusive('12:00')).toBe('11:59')
+    expect(finInclusive('10:00')).toBe('09:59')
+    expect(finInclusive('01:00')).toBe('00:59')
+  })
+
+  it('recule d’une minute pour une borne H:30 (pas 30)', () => {
+    expect(finInclusive('12:30')).toBe('12:29')
+    expect(finInclusive('18:30')).toBe('18:29')
+  })
+
+  it('recule d’une minute pour une borne quelconque (pas arbitraire)', () => {
+    expect(finInclusive('09:45')).toBe('09:44')
+    expect(finInclusive('10:15')).toBe('10:14')
+    expect(finInclusive('23:45')).toBe('23:44')
+  })
+
+  it('gère la borne 24:00 (fin de journée interne) → 23:59', () => {
+    expect(finInclusive('24:00')).toBe('23:59')
+  })
+
+  it('gère la borne 00:00 (fin de journée saisie) → 23:59', () => {
+    // Cas frontière : `00:00` traité comme fin-de-jour, pas comme début.
+    // Recule vers 23:59 du même jour, pas vers un négatif.
+    expect(finInclusive('00:00')).toBe('23:59')
+  })
+
+  it('compose avec normaliserFinBorne pour toute saisie utilisateur', () => {
+    // La convention Stéphane (CD 6832) veut que la saisie 12:00 soit
+    // convertie en 11:59. La double transformation
+    // `finInclusive(normaliserFinBorne(...))` doit être l'identité sur
+    // toute saisie utilisateur valide.
+    for (const saisie of ['09:00', '12:00', '18:30', '23:59', '00:00']) {
+      const affichee = finInclusive(normaliserFinBorne(saisie))
+      // Ce que l'utilisateur écrit doit correspondre à ce que l'app
+      // décide d'afficher (ou déjà écrit dans la convention Stéphane).
+      const attendu =
+        saisie === '00:00' ? '23:59' : saisie.endsWith(':59') ? saisie : finInclusive(saisie)
+      expect(affichee).toBe(attendu)
+    }
+  })
+})
+
+describe('corrigerSaisieFin', () => {
+  it('laisse la chaîne vide inchangée (saisie non encore commencée)', () => {
+    const r = corrigerSaisieFin('')
+    expect(r.valeur).toBe('')
+    expect(r.original).toBeNull()
+  })
+
+  it('laisse H:59 inchangé (borne déjà finale, pas de mention)', () => {
+    // Convention Stéphane : quand l'utilisateur écrit directement la
+    // dernière minute occupée, aucune correction n'est appliquée et
+    // aucune mention ne s'affiche.
+    expect(corrigerSaisieFin('11:59')).toEqual({ valeur: '11:59', original: null })
+    expect(corrigerSaisieFin('23:59')).toEqual({ valeur: '23:59', original: null })
+    expect(corrigerSaisieFin('00:59')).toEqual({ valeur: '00:59', original: null })
+  })
+
+  it('corrige H:00 vers (H−1):59 avec mention', () => {
+    expect(corrigerSaisieFin('12:00')).toEqual({ valeur: '11:59', original: '12:00' })
+    expect(corrigerSaisieFin('09:00')).toEqual({ valeur: '08:59', original: '09:00' })
+  })
+
+  it('corrige 00:00 vers 23:59 (fin de journée saisie) avec mention', () => {
+    expect(corrigerSaisieFin('00:00')).toEqual({ valeur: '23:59', original: '00:00' })
+  })
+
+  it('corrige toute borne non-finale H:MM vers H:(MM−1) avec mention', () => {
+    // Cas pas 30 (`H:30`) et pas quelconque : la dernière minute
+    // effectivement occupée est la minute juste avant la borne.
+    expect(corrigerSaisieFin('12:30')).toEqual({ valeur: '12:29', original: '12:30' })
+    expect(corrigerSaisieFin('18:15')).toEqual({ valeur: '18:14', original: '18:15' })
+  })
+})
+
+describe('appliquerCorrectionFinSaisie', () => {
+  it('applique la correction quand fin est H:00 et fin_saisie_original absent', () => {
+    const o: { fin?: string; fin_saisie_original?: string } = { fin: '12:00' }
+    appliquerCorrectionFinSaisie(o)
+    expect(o.fin).toBe('11:59')
+    expect(o.fin_saisie_original).toBe('12:00')
+  })
+
+  it('n’applique pas la correction si fin_saisie_original est déjà renseigné (idempotence)', () => {
+    // Un JSON produit après entrée en vigueur de la convention porte
+    // les deux champs de façon cohérente — le helper doit court-circuiter
+    // pour ne pas re-corriger `11:59 → 11:58` ni écraser `12:00` original.
+    const o: { fin?: string; fin_saisie_original?: string } = {
+      fin: '11:59',
+      fin_saisie_original: '12:00',
+    }
+    appliquerCorrectionFinSaisie(o)
+    expect(o.fin).toBe('11:59')
+    expect(o.fin_saisie_original).toBe('12:00')
+  })
+
+  it('court-circuite proprement quand fin est absent (Indispo optionnel)', () => {
+    const o: { fin?: string; fin_saisie_original?: string } = {}
+    appliquerCorrectionFinSaisie(o)
+    expect(o.fin).toBeUndefined()
+    expect(o.fin_saisie_original).toBeUndefined()
+  })
+
+  it('laisse une valeur naturelle H:59 inchangée', () => {
+    const o: { fin?: string; fin_saisie_original?: string } = { fin: '11:59' }
+    appliquerCorrectionFinSaisie(o)
+    expect(o.fin).toBe('11:59')
+    expect(o.fin_saisie_original).toBeUndefined()
   })
 })
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Lieu } from '../domain/model'
+  import InputFinBorne from './InputFinBorne.svelte'
 
   interface Props {
     lieu: Lieu
@@ -97,7 +98,11 @@
                 <div class="restr">
                   <input type="time" bind:value={res.debut} onchange={onInvalider} />
                   <span>→</span>
-                  <input type="time" bind:value={res.fin} onchange={onInvalider} />
+                  <InputFinBorne
+                    bind:valeur={res.fin}
+                    bind:original={res.fin_saisie_original}
+                    onchange={onInvalider}
+                  />
                   <select bind:value={res.contrainte} onchange={onInvalider}>
                     <option value="interdit">fermée</option>
                     <option value="acoustique_seulement">acoustique</option>

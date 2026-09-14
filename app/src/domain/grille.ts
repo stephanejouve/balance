@@ -98,6 +98,91 @@ export function normaliserFinBorne(t: HhMm): HhMm {
 }
 
 /**
+ * Transforme une borne de fin exclusive interne en la dernière unité
+ * effectivement occupée par la plage (fin inclusive affichée).
+ *
+ * Convention Stéphane (CD msg 6832) : « la dernière unité affichée
+ * appartient au créneau ». À l'écran et dans les exports, une plage
+ * `[debut, fin[` interne est présentée comme `[debut, fin−1 min]`. Deux
+ * créneaux consécutifs cessent alors de partager visuellement leur
+ * frontière — `18:00–18:30` puis `18:30–19:00` devient `18:00–18:29`
+ * puis `18:30–18:59`.
+ *
+ * Contrat :
+ *  - `'12:00'` → `'11:59'`, `'12:30'` → `'12:29'` (pas quelconque)
+ *  - `'00:00'` et `'24:00'` (borne minuit fin-de-jour, produite en
+ *    interne par `normaliserFinBorne`) → `'23:59'`
+ *
+ * Fonction pure. Symétrique inverse de `normaliserFinBorne` côté
+ * présentation : `normaliserFinBorne` pousse la borne EN AVANT pour le
+ * calcul, `finInclusive` la ramène EN ARRIÈRE pour l'affichage.
+ */
+export function finInclusive(t: HhMm): HhMm {
+  const [h, m] = t.split(':').map(Number)
+  const totalMin = h * 60 + m
+  // Cas frontière : `00:00` interne = fin de journée (avant que
+  // `normaliserFinBorne` ait poussé vers `24:00`). Reculer d'une minute
+  // depuis 0 tombe sur 23:59 du jour, pas sur -1.
+  const inc = totalMin === 0 ? 24 * 60 - 1 : totalMin - 1
+  const hh = Math.floor(inc / 60)
+  const mm = inc % 60
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`
+}
+
+/**
+ * Applique la convention Stéphane (CD msg 6798 / 6832) à une valeur
+ * saisie utilisateur : convertit une borne non finale (`H:00`, `H:30`,
+ * etc.) vers la dernière minute effectivement occupée (`(H−1):59`,
+ * `H:29`), en signalant l'écart pour que l'UI affiche une mention
+ * persistante informative.
+ *
+ * Contrat :
+ *  - Chaîne vide → renvoyée telle quelle (l'utilisateur n'a pas encore
+ *    saisi, aucune correction à porter).
+ *  - Borne déjà finale (finissant par `:59`) → renvoyée telle quelle,
+ *    `original = null` (pas de mention à afficher).
+ *  - Toute autre borne → `valeur = finInclusive(saisie)`, `original =
+ *    saisie`. L'UI persiste `original` tant que `valeur` est là ; le
+ *    jour où l'utilisateur ré-édite vers un H:59 naturel, l'original
+ *    disparaît.
+ *
+ * Fonction pure. Utilisée par les 4 inputs `<input type="time">` de la
+ * fin de plage : Session.grille[i].fin, Lieu.salles[j].restrictions[k].fin,
+ * inscriptions.imposes[l].fin, Personne.indispos[m].fin. Aussi appelée
+ * par `appliquerImportJson` pour corriger silencieusement à l'import
+ * les JSON produits avant l'entrée en vigueur de la convention.
+ */
+export function corrigerSaisieFin(saisie: string): { valeur: string; original: string | null } {
+  if (saisie === '') return { valeur: saisie, original: null }
+  if (saisie.endsWith(':59')) return { valeur: saisie, original: null }
+  return { valeur: finInclusive(saisie as HhMm), original: saisie }
+}
+
+/**
+ * Applique `corrigerSaisieFin` en place sur un objet portant un champ
+ * `fin` et son compagnon `fin_saisie_original` optionnel — utilisé à
+ * l'import JSON pour rattraper les fichiers produits avant l'entrée en
+ * vigueur de la convention Stéphane.
+ *
+ * Idempotent : si `fin_saisie_original` est déjà renseigné, le JSON
+ * vient d'une source correcte (post-PR 2a), aucune re-correction n'est
+ * appliquée. Sinon la correction s'applique et écrit les deux champs
+ * de façon cohérente.
+ *
+ * Mute l'objet en place. Utilisé sur des `$state` Svelte 5 dans
+ * `appliquerImportJson` App.svelte.
+ */
+export function appliquerCorrectionFinSaisie(
+  o: { fin?: string; fin_saisie_original?: string },
+): void {
+  if (o.fin_saisie_original !== undefined) return
+  if (o.fin === undefined || o.fin === '') return
+  const r = corrigerSaisieFin(o.fin)
+  o.fin = r.valeur === '' ? undefined : r.valeur
+  if (r.original !== null) o.fin_saisie_original = r.original
+}
+
+/**
  * Énumère les dates ISO entre `debut` et `fin` (inclus des deux côtés).
  * Utilise Date.UTC pour éviter les décalages de fuseau.
  */
