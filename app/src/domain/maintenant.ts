@@ -1,3 +1,5 @@
+import type { IsoDate } from './model'
+
 /**
  * Parse un paramètre URL `?maintenant=YYYY-MM-DD[THH:MM]` en `Date` locale.
  *
@@ -41,4 +43,48 @@ export function parseMaintenantUrlParam(raw: string | null | undefined): Date | 
     return null
   }
   return parsed
+}
+
+/**
+ * Calcule le lendemain / la veille d'une date ISO en date-only (pas d'heure).
+ * Utilise `Date.UTC` pour éviter les décalages de fuseau qui feraient sauter
+ * un jour selon la timezone locale (aligné sur `joursDeSession` grille.ts).
+ */
+function offsetIso(iso: IsoDate, deltaJours: number): IsoDate {
+  const [y, m, d] = iso.split('-').map(Number)
+  const t = Date.UTC(y, m - 1, d) + deltaJours * 86_400_000
+  const dv = new Date(t)
+  return `${dv.getUTCFullYear()}-${String(dv.getUTCMonth() + 1).padStart(2, '0')}-${String(dv.getUTCDate()).padStart(2, '0')}` as IsoDate
+}
+
+/**
+ * Détermine si une session chargée a ses dates entièrement passées et,
+ * dans ce cas, propose une date de « rejeu » qui permet de re-simuler la
+ * session complète.
+ *
+ * Contrat :
+ *  - Retourne `null` si `dateFin >= aujourdhuiIso` — la session est en
+ *    cours ou future, aucun rejeu à proposer. Le seuil inclut le jour
+ *    même de fin (une session qui finit aujourd'hui reste rejouable en
+ *    temps réel).
+ *  - Retourne `{ dateFin, dateProposee }` sinon, où `dateProposee` est la
+ *    veille de `dateDebut` — choisie pour que le filtre `maintenantKey`
+ *    de `genererCreneaux` conserve TOUS les créneaux (le premier créneau
+ *    du 1ᵉʳ jour tombe strictement après la veille à midi).
+ *
+ * Fonction pure, testable sans window ni Date.now(). Le caller est
+ * responsable de composer `aujourdhuiIso` à partir de `new Date()` réelle
+ * (pas de `maintenantFixe` — sinon proposition circulaire quand un
+ * paramètre URL est déjà présent).
+ *
+ * Cadrage CD msg 6833 (2026-09-14). Le déclenchement est calculé au
+ * chargement de la session ; le clic effectif reste à Stéphane.
+ */
+export function propositionRejouer(
+  dateDebut: IsoDate,
+  dateFin: IsoDate,
+  aujourdhuiIso: IsoDate,
+): { dateFin: IsoDate; dateProposee: IsoDate } | null {
+  if (dateFin >= aujourdhuiIso) return null
+  return { dateFin, dateProposee: offsetIso(dateDebut, -1) }
 }

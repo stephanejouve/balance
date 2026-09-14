@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseMaintenantUrlParam } from './maintenant'
+import { parseMaintenantUrlParam, propositionRejouer } from './maintenant'
 
 describe('parseMaintenantUrlParam', () => {
   it('retourne null quand le paramètre est absent', () => {
@@ -43,5 +43,38 @@ describe('parseMaintenantUrlParam', () => {
     // à vérifier pour ne pas laisser passer un « faux présent » lié à
     // une saisie utilisateur maladroite.
     expect(parseMaintenantUrlParam('2026-02-30')).toBeNull()
+  })
+})
+
+describe('propositionRejouer', () => {
+  it('retourne null si la session finit dans le futur', () => {
+    expect(propositionRejouer('2026-10-01', '2026-10-05', '2026-09-14')).toBeNull()
+  })
+
+  it('retourne null si la session finit aujourd’hui (inclus)', () => {
+    // Une session qui se termine le jour même reste rejouable en temps
+    // réel — pas de proposition.
+    expect(propositionRejouer('2026-09-10', '2026-09-14', '2026-09-14')).toBeNull()
+  })
+
+  it('propose la veille de date_debut si dateFin est passée', () => {
+    const p = propositionRejouer('2026-08-24', '2026-08-30', '2026-09-14')
+    expect(p).not.toBeNull()
+    expect(p!.dateFin).toBe('2026-08-30')
+    expect(p!.dateProposee).toBe('2026-08-23')
+  })
+
+  it('gère le passage de mois pour la veille de date_debut', () => {
+    // Session commence le 1er septembre → veille = 31 août.
+    const p = propositionRejouer('2026-09-01', '2026-09-05', '2026-10-01')
+    expect(p).not.toBeNull()
+    expect(p!.dateProposee).toBe('2026-08-31')
+  })
+
+  it('gère le passage d’année pour la veille de date_debut', () => {
+    // Session commence le 1er janvier → veille = 31 décembre de l’année N−1.
+    const p = propositionRejouer('2027-01-01', '2027-01-03', '2027-02-01')
+    expect(p).not.toBeNull()
+    expect(p!.dateProposee).toBe('2026-12-31')
   })
 })
