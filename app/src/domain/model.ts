@@ -14,12 +14,71 @@ import { z } from 'zod'
 /**
  * Format HH:MM strict (00:00 → 23:59). `24:00` n'est PLUS accepté : la fin de
  * journée s'exprime `23:59` côté saisie utilisateur (le sélecteur horaire HTML
- * natif n'expose pas `24:00`). La conversion vers borne exclusive interne se
- * fait via `normaliserFinBorne` (domain/grille.ts).
+ * natif n'expose pas `24:00`). Cap durée (CD 6876+6885) : les 3 plages brutes
+ * (Indispo, Seance, RestrictionHoraire) portent désormais `duree_minutes` en
+ * canonique — voir `preprocessDuree` ci-dessous pour la migration depuis un
+ * ancien `fin`.
  */
 const HH_MM_RE = /^([01]\d|2[0-3]):[0-5]\d$/
 export const HhMm = z.string().regex(HH_MM_RE, 'attendu HH:MM')
 export type HhMm = z.infer<typeof HhMm>
+
+/**
+ * Parse `HH:MM` en minutes depuis minuit — duplication locale du helper de
+ * `domain/grille.ts` (pas d'import cross-fichier possible : `grille.ts`
+ * importe déjà `HhMm` d'ici, cycle interdit).
+ */
+function hhMmToMinutes(t: string): number | null {
+  const m = /^(\d{2}):(\d{2})$/.exec(t)
+  if (!m) return null
+  const h = Number(m[1])
+  const mm = Number(m[2])
+  if (!Number.isFinite(h) || !Number.isFinite(mm)) return null
+  return h * 60 + mm
+}
+
+/**
+ * Traite `'00:00'` comme fin de journée = dernière minute occupée
+ * (`23:59` = 1439). Sinon retourne `hhMmToMinutes(fin)`. Alignement sur
+ * `toFinMinutes` de `grille.ts`.
+ */
+function toFinMinutesLocal(fin: string): number | null {
+  if (fin === '00:00') return 24 * 60 - 1
+  return hhMmToMinutes(fin)
+}
+
+/**
+ * Migration `fin → duree_minutes` en preprocess Zod pour les 3 plages
+ * brutes (Indispo, Seance, RestrictionHoraire) — cap durée CD 6876+6885.
+ *
+ * Formule (CD 6878, corrigée du 6876) : la borne écrite est la dernière
+ * minute INCLUSE, donc
+ *   `duree_minutes = toFinMinutes(fin) − toMinutes(debut) + 1`
+ *
+ * Ex `18:00 → 18:59` = 60 min (pas 59), `22:00 → 00:00` = 120 min,
+ * `debut === fin` = 1 min (une minute occupée, cohérent).
+ *
+ * Idempotent : si `duree_minutes` est déjà présent, on ne recalcule pas
+ * (le JSON vient d'une source post-cap, canonique = durée). Si les deux
+ * sont présents avec des valeurs divergentes, la durée l'emporte —
+ * raison structurelle (CD 6885) : durée sans convention, fin en demande
+ * une → durée plus fiable.
+ *
+ * Ne pas déclencher d'alarme sur divergence (CD 6885) : la conv exclusive
+ * `fin = debut + duree` (habitude utilisateur) donne un écart d'une
+ * minute avec le `+1` inclusive presque à chaque ligne — l'alarme sonnerait
+ * pour rien. Seuil / traitement à décider après mesure.
+ */
+function preprocessDuree(val: unknown): unknown {
+  if (typeof val !== 'object' || val === null || Array.isArray(val)) return val
+  const o = val as Record<string, unknown>
+  if (typeof o.duree_minutes === 'number') return o
+  if (typeof o.fin !== 'string' || typeof o.debut !== 'string') return o
+  const finMin = toFinMinutesLocal(o.fin)
+  const debutMin = hhMmToMinutes(o.debut)
+  if (finMin === null || debutMin === null || finMin < debutMin) return o
+  return { ...o, duree_minutes: finMin - debutMin + 1 }
+}
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 export const IsoDate = z.string().regex(ISO_DATE_RE, 'attendu AAAA-MM-JJ')
@@ -90,21 +149,29 @@ export type RolePersonne = z.infer<typeof RolePersonne>
  *                               (compatibilité prototype : match sur début)
  *  - `debut` et `fin`         → plage `[debut, fin[`
  */
-export const Indispo = z.object({
-  jours: z.array(IsoDate).default([]),
-  debut: HhMm.optional(),
-  fin: HhMm.optional(),
-  /**
-   * Valeur brute que l'utilisateur a saisie AVANT correction automatique
-   * `H:00 → (H−1):59` (convention Stéphane, CD msg 6832). Renseigné quand
-   * `fin` a été corrigée par `corrigerSaisieFin` ; sert à afficher la
-   * mention persistante « on a interprété ta saisie comme… ». Effacé
-   * dès que l'utilisateur ré-édite vers une valeur naturelle H:59.
-   */
-  fin_saisie_original: HhMm.optional(),
-  roles: z.array(Pupitre).default([]),
-  motif: z.string().default(''),
-})
+/**
+ * Cap durée (CD 6876+6885) : modèle canonique `debut + duree_minutes`,
+ * `fin` est calculée à la volée par les consommateurs via `finMinutesDe`
+ * (domain/grille.ts). Les JSON avec l'ancien `fin` sont migrés au parse
+ * via `preprocessDuree` (défini plus haut).
+ *
+ * `duree_minutes` optionnel comme `debut` et `fin` — permet une indispo
+ * journée entière (`debut` et `duree` absents), ou un match exact
+ * `debut` seul (compatibilité prototype).
+ */
+export const Indispo = z.preprocess(
+  preprocessDuree,
+  z.object({
+    jours: z.array(IsoDate).default([]),
+    debut: HhMm.optional(),
+    /** @deprecated Cap durée — conservé pour rétro-compat, non-canonique. */
+    fin: HhMm.optional(),
+    /** Durée en minutes (canonique post-cap durée). */
+    duree_minutes: z.number().int().nonnegative().optional(),
+    roles: z.array(Pupitre).default([]),
+    motif: z.string().default(''),
+  }),
+)
 export type Indispo = z.infer<typeof Indispo>
 
 // preprocess : back-compat pour les états JSON antérieurs à 2026-08-30
@@ -159,16 +226,25 @@ export type Equipement = z.infer<typeof Equipement>
  * `jours` cible des dates ISO précises. Vide = tous les jours de la session
  * (comportement historique).
  */
-export const RestrictionHoraire = z.object({
-  jours: z.array(IsoDate).default([]),
-  debut: HhMm,
-  fin: HhMm,
-  /** Voir `Indispo.fin_saisie_original`. */
-  fin_saisie_original: HhMm.optional(),
-  contrainte: z.enum(['interdit', 'acoustique_seulement', 'pas_reduit']),
-  pas_max_minutes: z.number().int().positive().optional(),
-  motif: z.string().default(''),
-})
+/**
+ * Cap durée (CD 6876+6885) — voir doc `Indispo`. `fin` reste required
+ * ici pendant la migration : le preprocess ajoute `duree_minutes` mais
+ * ne supprime pas `fin`. La PR D retirera `fin` une fois les
+ * consommateurs migrés vers `finMinutesDe`.
+ */
+export const RestrictionHoraire = z.preprocess(
+  preprocessDuree,
+  z.object({
+    jours: z.array(IsoDate).default([]),
+    debut: HhMm,
+    fin: HhMm,
+    /** Durée en minutes (canonique post-cap durée). */
+    duree_minutes: z.number().int().positive().optional(),
+    contrainte: z.enum(['interdit', 'acoustique_seulement', 'pas_reduit']),
+    pas_max_minutes: z.number().int().positive().optional(),
+    motif: z.string().default(''),
+  }),
+)
 export type RestrictionHoraire = z.infer<typeof RestrictionHoraire>
 
 export const Salle = z.object({
@@ -261,7 +337,12 @@ export const RegleCreneau = z.object({
   jours: z.array(IsoDate).default([]),
   debut: HhMm,
   fin: HhMm,
-  /** Voir `Indispo.fin_saisie_original`. */
+  /**
+   * Valeur brute que l'utilisateur a saisie AVANT correction automatique
+   * `fin → dernière minute occupée`. Sert la mention persistante « on a
+   * interprété ta saisie comme… » — PR E remplacera l'input par un
+   * `<select>` d'options valides, ce champ disparaîtra alors.
+   */
   fin_saisie_original: HhMm.optional(),
   /** Durée d'un tour, en minutes. Défaut 60. */
   pas_minutes: z.number().int().positive().default(60),
@@ -518,14 +599,19 @@ export type Groupe = z.infer<typeof Groupe>
  * `Indispo` pour chaque membre du morceau : ils sont bloqués sur cette
  * plage-là, quel que soit leur autre engagement.
  */
-export const Seance = z.object({
-  date: IsoDate,
-  debut: HhMm,
-  fin: HhMm,
-  /** Voir `Indispo.fin_saisie_original`. */
-  fin_saisie_original: HhMm.optional(),
-  salle_id: z.string().optional(),
-})
+/** Cap durée (CD 6876+6885) — voir doc `Indispo`. `fin` reste required
+ *  pendant la migration ; PR D la retirera. */
+export const Seance = z.preprocess(
+  preprocessDuree,
+  z.object({
+    date: IsoDate,
+    debut: HhMm,
+    fin: HhMm,
+    /** Durée en minutes (canonique post-cap durée). */
+    duree_minutes: z.number().int().positive().optional(),
+    salle_id: z.string().optional(),
+  }),
+)
 export type Seance = z.infer<typeof Seance>
 
 /**

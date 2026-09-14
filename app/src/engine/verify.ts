@@ -1,5 +1,5 @@
 import type { Creneau } from '../domain/grille'
-import { toFinMinutes } from '../domain/grille'
+import { finMinutesDe } from '../domain/grille'
 import type { Groupe, Inscriptions, Lieu, Personne, Pupitre, Salle, Session } from '../domain/model'
 import { libellePersonne } from '../domain/model'
 import type { RegistreContraintes } from './contraintes'
@@ -85,11 +85,14 @@ export function salleRestreinte(
 ): 'interdit' | 'acoustique_seulement' | 'pas_reduit' | null {
   for (const r of salle.restrictions) {
     if (r.jours.length > 0 && !r.jours.includes(creneau.date)) continue
-    // Convention inclusive (CD 6856) : la restriction s'applique quand
-    // le début du créneau tombe dans `[r.debut, r.fin]` inclusive.
+    // Cap durée (CD 6876+6885) : `finMinutesDe` prend `duree_minutes`
+    // en canonique (post-migration Zod), retombe sur `fin` pour les
+    // objets construits manuellement dans les tests. Convention
+    // inclusive maintenue.
     const debutCreneauMin = toMinutesLocal(creneau.debut)
     const debutResMin = toMinutesLocal(r.debut)
-    const finResMin = toFinMinutes(r.fin)
+    const finResMin = finMinutesDe(r)
+    if (finResMin === null) continue
     if (debutCreneauMin < debutResMin || debutCreneauMin > finResMin) continue
     if (r.contrainte === 'interdit') return 'interdit'
     if (r.contrainte === 'pas_reduit') {
