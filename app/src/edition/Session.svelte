@@ -75,10 +75,15 @@
         return "la session n'a aucun jour (intervalle date de début → date de fin invalide ou vide)"
       case 'aucune-regle-creatrice':
         return 'aucune règle créatrice définie (seules des règles de blocage sont présentes)'
+      case 'session-terminee':
+        // CD msg 6839 : ne pas envoyer chercher un défaut inexistant. La
+        // grille est saine, seule la date_fin passée écrase les créneaux.
+        return "la session est terminée (date de fin dans le passé) — utilisez le bandeau « Rejouer à cette date » en tête de page pour re-simuler"
       default:
         return categorie
     }
   }
+
 </script>
 
 <details class="sheet" open>

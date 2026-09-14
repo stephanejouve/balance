@@ -255,7 +255,15 @@
   // d'exclusion par un unique bandeau « session non configurable ».
   const diagnosticGrille = $derived.by(() => {
     try {
-      return diagnostiquerGrille(session, lieu)
+      // Passe l'ISO du présent effectif (fixe si `?maintenant=`, réel sinon)
+      // au diagnostic pour identifier le cas « session terminée » — CD msg
+      // 6839. Sans ce contexte, une session dont date_fin est passée mais
+      // aux règles saines apparaîtrait comme incohérente
+      // (`configurable=false, defauts=[]`).
+      const now = maintenantFixe ?? new Date()
+      const maintenantIso =
+        `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      return diagnostiquerGrille(session, lieu, { maintenantIso })
     } catch {
       return null
     }
@@ -1251,15 +1259,34 @@
             La cause « pourquoi la grille est vide » est détaillée sur l'écran
             Étape 2b Session (issue #110, via `diagnostiquerGrille`).
           -->
-          <div class="msg warn">
-            <b>Session non configurable — aucun créneau généré.</b>
-            <p class="mini-h">
-              La grille de la session ne produit aucun créneau : les {exclusions.length} musicien(s)
-              engagé(s) sont mécaniquement sans place. La cause est globale, pas
-              individuelle — voir <b>Étape 2b Session</b> ci-dessus pour le
-              détail des règles pathologiques.
-            </p>
-          </div>
+          {#if diagnosticGrille?.defauts_globaux.includes('session-terminee')}
+            <!--
+              Cas spécifique CD msg 6839 : quand la grille est saine mais que
+              date_fin est passée, ne pas envoyer chercher des règles
+              pathologiques inexistantes. Pointer vers le bandeau Rejouer
+              en tête de page (livré PR #124) qui est le vrai remède.
+            -->
+            <div class="msg warn">
+              <b>Session terminée — aucun créneau à placer aujourd'hui.</b>
+              <p class="mini-h">
+                Les dates de cette session sont dans le passé, aucun créneau ne
+                peut donc être proposé au présent. Les règles de grille sont
+                saines — c'est le calendrier qui écrase les créneaux. Utilisez
+                le bandeau <b>« Rejouer à cette date »</b> en tête de page pour
+                re-simuler la session à sa date d'origine.
+              </p>
+            </div>
+          {:else}
+            <div class="msg warn">
+              <b>Session non configurable — aucun créneau généré.</b>
+              <p class="mini-h">
+                La grille de la session ne produit aucun créneau : les {exclusions.length} musicien(s)
+                engagé(s) sont mécaniquement sans place. La cause est globale, pas
+                individuelle — voir <b>Étape 2b Session</b> ci-dessus pour le
+                détail des règles pathologiques.
+              </p>
+            </div>
+          {/if}
         {:else}
           <div class="msg warn">
             <b>Contrôle en amont : {exclusions.length} musicien(s) sans aucun créneau disponible.</b>

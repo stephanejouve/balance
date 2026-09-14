@@ -396,6 +396,86 @@ describe('diagnostiquerGrille (issues #110 + #111)', () => {
     const cats = diag.defauts_regles.map((d) => d.categorie)
     expect(cats).toEqual(['plage-vide', 'pas-trop-grand'])
   })
+
+  it('signale « session-terminée » quand date_fin < maintenantIso et court-circuite les règles', () => {
+    // CD msg 6839 (2026-09-14) : le jeu de stress importé le 14 septembre
+    // avec dates aoûtées faisait dire au diagnostic « voir Étape 2b pour
+    // règles pathologiques » alors qu'aucune ne l'était. La cause était
+    // le filtre `maintenant` du générateur, pas la grille.
+    const s = sessionOk({
+      date_debut: '2026-08-24',
+      date_fin: '2026-08-28',
+      butoir_apero_date: '2026-08-26',
+      butoir_apero_heure: '18:00',
+      butoir_vendredi_date: '2026-08-28',
+      butoir_vendredi_heure: '20:00',
+      grille: [{ debut: '09:00', fin: '12:00', pas_minutes: 60 }],
+    })
+    const diag = diagnostiquerGrille(s, lieuOk, { maintenantIso: '2026-09-14' })
+    expect(diag.configurable).toBe(false)
+    expect(diag.defauts_globaux).toEqual(['session-terminee'])
+    // Court-circuit : la grille est saine, aucune règle n'est pathologique.
+    expect(diag.defauts_regles).toEqual([])
+  })
+
+  it('n signale pas « session-terminée » quand date_fin >= maintenantIso', () => {
+    // Session en cours (date_fin === maintenantIso) : rejouable en temps
+    // réel, aucune raison de rapporter session-terminée. Comportement
+    // aligné sur `propositionRejouer`.
+    const s = sessionOk({
+      date_debut: '2026-09-10',
+      date_fin: '2026-09-14',
+      butoir_apero_date: '2026-09-12',
+      butoir_apero_heure: '18:00',
+      butoir_vendredi_date: '2026-09-14',
+      butoir_vendredi_heure: '20:00',
+      grille: [{ debut: '09:00', fin: '12:00', pas_minutes: 60 }],
+    })
+    const diag = diagnostiquerGrille(s, lieuOk, { maintenantIso: '2026-09-14' })
+    // La grille est saine, `genererCreneaux` produit des créneaux.
+    expect(diag.configurable).toBe(true)
+    expect(diag.defauts_globaux).toEqual([])
+  })
+
+  it('signale « session-terminée » avant de nommer les règles pathologiques', () => {
+    // Priorité : quand la session est terminée, l'utilisateur ne doit pas
+    // voir « votre règle #2 a un pas trop grand » — c'est un artefact du
+    // moment du regard, pas un défaut à corriger.
+    const s = sessionOk({
+      date_debut: '2026-08-24',
+      date_fin: '2026-08-28',
+      butoir_apero_date: '2026-08-26',
+      butoir_apero_heure: '18:00',
+      butoir_vendredi_date: '2026-08-28',
+      butoir_vendredi_heure: '20:00',
+      grille: [
+        { debut: '10:00', fin: '09:00', pas_minutes: 60 }, // plage-vide, ignoré
+        { debut: '09:00', fin: '12:00', pas_minutes: 60 }, // sain
+      ],
+    })
+    const diag = diagnostiquerGrille(s, lieuOk, { maintenantIso: '2026-09-14' })
+    expect(diag.defauts_globaux).toEqual(['session-terminee'])
+    expect(diag.defauts_regles).toEqual([])
+  })
+
+  it('reste rétro-compatible : sans maintenantIso le check session-terminée est court-circuité', () => {
+    // Les appels existants (tests unitaires, sanity Zod) ne passent pas
+    // maintenantIso. Le comportement doit être identique à avant la PR.
+    const s = sessionOk({
+      date_debut: '2026-08-24',
+      date_fin: '2026-08-28',
+      butoir_apero_date: '2026-08-26',
+      butoir_apero_heure: '18:00',
+      butoir_vendredi_date: '2026-08-28',
+      butoir_vendredi_heure: '20:00',
+      grille: [{ debut: '10:00', fin: '09:00', pas_minutes: 60 }],
+    })
+    const diag = diagnostiquerGrille(s, lieuOk)
+    // Sans maintenantIso, on retombe sur le diagnostic classique
+    // (règle plage-vide), pas session-terminée.
+    expect(diag.defauts_globaux).toEqual([])
+    expect(diag.defauts_regles.map((d) => d.categorie)).toEqual(['plage-vide'])
+  })
 })
 
 describe('finInclusive', () => {
