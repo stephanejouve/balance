@@ -31,11 +31,36 @@ interface Tour {
   fin: HhMm
 }
 
+/**
+ * Découpe une plage `[debut, fin]` en tours de `pasMinutes` minutes.
+ *
+ * **Convention** (CD msg 6856, arbitrée post-incident hotfix²) : `fin`
+ * est INCLUSIVE — c'est la dernière minute effectivement occupée par
+ * la plage. La saisie utilisateur porte cette convention depuis la
+ * PR 2a (mention « on a interprété 18:30 comme 18:29 »), le calcul
+ * doit la suivre.
+ *
+ * Formule : `nb = floor((fin + 1 − debut) / pas)`. L'ajout du `+1` fait
+ * la bascule inclusive → exclusive au niveau du compte. Exemples :
+ *  - `13:30 → 18:29` pas 60 : `(1109 + 1 − 810) / 60 = 5` tours
+ *  - `13:30 → 18:30` pas 60 : `(1110 + 1 − 810) / 60 = 5.01 → 5` tours
+ *  - `13:37 → 18:36` pas 60 : `(1116 + 1 − 817) / 60 = 5` tours
+ *  - `09:00 → 11:59` pas 60 : `(719 + 1 − 540) / 60 = 3` tours
+ *  - `22:00 → 23:59` pas 60 : `(1439 + 1 − 1320) / 60 = 2` tours
+ *
+ * **Invariant clé** (test verrouillé) : pour toute paire (debut, pas),
+ * le compte de créneaux est identique avant et après conversion de la
+ * saisie — `13:30 → 18:30` et `13:30 → 18:29` donnent 5 tous les deux.
+ *
+ * Les tours émis portent `debut` (inclusif) et `fin` (exclusif interne
+ * — c'est-à-dire `debut + pas`), inchangés par rapport à la version
+ * pré-hotfix³. L'affichage utilisateur passe par `finInclusive`.
+ */
 export function decouper(debut: HhMm, fin: HhMm, pasMinutes: number): Tour[] {
   const start = toMinutes(debut)
-  const end = toMinutes(fin)
-  if (end <= start || pasMinutes <= 0) return []
-  const nb = Math.floor((end - start) / pasMinutes)
+  const end = toFinMinutes(fin)
+  if (end < start || pasMinutes <= 0) return []
+  const nb = Math.floor((end + 1 - start) / pasMinutes)
   return Array.from({ length: nb }, (_, i) => ({
     debut: fromMinutes(start + i * pasMinutes),
     fin: fromMinutes(start + (i + 1) * pasMinutes),
@@ -74,27 +99,24 @@ export function resoudreJours(saisi: readonly string[], joursSession: readonly I
 }
 
 /**
- * Convertit une borne de fin saisie utilisateur en borne exclusive interne.
+ * Convertit une borne de fin en minutes en traitant `'00:00'` comme la
+ * dernière minute du jour (`23:59` = 1439 min).
  *
- * Deux notations utilisateur sont acceptées pour désigner la fin d'une plage :
- *  - `'00:00'` (minuit fin de journée, saisi par certains navigateurs)
- *  - `'H:59'` (dernière minute de l'heure H — le sélecteur horaire HTML natif
- *    n'exposant pas `24:00`, cette écriture est la seule façon pour un
- *    organisateur d'exprimer « jusqu'à H+1 » via un champ standard)
+ * Le modèle porte désormais des bornes de fin INCLUSIVES (CD msg 6856).
+ * `decouper`, `estBloqué` et les checks du diagnostic passent tous par
+ * cet helper pour rester alignés — et pour gérer proprement le cas
+ * legacy `fin: '00:00'` (fin de journée) qui ne peut pas s'exprimer en
+ * modulo positif sur le même jour.
  *
- * En interne, la convention `decouper` / `estBloqué` / `diagnostic` est
- * **fin exclusive** : la borne sortie est `(H+1):00` (ou `24:00` pour minuit).
- * Cette conversion appliquée uniformément aux 4 sites d'appel maintient la
- * symétrie règles créatrices / règles bloqueuses.
+ * Note historique : cette fonction remplace `normaliserFinBorne` qui
+ * poussait `H:59 → (H+1):00` pour compenser un `decouper` en fin
+ * exclusive. Le hotfix³ (CD 6856) fait porter la convention par
+ * `decouper` lui-même (`nb = floor((fin+1 − debut)/pas)`), rendant la
+ * compensation obsolète.
  */
-export function normaliserFinBorne(t: HhMm): HhMm {
-  if (t === '00:00') return '24:00'
-  // `H:59` → `(H+1):00`. La regex garantit un format HH:MM valide en amont.
-  if (t.endsWith(':59')) {
-    const h = Number(t.slice(0, 2))
-    return `${String(h + 1).padStart(2, '0')}:00`
-  }
-  return t
+export function toFinMinutes(fin: HhMm): number {
+  if (fin === '00:00') return 24 * 60 - 1
+  return toMinutes(fin)
 }
 
 /**
@@ -293,9 +315,8 @@ export function genererCreneaux(session: Session, lieu: Lieu, options: GenererOp
   for (const regle of reglesCreatrices) {
     const jourReglés = regle.jours.length ? resoudreJours(regle.jours, jours) : jours
     const salles = regle.salles.length ? regle.salles : sallesActives
-    const finNormale = normaliserFinBorne(regle.fin)
     for (const jour of jourReglés) {
-      for (const tour of decouper(regle.debut, finNormale, regle.pas_minutes)) {
+      for (const tour of decouper(regle.debut, regle.fin, regle.pas_minutes)) {
         emitted.push({
           id: `${jour}T${tour.debut.replace(':', '')}`,
           date: jour,
@@ -311,8 +332,12 @@ export function genererCreneaux(session: Session, lieu: Lieu, options: GenererOp
     for (const regle of reglesBloqueuses) {
       const jourReglés = regle.jours.length ? resoudreJours(regle.jours, jours) : jours
       if (!jourReglés.includes(c.date)) continue
-      const finNormale = normaliserFinBorne(regle.fin)
-      if (c.debut >= regle.debut && c.debut < finNormale) return true
+      // Convention inclusive (CD 6856) : un créneau est bloqué si son
+      // début tombe dans `[regle.debut, regle.fin]` inclusive.
+      const debutCreneauMin = toMinutes(c.debut)
+      const debutRegleMin = toMinutes(regle.debut)
+      const finRegleMin = toFinMinutes(regle.fin)
+      if (debutCreneauMin >= debutRegleMin && debutCreneauMin <= finRegleMin) return true
     }
     return false
   }
@@ -355,11 +380,11 @@ export function genererCreneaux(session: Session, lieu: Lieu, options: GenererOp
  * Sémantique par catégorie (dans l'ordre d'évaluation) :
  *  - `jours-invalides` : la règle a des jours listés qui ne matchent aucun
  *    jour de la session (ou aucun jour reconnu par `resoudreJours`).
- *  - `plage-vide` : `debut >= fin` (fin normalisée via `normaliserFinBorne` :
- *    `00:00 → 24:00`, `H:59 → (H+1):00`).
- *  - `pas-trop-grand` : `pas_minutes > (fin - debut)` — la division entière
- *    retourne 0 tour, aucun créneau émis. `pas_minutes <= 0` tombe dans le
- *    même bucket (impossible via l'UI, borne défensive).
+ *  - `plage-vide` : `fin < debut` (bornes inclusives, `toFinMinutes` gère
+ *    le cas `'00:00'` = fin de journée).
+ *  - `pas-trop-grand` : `pas_minutes > (fin + 1 - debut)` — la division
+ *    entière retourne 0 tour, aucun créneau émis. `pas_minutes <= 0` tombe
+ *    dans le même bucket (impossible via l'UI, borne défensive).
  *  - `tout-bloqué` : chaque créneau émis par la règle est capturé par une
  *    règle de blocage postérieure ou tombe au-delà du butoir maximal.
  */
@@ -502,10 +527,11 @@ export function diagnostiquerGrille(
       continue
     }
 
-    const finNormale = normaliserFinBorne(regle.fin)
+    // Convention inclusive (CD 6856) : la largeur d'une plage `[debut, fin]`
+    // vaut `fin + 1 − debut` en minutes.
     const debutMin = toMinutes(regle.debut)
-    const finMin = toMinutes(finNormale)
-    if (finMin <= debutMin) {
+    const finMin = toFinMinutes(regle.fin)
+    if (finMin < debutMin) {
       defauts_regles.push({
         regleIndex: index,
         categorie: 'plage-vide',
@@ -514,7 +540,7 @@ export function diagnostiquerGrille(
       })
       continue
     }
-    if (regle.pas_minutes <= 0 || regle.pas_minutes > finMin - debutMin) {
+    if (regle.pas_minutes <= 0 || regle.pas_minutes > finMin + 1 - debutMin) {
       defauts_regles.push({
         regleIndex: index,
         categorie: 'pas-trop-grand',
@@ -527,17 +553,19 @@ export function diagnostiquerGrille(
     // La règle émettrait des créneaux — vérifier s'ils sont TOUS effacés par
     // blocage ou butoir. Rejouer decouper + estBloqué sur chaque jour de la
     // règle, compter les survivants.
-    const tours = decouper(regle.debut, finNormale, regle.pas_minutes)
+    const tours = decouper(regle.debut, regle.fin, regle.pas_minutes)
     let survivants = 0
     for (const jour of jourReglés) {
       for (const tour of tours) {
         const cleCreneau = `${jour}T${tour.debut.replace(':', '')}`
         if (cleCreneau >= butoirKeyMax) continue
+        const tourDebutMin = toMinutes(tour.debut)
         const bloquePar = reglesBloqueuses.some((rb) => {
           const jrb = rb.jours.length ? resoudreJours(rb.jours, jours) : jours
           if (!jrb.includes(jour)) return false
-          const finRbNormale = normaliserFinBorne(rb.fin)
-          return tour.debut >= rb.debut && tour.debut < finRbNormale
+          const rbDebutMin = toMinutes(rb.debut)
+          const rbFinMin = toFinMinutes(rb.fin)
+          return tourDebutMin >= rbDebutMin && tourDebutMin <= rbFinMin
         })
         if (!bloquePar) survivants++
       }
