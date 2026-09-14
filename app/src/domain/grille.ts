@@ -132,26 +132,32 @@ export function finInclusive(t: HhMm): HhMm {
 /**
  * Applique la convention Stéphane (CD msg 6798 / 6832 / 6850) à une
  * valeur saisie utilisateur : convertit une borne qui tombe **pile sur
- * une frontière du pas** (donc exclusive) vers la dernière minute
- * effectivement occupée (`(H−1):59`, `H:29`, etc.), en signalant
- * l'écart pour que l'UI affiche une mention persistante informative.
+ * une frontière de créneau** (donc exclusive) vers la dernière minute
+ * effectivement occupée, en signalant l'écart pour que l'UI affiche
+ * une mention persistante informative.
  *
- * **Critère** (CD 6850, arbitré par Stéphane après incident PR #125) :
- * le pas décide. Une saisie est corrigée UNIQUEMENT si son total en
- * minutes est un multiple du pas — c'est-à-dire si elle coïncide avec
- * une frontière de créneau. Toute autre saisie est laissée intacte :
- * la précédente version convertissait `18:29` (déjà inclusive pour un
- * pas de 30) en `18:28` et dérivait à chaque ré-édition.
+ * **Critère** (Stéphane, relayé CD 6850 puis affiné 6853) : la frontière
+ * est calculée par rapport au DÉBUT de la plage, pas depuis minuit. Le
+ * dernier créneau d'une plage `13:30 → 18:30` pas 60 finit bien à
+ * `18:30` — c'est une frontière du 5ᵉ tour, à convertir en `18:29`,
+ * même si `18:30` en absolu n'est pas un multiple de 60.
+ *
+ * Formule : la saisie est corrigée SSI
+ * `(finMinutes − debutMinutes) % pasMinutes === 0`.
  *
  * Contrat :
- *  - Chaîne vide → renvoyée telle quelle, `original = null`.
- *  - Saisie sur frontière du pas (`totalMin % pasMinutes === 0`) →
- *    convertie via `finInclusive`, `original = saisie` (mention à
- *    afficher).
- *  - Saisie une minute avant frontière (`(totalMin+1) % pasMinutes === 0`)
- *    → déjà inclusive, laissée telle quelle, `original = null`.
- *  - Saisie qui ne tombe ni sur ni juste avant une frontière → laissée
- *    telle quelle (CD 6850 « n'invente pas de correction pour ce cas »).
+ *  - Chaîne vide, pas invalide, entrée mal formée → laissé tel quel.
+ *  - Saisie sur frontière relative au début → convertie via
+ *    `finInclusive`, `original = saisie` (mention à afficher).
+ *  - Toute autre saisie → laissée telle quelle (CD 6850 « n'invente
+ *    pas de correction pour ce cas »).
+ *
+ * Historique des critères :
+ *  1. PR #125 : `endsWith(':59')` — cassait `18:29` en `18:28` (dérive).
+ *  2. PR #128 : `totalMin % pas === 0` — ratait `13:30 → 18:30` pas 60
+ *     car `1110 % 60 = 30 ≠ 0`.
+ *  3. Cette version : critère relatif au début, correct pour toute
+ *     paire (debut, pas).
  *
  * Fonction pure. Utilisée par les 4 inputs `<input type="time">` de la
  * fin de plage (Session grille, Lieu restrictions, Imposes seances,
@@ -161,19 +167,37 @@ export function finInclusive(t: HhMm): HhMm {
 export function corrigerSaisieFin(
   saisie: string,
   pasMinutes: number,
+  debutMinutes: number,
 ): { valeur: string; original: string | null } {
   if (saisie === '') return { valeur: saisie, original: null }
   if (pasMinutes <= 0) return { valeur: saisie, original: null }
+  if (!Number.isFinite(debutMinutes)) return { valeur: saisie, original: null }
   const parts = saisie.split(':')
   if (parts.length !== 2) return { valeur: saisie, original: null }
   const h = Number(parts[0])
   const m = Number(parts[1])
   if (!Number.isFinite(h) || !Number.isFinite(m)) return { valeur: saisie, original: null }
-  const totalMin = h * 60 + m
-  if (totalMin % pasMinutes === 0) {
+  const finMin = h * 60 + m
+  // Frontière relative au début (CD 6853). Une saisie strictement
+  // antérieure au début est laissée telle quelle — le contrôle `end <=
+  // start` de `decouper` prend le relais et retourne une liste vide,
+  // ce n'est pas à la couche de conversion de trancher.
+  if (finMin <= debutMinutes) return { valeur: saisie, original: null }
+  if ((finMin - debutMinutes) % pasMinutes === 0) {
     return { valeur: finInclusive(saisie as HhMm), original: saisie }
   }
   return { valeur: saisie, original: null }
+}
+
+/** Convertit une chaîne HH:MM en total de minutes, ou `null` si invalide. */
+function parseHhMmToMinutes(s: string | undefined): number | null {
+  if (s === undefined || s === '') return null
+  const parts = s.split(':')
+  if (parts.length !== 2) return null
+  const h = Number(parts[0])
+  const m = Number(parts[1])
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null
+  return h * 60 + m
 }
 
 /**
@@ -187,11 +211,12 @@ export function corrigerSaisieFin(
  * appliquée. Sinon la correction s'applique et écrit les deux champs
  * de façon cohérente.
  *
- * `pasMinutes` est requis (CD 6850) : le critère de conversion dépend
- * du pas du contexte. Pour une règle de grille, c'est `regle.pas_minutes`
- * ; pour un contexte sans pas propre (restriction de salle, séance
- * imposée, indispo), passer `null` court-circuite la correction et
- * laisse la valeur intacte — la saisie utilisateur seule fait foi.
+ * `pasMinutes` et `debut` sont requis (CD 6850 + 6853) : le critère de
+ * conversion dépend du pas ET du début (frontière relative). Pour une
+ * règle de grille, `pasMinutes = regle.pas_minutes` et `debut = regle.debut`.
+ * Pour un contexte sans pas propre (restriction de salle, séance
+ * imposée, indispo), passer `pasMinutes = null` court-circuite la
+ * correction — la saisie utilisateur seule fait foi.
  *
  * Mute l'objet en place. Utilisé sur des `$state` Svelte 5 dans
  * `appliquerImportJson` App.svelte.
@@ -199,11 +224,14 @@ export function corrigerSaisieFin(
 export function appliquerCorrectionFinSaisie(
   o: { fin?: string; fin_saisie_original?: string },
   pasMinutes: number | null,
+  debut: string | undefined,
 ): void {
   if (o.fin_saisie_original !== undefined) return
   if (o.fin === undefined || o.fin === '') return
   if (pasMinutes === null) return
-  const r = corrigerSaisieFin(o.fin, pasMinutes)
+  const debutMin = parseHhMmToMinutes(debut)
+  if (debutMin === null) return
+  const r = corrigerSaisieFin(o.fin, pasMinutes, debutMin)
   o.fin = r.valeur === '' ? undefined : r.valeur
   if (r.original !== null) o.fin_saisie_original = r.original
 }
