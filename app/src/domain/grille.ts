@@ -120,6 +120,40 @@ export function toFinMinutes(fin: HhMm): number {
 }
 
 /**
+ * Reconstruit la borne de fin d'une plage `{ debut, duree_minutes?, fin? }`
+ * en minutes inclusives, ou renvoie `null` si aucune borne calculable.
+ *
+ * Cap durée (CD 6876+6885) : les 3 plages brutes (Indispo, Seance,
+ * RestrictionHoraire) portent désormais `duree_minutes` en canonique.
+ * Ce helper est le point d'entrée unique pour toute comparaison
+ * temporelle côté consommateurs (`estBloqué`, `salleRestreinte`,
+ * `indispoBloque`, etc.).
+ *
+ * Priorité :
+ *  1. `duree_minutes` présent + `debut` présent → `toMinutes(debut) + duree − 1`
+ *     (borne inclusive du dernier moment occupé).
+ *  2. Sinon `fin` présent → `toFinMinutes(fin)` (rétro-compat JSON legacy).
+ *  3. Sinon `null` (indispo journée entière ou match exact `debut` seul).
+ *
+ * Convention inclusive maintenue (CD 6856) : `duree = 60` sur `debut =
+ * 18:00` désigne les 60 minutes 18:00..18:59, donc `finMin = 18*60 + 60 −
+ * 1 = 1139` (= `18:59`).
+ */
+export function finMinutesDe(o: {
+  debut?: string
+  duree_minutes?: number
+  fin?: string
+}): number | null {
+  if (typeof o.duree_minutes === 'number' && typeof o.debut === 'string') {
+    return toMinutes(o.debut as HhMm) + o.duree_minutes - 1
+  }
+  if (typeof o.fin === 'string' && o.fin.length > 0) {
+    return toFinMinutes(o.fin as HhMm)
+  }
+  return null
+}
+
+/**
  * Transforme une borne de fin exclusive interne en la dernière unité
  * effectivement occupée par la plage (fin inclusive affichée).
  *
