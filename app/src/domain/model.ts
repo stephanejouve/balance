@@ -49,25 +49,28 @@ function toFinMinutesLocal(fin: string): number | null {
 
 /**
  * Migration `fin → duree_minutes` en preprocess Zod pour les 3 plages
- * brutes (Indispo, Seance, RestrictionHoraire) — cap durée CD 6876+6885.
+ * brutes (Indispo, Seance, RestrictionHoraire) — cap durée CD 6876+6891.
  *
- * Formule (CD 6878, corrigée du 6876) : la borne écrite est la dernière
- * minute INCLUSE, donc
- *   `duree_minutes = toFinMinutes(fin) − toMinutes(debut) + 1`
+ * **Formule** (CD 6891) : la fin d'une indisponibilité a TOUJOURS été
+ * traitée en convention EXCLUSIVE par `indispoBloque` (`creneau.debut <
+ * ind.fin`). Ce n'est pas une convention héritée mais la sémantique du
+ * champ depuis le début. Migration :
  *
- * Ex `18:00 → 18:59` = 60 min (pas 59), `22:00 → 00:00` = 120 min,
- * `debut === fin` = 1 min (une minute occupée, cohérent).
+ *   `duree_minutes = toFinMinutes(fin) − toMinutes(debut)`
+ *
+ * Ex `18:00 → 19:00` = 60 min, `22:00 → 00:00` = 119 min (car
+ * `toFinMinutes('00:00') = 1439`), `debut === fin` = 0 min (plage vide,
+ * cohérent).
  *
  * Idempotent : si `duree_minutes` est déjà présent, on ne recalcule pas
- * (le JSON vient d'une source post-cap, canonique = durée). Si les deux
- * sont présents avec des valeurs divergentes, la durée l'emporte —
- * raison structurelle (CD 6885) : durée sans convention, fin en demande
- * une → durée plus fiable.
+ * — canonique post-cap = durée (CD 6885).
  *
- * Ne pas déclencher d'alarme sur divergence (CD 6885) : la conv exclusive
- * `fin = debut + duree` (habitude utilisateur) donne un écart d'une
- * minute avec le `+1` inclusive presque à chaque ligne — l'alarme sonnerait
- * pour rien. Seuil / traitement à décider après mesure.
+ * Ne PAS confondre avec la convention Stéphane INCLUSIVE de la grille
+ * (`RegleCreneau` post PR #130) : les 3 plages brutes ont toujours été
+ * exclusives, et c'est justement pour supprimer cette double convention
+ * qu'on passe à la durée (CD 6891 : « les deux coexistent sans se
+ * contredire : la grille porte une fin inclusive depuis aujourd'hui,
+ * les indisponibilités une fin exclusive depuis toujours »).
  */
 function preprocessDuree(val: unknown): unknown {
   if (typeof val !== 'object' || val === null || Array.isArray(val)) return val
@@ -77,7 +80,7 @@ function preprocessDuree(val: unknown): unknown {
   const finMin = toFinMinutesLocal(o.fin)
   const debutMin = hhMmToMinutes(o.debut)
   if (finMin === null || debutMin === null || finMin < debutMin) return o
-  return { ...o, duree_minutes: finMin - debutMin + 1 }
+  return { ...o, duree_minutes: finMin - debutMin }
 }
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -239,7 +242,7 @@ export const RestrictionHoraire = z.preprocess(
     debut: HhMm,
     fin: HhMm,
     /** Durée en minutes (canonique post-cap durée). */
-    duree_minutes: z.number().int().positive().optional(),
+    duree_minutes: z.number().int().nonnegative().optional(),
     contrainte: z.enum(['interdit', 'acoustique_seulement', 'pas_reduit']),
     pas_max_minutes: z.number().int().positive().optional(),
     motif: z.string().default(''),
@@ -608,7 +611,7 @@ export const Seance = z.preprocess(
     debut: HhMm,
     fin: HhMm,
     /** Durée en minutes (canonique post-cap durée). */
-    duree_minutes: z.number().int().positive().optional(),
+    duree_minutes: z.number().int().nonnegative().optional(),
     salle_id: z.string().optional(),
   }),
 )

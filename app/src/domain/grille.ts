@@ -121,23 +121,24 @@ export function toFinMinutes(fin: HhMm): number {
 
 /**
  * Reconstruit la borne de fin d'une plage `{ debut, duree_minutes?, fin? }`
- * en minutes inclusives, ou renvoie `null` si aucune borne calculable.
+ * en minutes **inclusives** (dernière minute occupée), ou renvoie
+ * `null` si aucune borne calculable.
  *
- * Cap durée (CD 6876+6885) : les 3 plages brutes (Indispo, Seance,
- * RestrictionHoraire) portent désormais `duree_minutes` en canonique.
- * Ce helper est le point d'entrée unique pour toute comparaison
- * temporelle côté consommateurs (`estBloqué`, `salleRestreinte`,
- * `indispoBloque`, etc.).
+ * Cap durée (CD 6876+6891) : les 3 plages brutes (Indispo, Seance,
+ * RestrictionHoraire) portent désormais `duree_minutes` en canonique,
+ * **convention EXCLUSIVE** (fin d'indispo depuis toujours) — le champ
+ * `duree` désigne le nombre de minutes occupées, plage `[debut, debut +
+ * duree[` exclusive côté sémantique. Ce helper retourne l'index de la
+ * dernière minute effectivement occupée pour un usage direct par les
+ * consommateurs `estBloqué`, `salleRestreinte`, `indispoBloque`.
  *
  * Priorité :
  *  1. `duree_minutes` présent + `debut` présent → `toMinutes(debut) + duree − 1`
- *     (borne inclusive du dernier moment occupé).
- *  2. Sinon `fin` présent → `toFinMinutes(fin)` (rétro-compat JSON legacy).
- *  3. Sinon `null` (indispo journée entière ou match exact `debut` seul).
- *
- * Convention inclusive maintenue (CD 6856) : `duree = 60` sur `debut =
- * 18:00` désigne les 60 minutes 18:00..18:59, donc `finMin = 18*60 + 60 −
- * 1 = 1139` (= `18:59`).
+ *     (dernier moment occupé — `duree=0` retourne `debut - 1`, plage vide).
+ *  2. Sinon `fin` présent (JSON legacy sans passer par preprocess) →
+ *     convention exclusive `toMinutes(fin) − 1`, sauf `'00:00'` traité
+ *     comme fin de journée = 1439 (inclusive).
+ *  3. Sinon `null`.
  */
 export function finMinutesDe(o: {
   debut?: string
@@ -148,7 +149,10 @@ export function finMinutesDe(o: {
     return toMinutes(o.debut as HhMm) + o.duree_minutes - 1
   }
   if (typeof o.fin === 'string' && o.fin.length > 0) {
-    return toFinMinutes(o.fin as HhMm)
+    // `'00:00'` = fin de journée inclusive (23:59 = 1439).
+    if (o.fin === '00:00') return 24 * 60 - 1
+    // Autres : convention exclusive legacy → dernière minute occupée = fin − 1.
+    return toMinutes(o.fin as HhMm) - 1
   }
   return null
 }
