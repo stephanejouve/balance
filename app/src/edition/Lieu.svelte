@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Lieu } from '../domain/model'
+  import InputDuree from './InputDuree.svelte'
 
   interface Props {
     lieu: Lieu
@@ -96,8 +97,13 @@
               {#each salle.restrictions as res, ri}
                 <div class="restr">
                   <input type="time" bind:value={res.debut} onchange={onInvalider} />
-                  <span>→</span>
-                  <input type="time" bind:value={res.fin} onchange={onInvalider} />
+                  <span>+</span>
+                  <InputDuree
+                    debut={res.debut}
+                    bind:duree_minutes={res.duree_minutes}
+                    bind:fin={res.fin}
+                    onchange={onInvalider}
+                  />
                   <select bind:value={res.contrainte} onchange={onInvalider}>
                     <option value="interdit">fermée</option>
                     <option value="acoustique_seulement">acoustique</option>
