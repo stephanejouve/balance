@@ -7,6 +7,7 @@ import {
   finInclusive,
   genererCreneaux,
   joursDeSession,
+  parseDureeSaisie,
   toFinMinutes,
 } from './grille'
 import { Lieu, Session } from './model'
@@ -831,5 +832,61 @@ describe('genererCreneaux — démo Session 5 nocturne (#82 CD 6790)', () => {
     // Créatrice 20:00→23:59 pas 60 = 4 tours (20, 21, 22, 23). Bloqueuse
     // 22:00→23:59 retire 22 et 23. Reste 20 et 21.
     expect(c.map((x) => x.debut).sort()).toEqual(['20:00', '21:00'])
+  })
+})
+
+describe('parseDureeSaisie — accepte minutes/heures/mixte (CD 6950)', () => {
+  it('minutes brutes : « 120 » → 120', () => {
+    expect(parseDureeSaisie('120')).toBe(120)
+    expect(parseDureeSaisie('90')).toBe(90)
+    expect(parseDureeSaisie('1')).toBe(1)
+  })
+
+  it('heures rondes : « 2h » → 120, « 1h » → 60', () => {
+    expect(parseDureeSaisie('2h')).toBe(120)
+    expect(parseDureeSaisie('1h')).toBe(60)
+    expect(parseDureeSaisie('3h')).toBe(180)
+  })
+
+  it('heures + minutes : « 1h30 » → 90, « 2h15 » → 135', () => {
+    expect(parseDureeSaisie('1h30')).toBe(90)
+    expect(parseDureeSaisie('2h15')).toBe(135)
+    expect(parseDureeSaisie('0h45')).toBe(45)
+  })
+
+  it('unité min explicite : « 90 min » → 90', () => {
+    expect(parseDureeSaisie('90 min')).toBe(90)
+    expect(parseDureeSaisie('120min')).toBe(120)
+  })
+
+  it('tolère les espaces autour et la casse', () => {
+    expect(parseDureeSaisie('  2h  ')).toBe(120)
+    expect(parseDureeSaisie('2H')).toBe(120)
+    expect(parseDureeSaisie('1H30')).toBe(90)
+  })
+
+  it('renvoie undefined sur saisie vide', () => {
+    expect(parseDureeSaisie('')).toBeUndefined()
+    expect(parseDureeSaisie('   ')).toBeUndefined()
+  })
+
+  it('renvoie undefined sur format non reconnu — ne devine pas', () => {
+    // Le caller décide (input reste tel quel côté user, à corriger).
+    expect(parseDureeSaisie('abc')).toBeUndefined()
+    expect(parseDureeSaisie('2xyz')).toBeUndefined()
+    expect(parseDureeSaisie('h30')).toBeUndefined()
+    expect(parseDureeSaisie('1:30')).toBeUndefined()
+  })
+
+  it('rejette « 1h75 » (minutes > 60 dans le suffixe heures)', () => {
+    // « 1h75 » n'a pas de sens en durée mixte. Le caller doit refuser
+    // plutôt que d'interpréter comme 1h + 75min = 135.
+    expect(parseDureeSaisie('1h75')).toBeUndefined()
+  })
+
+  it('cas frontière : « 0 » = 0 min (plage vide), « 0h » = 0', () => {
+    // Cohérent avec la sémantique preprocess Zod : `debut === fin` = 0.
+    expect(parseDureeSaisie('0')).toBe(0)
+    expect(parseDureeSaisie('0h')).toBe(0)
   })
 })

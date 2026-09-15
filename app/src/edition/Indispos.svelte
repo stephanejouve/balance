@@ -61,7 +61,7 @@
               bind:duree_minutes={ind.duree_minutes}
               bind:fin={ind.fin}
               onchange={onInvalider}
-              placeholder="durée min (vide = match exact)"
+              placeholder="durée — 2h, 90, 1h30 (vide = créneau démarrant pile à l'heure)"
             />
             <input
               value={ind.roles.join(', ')}

@@ -1,13 +1,18 @@
 <script lang="ts">
   /**
    * Input pour saisir la durée d'une plage (Indispo / RestrictionHoraire /
-   * Seance) — cap durée (CD 6876+6885+6892).
+   * Seance) — cap durée (CD 6876+6885+6892+6950).
    *
-   * L'utilisateur saisit la **durée en minutes** directement (une durée n'a
-   * pas de convention, contrairement à la fin qui peut être inclusive ou
-   * exclusive). Le composant affiche à côté un label dérivé « jusqu'à
-   * HH:MM » avec la borne **inclusive** (dernière minute occupée) —
-   * cohérent avec l'affichage des créneaux post-PR 2b.
+   * L'utilisateur saisit une **durée** en trois formes acceptées
+   * (CD 6950 relayant Stéphane) : `120` (minutes brutes), `2h` (heures
+   * rondes), `1h30` (heures + minutes). Une durée d'indispo se dit
+   * naturellement en heures — forcer les minutes serait une conversion
+   * mentale à chaque saisie. La normalisation vers `duree_minutes` est
+   * transparente en interne.
+   *
+   * Le composant affiche à côté un label dérivé « jusqu'à HH:MM » avec
+   * la borne **inclusive** (dernière minute occupée) — cohérent avec
+   * l'affichage des créneaux post-PR 2b.
    *
    * Écriture bind côté modèle :
    *  - `duree_minutes` (canonique post-cap)
@@ -40,13 +45,34 @@
     placeholder?: string
   }
 
+  import { parseDureeSaisie } from '../domain/grille'
+
   let {
     debut,
     duree_minutes = $bindable(),
     fin = $bindable(),
     onchange,
-    placeholder = 'durée (min)',
+    placeholder = 'durée — 2h, 90, 1h30',
   }: Props = $props()
+
+  /**
+   * Affichage textuel de `duree_minutes` — préserve la forme naturelle :
+   * une durée ronde s'affiche en heures (`2h`), une durée avec minutes
+   * en forme composée (`1h30`), une durée pas ronde en minutes (`90`).
+   * Toujours ré-évalué depuis `duree_minutes` pour rester en phase avec
+   * les changements externes (chargement JSON, `$effect` du parent).
+   */
+  const affichageDuree = $derived.by(() => {
+    if (duree_minutes === undefined) return ''
+    if (duree_minutes === 0) return '0'
+    if (duree_minutes % 60 === 0) return `${duree_minutes / 60}h`
+    if (duree_minutes > 60) {
+      const h = Math.floor(duree_minutes / 60)
+      const m = duree_minutes % 60
+      return `${h}h${String(m).padStart(2, '0')}`
+    }
+    return String(duree_minutes)
+  })
 
   /** `HH:MM` → total minutes, ou `null` si invalide. */
   function toMin(t: string | undefined): number | null {
@@ -101,46 +127,39 @@
 
   function auChangement(e: Event) {
     const raw = (e.currentTarget as HTMLInputElement).value
-    if (raw === '') {
+    if (raw.trim() === '') {
       // Effacement de la durée : on repasse en « durée non renseignée ».
       // `fin` est laissé tel quel — c'est un champ required dans certains
       // schémas (Seance, RestrictionHoraire) et le vider casserait Zod.
-      // L'utilisateur qui vide le champ durée retombe sur la sémantique
-      // « fin seule », comportement pré-cap.
+      // Pour Indispos : sémantique « match exact du début » (créneau
+      // démarrant pile à l'heure `debut`), comportement pré-cap.
       duree_minutes = undefined
       onchange()
       return
     }
-    const n = Number(raw)
-    if (!Number.isFinite(n) || n < 0) {
-      // Entrée invalide — on ignore (le champ HTML type=number filtre déjà).
+    const parsed = parseDureeSaisie(raw)
+    if (parsed === undefined) {
+      // Format inconnu (`abc`, `2xyz`, `1h75`…) — on n'écrit pas dans
+      // le modèle, l'input reste tel quel côté utilisateur (il verra
+      // sa saisie brute, à corriger). `$effect` ne firera pas puisque
+      // `duree_minutes` n'a pas changé.
       onchange()
       return
     }
-    duree_minutes = Math.floor(n)
-    // Dérive `fin` en borne EXCLUSIVE (`debut + duree`). Convention
-    // conservée pour rétro-compat consommateurs (`indispoBloque`,
-    // `salleRestreinte` utilisent `finMinutesDe` qui prend `duree` en
-    // priorité, mais le JSON exporté garde les deux cohérents).
-    const debutMin = toMin(debut)
-    if (debutMin !== null) {
-      fin = fromMin(debutMin + duree_minutes)
-    }
-    // Si `debut` absent, on ne peut pas dériver `fin` — on laisse tel
-    // quel. L'invariant Zod required est préservé côté schémas concernés.
+    duree_minutes = parsed
+    // Fin dérivée écrite par le `$effect` réactif ci-dessus (déclenché
+    // par la mutation de `duree_minutes`). Pas besoin de l'écrire ici.
     onchange()
   }
 </script>
 
 <input
-  type="number"
-  min="0"
-  max="1440"
-  step="15"
-  value={duree_minutes ?? ''}
+  type="text"
+  inputmode="numeric"
+  value={affichageDuree}
   oninput={auChangement}
   {placeholder}
-  style="width:90px"
+  style="width:130px"
 />
 {#if labelFinInclusive}
   <span class="fin-derivee">{labelFinInclusive}</span>
