@@ -78,6 +78,27 @@
     return `jusqu'à ${fromMin(debutMin + duree_minutes - 1)}`
   })
 
+  /**
+   * Fin stale — CD msg 6936 : quand l'utilisateur saisit une durée
+   * puis modifie le début, la `fin` écrite en stockage restait à sa
+   * valeur d'origine. Rien ne la lisait (les consommateurs passent par
+   * `finMinutesDe` qui prend `duree_minutes` en priorité), MAIS la
+   * valeur partait dans les exports et les états JSON — quelqu'un qui
+   * reprendrait un état verrait une fin incohérente. « Une donnée qui
+   * ment en attendant que quelqu'un s'en serve. »
+   *
+   * `$effect` recalcule `fin` à chaque changement de `debut` ou de
+   * `duree_minutes`. Idempotent : si les 2 termes n'ont pas bougé,
+   * l'écriture est un no-op (même valeur).
+   */
+  $effect(() => {
+    if (duree_minutes === undefined) return
+    const debutMin = toMin(debut)
+    if (debutMin === null) return
+    const finDerivee = fromMin(debutMin + duree_minutes)
+    if (fin !== finDerivee) fin = finDerivee
+  })
+
   function auChangement(e: Event) {
     const raw = (e.currentTarget as HTMLInputElement).value
     if (raw === '') {

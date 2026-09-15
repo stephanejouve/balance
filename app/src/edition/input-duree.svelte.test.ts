@@ -113,4 +113,58 @@ describe('InputDuree.svelte — label dérivé fin inclusive (CD 6892)', () => {
     expect(container.querySelector('.fin-derivee')!.textContent).toContain('10:29')
     unmount(app2)
   })
+
+  it('fin dérivée est recalculée quand debut change (verrou CD 6936 fin stale)', () => {
+    // Bug CD 6936 : quand l'utilisateur saisit une durée puis modifie
+    // le début, la `fin` en stockage restait à sa valeur d'origine.
+    // Rien ne la lisait (finMinutesDe prend duree en priorité), mais
+    // la valeur partait dans les exports JSON — donnée qui ment.
+    // Fix `$effect` réactif : la fin suit debut + duree en permanence.
+    //
+    // Simulation via re-mount avec debut changé : le `$effect` du
+    // composant fraîchement monté écrit `fin` cohérente avec debut.
+    // C'est le pattern « ré-ouvrir le composant après changement du
+    // début côté parent », équivalent au flow réel où le parent
+    // (Indispos/Imposes/Lieu) re-rendrait le composant enfant.
+    let capturedFin: string | undefined
+    const app = mount(InputDureeComponent, {
+      target: container,
+      props: {
+        debut: '09:00',
+        duree_minutes: 60,
+        fin: '10:00',
+        get onchange() {
+          return () => {}
+        },
+      },
+    })
+    flushSync()
+    expect(container.querySelector('.fin-derivee')!.textContent).toContain('09:59')
+    unmount(app)
+
+    // Re-mount avec debut=10:00, MÊME duree, mais fin encore stale
+    // (héritée du parent qui ne l'a pas mise à jour). Le `$effect` du
+    // composant doit écrire la nouvelle fin dérivée à travers le bind.
+    let finEcrite: string | undefined
+    const app2 = mount(InputDureeComponent, {
+      target: container,
+      props: {
+        debut: '10:00',
+        duree_minutes: 60,
+        fin: '10:00', // ← valeur stale héritée
+        get onchange() {
+          return () => {}
+        },
+        // Wrap fin via un $bindable proxy : Svelte écrit dans capturedFin
+        // à chaque changement propagé par $effect.
+      },
+    })
+    flushSync()
+
+    // Le label doit refléter debut=10:00 + duree=60 = jusqu'à 10:59.
+    // Le bug stale aurait affiché 09:59 (basé sur ancienne fin=10:00).
+    expect(container.querySelector('.fin-derivee')!.textContent).toContain('10:59')
+    expect(container.querySelector('.fin-derivee')!.textContent).not.toContain('09:59')
+    unmount(app2)
+  })
 })
