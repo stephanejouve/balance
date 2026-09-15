@@ -1122,15 +1122,6 @@
     {personnesParId}
   />
 
-  <IndisposEdit
-    {personnesAvecIndispo}
-    {personnesSansIndispo}
-    {nbIndispoTotal}
-    onAjouterIndispo={ajouterIndispo}
-    onSupprimerIndispo={supprimerIndispo}
-    onInvalider={marquerObsolete}
-  />
-
   <ImposesEdit
     bind:inscriptions
     {personnesParId}
@@ -1138,6 +1129,15 @@
     onSupprimerImpose={supprimerImpose}
     onAjouterSeance={ajouterSeance}
     onSupprimerSeance={supprimerSeance}
+    onInvalider={marquerObsolete}
+  />
+
+  <IndisposEdit
+    {personnesAvecIndispo}
+    {personnesSansIndispo}
+    {nbIndispoTotal}
+    onAjouterIndispo={ajouterIndispo}
+    onSupprimerIndispo={supprimerIndispo}
     onInvalider={marquerObsolete}
   />
 
