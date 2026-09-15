@@ -64,7 +64,7 @@
 
 <details class="sheet pool" {open}>
   <summary>
-    <p class="eyebrow">Étape 1B · Pool d'arbitrage</p>
+    <p class="eyebrow">Panneau · Pool d'arbitrage</p>
     <h2>Mouvements pertinents ({propositions.length})</h2>
     <p class="hint">
       Vue calculée à partir des inscriptions et des refus persistants —
