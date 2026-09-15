@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Inscriptions, Personne } from '../domain/model'
   import { libellePersonne } from '../domain/model'
+  import InputDuree from './InputDuree.svelte'
 
   interface Props {
     inscriptions: Inscriptions
@@ -54,7 +55,7 @@
             <tr>
               <th style="width:140px">Date</th>
               <th style="width:110px">Début</th>
-              <th style="width:110px">Fin</th>
+              <th style="width:180px">Durée (min)</th>
               <th>Salle (info)</th>
               <th style="width:40px"></th>
             </tr>
@@ -64,7 +65,14 @@
               <tr>
                 <td><input type="date" bind:value={s.date} onchange={onInvalider} /></td>
                 <td><input type="time" bind:value={s.debut} onchange={onInvalider} /></td>
-                <td><input type="time" bind:value={s.fin} onchange={onInvalider} /></td>
+                <td>
+                  <InputDuree
+                    debut={s.debut}
+                    bind:duree_minutes={s.duree_minutes}
+                    bind:fin={s.fin}
+                    onchange={onInvalider}
+                  />
+                </td>
                 <td><input bind:value={s.salle_id} onchange={onInvalider} placeholder="XVème, Le Garage…" /></td>
                 <td class="center">
                   <button class="mini" onclick={() => onSupprimerSeance(i, si)}>×</button>

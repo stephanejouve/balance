@@ -28,6 +28,7 @@
   import type { AlerteIdentite } from '../domain/identites'
   import type { AlerteCoherence } from '../domain/coherence'
   import { grouperAlertesCoherence } from '../domain/coherence'
+  import { finInclusive } from '../domain/grille'
   import {
     filtrerPersonnes,
     grouperAlertes,
@@ -93,7 +94,7 @@
       case 'indispo_percutee':
         return {
           titre: `À arbitrer — « ${a.personne} » indisponible sur la séance « ${a.morceau} »`,
-          detail: `Séance figée le ${a.date} de ${a.debut} à ${a.fin}, mais indisponibilité déclarée${a.motif_indispo ? ` (${a.motif_indispo})` : ''}. Le solveur ne peut pas déplacer une séance figée : il faut lever l'indisponibilité, retirer la personne du morceau, ou déplacer la séance manuellement avant validation.`,
+          detail: `Séance figée le ${a.date} de ${a.debut} à ${finInclusive(a.fin)}, mais indisponibilité déclarée${a.motif_indispo ? ` (${a.motif_indispo})` : ''}. Le solveur ne peut pas déplacer une séance figée : il faut lever l'indisponibilité, retirer la personne du morceau, ou déplacer la séance manuellement avant validation.`,
         }
       case 'pupitre_contredit':
         return {
