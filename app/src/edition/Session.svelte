@@ -1,7 +1,6 @@
 <script lang="ts">
-  import type { DiagnosticGrille } from '../domain/grille'
+  import { optionsFinGrille, type DiagnosticGrille } from '../domain/grille'
   import type { Session } from '../domain/model'
-  import InputFinBorne from './InputFinBorne.svelte'
 
   interface Props {
     session: Session
@@ -147,8 +146,9 @@
       Chaque règle génère des créneaux sur les jours ciblés (colonne <b>Jours</b> —
       vide = tous les jours de la session). Accepte des dates ISO (<code>2026-08-26</code>)
       ou des noms de jour FR (<code>mercredi</code>, <code>lundi</code>…).
-      « Bloque » retire les créneaux qui tombent dans la plage. Pour aller jusqu'à
-      minuit, saisis <code>23:59</code> comme fin (dernière minute du jour).
+      « Bloque » retire les créneaux qui tombent dans la plage. La <b>Fin</b> se
+      choisit dans une liste alignée sur le <b>Pas</b> depuis le <b>Début</b> — la
+      dernière option va jusqu'à <code>23:59</code> (fin de journée).
     </p>
     <table>
       <thead>
@@ -163,6 +163,8 @@
       </thead>
       <tbody>
         {#each session.grille as regle, i}
+          {@const options = optionsFinGrille(regle.debut, regle.pas_minutes)}
+          {@const finHorsAlignement = regle.fin && !options.includes(regle.fin) ? regle.fin : null}
           <tr>
             <td>
               <input
@@ -179,13 +181,14 @@
             </td>
             <td><input type="time" bind:value={regle.debut} onchange={onInvalider} /></td>
             <td>
-              <InputFinBorne
-                bind:valeur={regle.fin}
-                bind:original={regle.fin_saisie_original}
-                pasMinutes={regle.pas_minutes}
-                debut={regle.debut}
-                onchange={onInvalider}
-              />
+              <select bind:value={regle.fin} onchange={onInvalider}>
+                {#if finHorsAlignement}
+                  <option value={finHorsAlignement}>{finHorsAlignement} · hors alignement</option>
+                {/if}
+                {#each options as fin}
+                  <option value={fin}>{fin}</option>
+                {/each}
+              </select>
             </td>
             <td><input type="number" min="10" max="240" step="15" bind:value={regle.pas_minutes} onchange={onInvalider} /></td>
             <td class="center"><input type="checkbox" bind:checked={regle.bloque} onchange={onInvalider} /></td>
