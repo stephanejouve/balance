@@ -148,7 +148,7 @@
       ou des noms de jour FR (<code>mercredi</code>, <code>lundi</code>…).
       « Bloque » retire les créneaux qui tombent dans la plage. La <b>Fin</b> se
       choisit dans une liste alignée sur le <b>Pas</b> depuis le <b>Début</b> — la
-      dernière option va jusqu'à <code>23:59</code> (fin de journée).
+      liste s'arrête à la dernière fin possible dans la journée.
     </p>
     <table>
       <thead>
