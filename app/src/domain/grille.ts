@@ -249,6 +249,46 @@ export function corrigerSaisieFin(
   return { valeur: saisie, original: null }
 }
 
+/**
+ * Parse une saisie utilisateur de durée en total de minutes. Accepte
+ * trois formes (CD msg 6950 relayant Stéphane) :
+ *  - `120`, `90` (minutes brutes, forme la plus fréquente à la saisie)
+ *  - `2h`, `1h` (heures rondes, unité `h` capturée)
+ *  - `1h30`, `2h15` (heures + minutes, format naturel « je viens 1h30 »)
+ *
+ * Retourne `undefined` si la saisie est vide ou dans un format non
+ * reconnu — le caller décide ce que fait un champ vide (Indispo : match
+ * exact ; Seance/RestrictionHoraire : durée requise, formulaire en erreur).
+ *
+ * **Pas d'ambiguïté h dans un champ de DURÉE** (contrairement à la saisie
+ * indispo libre `9h + 1h30`) : ici, le `h` est toujours l'unité heures.
+ * Réutilise la logique de `parserIndispoLibre` (io/stagiaires-adapter.ts)
+ * mais en version simplifiée — pas de séparateur `+`, pas de préambule
+ * `debut h M`.
+ */
+export function parseDureeSaisie(raw: string): number | undefined {
+  const trimmed = raw.trim().toLowerCase()
+  if (!trimmed) return undefined
+  // `NNhMM` ou `NNh` (heures + minutes optionnelles). L'unité `h` est
+  // toujours interprétée comme heures — pas d'ambiguïté dans un champ
+  // de durée pure.
+  const withHours = trimmed.match(/^(\d{1,3})h(\d{0,2})$/)
+  if (withHours) {
+    const h = Number(withHours[1])
+    const mm = withHours[2] ? Number(withHours[2]) : 0
+    if (mm >= 60) return undefined // « 1h75 » n'a pas de sens
+    return h * 60 + mm
+  }
+  // `NN min` avec unité explicite (rare mais reconnu — cohérent avec
+  // le mode d'emploi qui accepte l'unité).
+  const explicitMin = trimmed.match(/^(\d{1,3})\s*min$/)
+  if (explicitMin) return Number(explicitMin[1])
+  // `NN` bare (minutes par défaut, forme la plus fréquente).
+  const bareMinutes = trimmed.match(/^(\d{1,4})$/)
+  if (bareMinutes) return Number(bareMinutes[1])
+  return undefined
+}
+
 /** Convertit une chaîne HH:MM en total de minutes, ou `null` si invalide. */
 function parseHhMmToMinutes(s: string | undefined): number | null {
   if (s === undefined || s === '') return null
