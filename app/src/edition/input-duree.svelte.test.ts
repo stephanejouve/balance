@@ -114,57 +114,17 @@ describe('InputDuree.svelte — label dérivé fin inclusive (CD 6892)', () => {
     unmount(app2)
   })
 
-  it('fin dérivée est recalculée quand debut change (verrou CD 6936 fin stale)', () => {
-    // Bug CD 6936 : quand l'utilisateur saisit une durée puis modifie
-    // le début, la `fin` en stockage restait à sa valeur d'origine.
-    // Rien ne la lisait (finMinutesDe prend duree en priorité), mais
-    // la valeur partait dans les exports JSON — donnée qui ment.
-    // Fix `$effect` réactif : la fin suit debut + duree en permanence.
-    //
-    // Simulation via re-mount avec debut changé : le `$effect` du
-    // composant fraîchement monté écrit `fin` cohérente avec debut.
-    // C'est le pattern « ré-ouvrir le composant après changement du
-    // début côté parent », équivalent au flow réel où le parent
-    // (Indispos/Imposes/Lieu) re-rendrait le composant enfant.
-    let capturedFin: string | undefined
-    const app = mount(InputDureeComponent, {
-      target: container,
-      props: {
-        debut: '09:00',
-        duree_minutes: 60,
-        fin: '10:00',
-        get onchange() {
-          return () => {}
-        },
-      },
-    })
-    flushSync()
-    expect(container.querySelector('.fin-derivee')!.textContent).toContain('09:59')
-    unmount(app)
-
-    // Re-mount avec debut=10:00, MÊME duree, mais fin encore stale
-    // (héritée du parent qui ne l'a pas mise à jour). Le `$effect` du
-    // composant doit écrire la nouvelle fin dérivée à travers le bind.
-    let finEcrite: string | undefined
-    const app2 = mount(InputDureeComponent, {
-      target: container,
-      props: {
-        debut: '10:00',
-        duree_minutes: 60,
-        fin: '10:00', // ← valeur stale héritée
-        get onchange() {
-          return () => {}
-        },
-        // Wrap fin via un $bindable proxy : Svelte écrit dans capturedFin
-        // à chaque changement propagé par $effect.
-      },
-    })
-    flushSync()
-
-    // Le label doit refléter debut=10:00 + duree=60 = jusqu'à 10:59.
-    // Le bug stale aurait affiché 09:59 (basé sur ancienne fin=10:00).
-    expect(container.querySelector('.fin-derivee')!.textContent).toContain('10:59')
-    expect(container.querySelector('.fin-derivee')!.textContent).not.toContain('09:59')
-    unmount(app2)
-  })
+  // ─── Test « fin stale écrite recalculée » retiré (review Leader msg 6942) ───
+  // Le test précédent assertait sur le label `$derived` qui est calculé
+  // depuis `debut + duree - 1` — il ne lit PAS `fin`. Même sans le
+  // `$effect` fix, le label afficherait la bonne valeur. Il ne
+  // verrouillait donc pas ce qu'il prétendait.
+  //
+  // Le vrai bug (fin stale en ÉCRITURE partant dans les exports JSON)
+  // nécessite un wrapper `$state` réactif pour capturer la valeur
+  // écrite via bind. Non trivial en `.svelte.test.ts` pur (Svelte 5
+  // n'expose `$state` que dans un composant). Reporté en dette
+  // technique — le `$effect` du composant est verrouillé par revue
+  // humaine du code source et par observation Stéphane à l'écran
+  // (CD 6892 : « ça se juge en le voyant »).
 })
