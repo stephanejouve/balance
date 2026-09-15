@@ -339,14 +339,15 @@ export const RegleCreneau = z.object({
   /** Jours ciblés (ISO). Vide = tous les jours de la session. */
   jours: z.array(IsoDate).default([]),
   debut: HhMm,
-  fin: HhMm,
   /**
-   * Valeur brute que l'utilisateur a saisie AVANT correction automatique
-   * `fin → dernière minute occupée`. Sert la mention persistante « on a
-   * interprété ta saisie comme… » — PR E remplacera l'input par un
-   * `<select>` d'options valides, ce champ disparaîtra alors.
+   * Fin INCLUSIVE (dernière minute occupée, convention post-PR #130).
+   * Alimentée depuis PR E par un `<select>` d'options précalculées via
+   * `optionsFinGrille(debut, pas_minutes)` — l'utilisateur choisit une
+   * fin qui tombe pile sur une frontière de créneau, plus de saisie
+   * libre à corriger. Les vieux JSON avec `fin_saisie_original` voient
+   * ce champ silencieusement stripé par Zod (mode par défaut).
    */
-  fin_saisie_original: HhMm.optional(),
+  fin: HhMm,
   /** Durée d'un tour, en minutes. Défaut 60. */
   pas_minutes: z.number().int().positive().default(60),
   /** Restreint aux salles listées. Vide = toutes les salles actives du lieu. */

@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
-  appliquerCorrectionFinSaisie,
-  corrigerSaisieFin,
   decouper,
   diagnostiquerGrille,
   finInclusive,
   genererCreneaux,
   joursDeSession,
+  optionsFinGrille,
   parseDureeSaisie,
   toFinMinutes,
 } from './grille'
@@ -525,190 +524,46 @@ describe('toFinMinutes (helper convention inclusive — CD 6856)', () => {
   })
 })
 
-describe('corrigerSaisieFin — critère relatif au début (CD 6853)', () => {
-  // Helper : `HH:MM` → minutes depuis minuit pour lisibilité des tests.
-  const min = (hhmm: string) => {
-    const [h, m] = hhmm.split(':').map(Number)
-    return h * 60 + m
-  }
-
-  it('laisse la chaîne vide inchangée (saisie non encore commencée)', () => {
-    const r = corrigerSaisieFin('', 60, min('09:00'))
-    expect(r.valeur).toBe('')
-    expect(r.original).toBeNull()
+describe('optionsFinGrille — fins inclusives alignées sur le pas (PR E)', () => {
+  it('début 13:30 pas 60 : 10 options de 14:29 à 23:29', () => {
+    // (1440 − 810) / 60 = 10.5 → K=10 tours possibles avant minuit.
+    // Dernière option = 13:30 + 10×60 − 1 = 23:29 (dernière minute occupée).
+    const opts = optionsFinGrille('13:30', 60)
+    expect(opts).toHaveLength(10)
+    expect(opts[0]).toBe('14:29')
+    expect(opts[9]).toBe('23:29')
   })
 
-  // Cas Stéphane « SNCF » (CD 6853) — début 13:37 pas 60 = frontière 18:37.
-  it('SNCF début 13:37 pas 60 : 18:37 (frontière) → 18:36', () => {
-    // 18:37 − 13:37 = 300 min = 5 × 60 → frontière. Aucune valeur
-    // ne finit par :59 ni :29, seul le multiple relatif du pas tient.
-    expect(corrigerSaisieFin('18:37', 60, min('13:37'))).toEqual({
-      valeur: '18:36',
-      original: '18:37',
-    })
+  it('début 18:00 pas 60 : va jusqu\'à 23:59 (dernier tour boucle sur fin de journée)', () => {
+    // (1440 − 1080) / 60 = 6 → K=6. Dernier tour finit à 23:59.
+    const opts = optionsFinGrille('18:00', 60)
+    expect(opts).toEqual(['18:59', '19:59', '20:59', '21:59', '22:59', '23:59'])
   })
 
-  it('SNCF début 13:37 pas 60 : 18:36 (déjà inclusive) intact', () => {
-    // 18:36 − 13:37 = 299 min, pas un multiple → intact.
-    expect(corrigerSaisieFin('18:36', 60, min('13:37'))).toEqual({
-      valeur: '18:36',
-      original: null,
-    })
+  it('début 09:00 pas 30 : options tombent tous les :29 et :59', () => {
+    const opts = optionsFinGrille('09:00', 30)
+    expect(opts.slice(0, 4)).toEqual(['09:29', '09:59', '10:29', '10:59'])
+    expect(opts[opts.length - 1]).toBe('23:59')
   })
 
-  it('début 13:30 pas 60 : 18:30 (frontière) → 18:29', () => {
-    // Cas observé sur main #128 déployé : 300 % 60 = 0 → conversion.
-    expect(corrigerSaisieFin('18:30', 60, min('13:30'))).toEqual({
-      valeur: '18:29',
-      original: '18:30',
-    })
+  it('début 09:00 pas 45 : premier tour finit à 09:44', () => {
+    const opts = optionsFinGrille('09:00', 45)
+    expect(opts[0]).toBe('09:44')
+    expect(opts[1]).toBe('10:29')
   })
 
-  it('début 09:00 pas 60 : 12:00 (frontière) → 11:59', () => {
-    // Cas historique du chantier : début aligné H:00, frontières H:00
-    // depuis minuit ET relatives — les deux critères coïncident.
-    expect(corrigerSaisieFin('12:00', 60, min('09:00'))).toEqual({
-      valeur: '11:59',
-      original: '12:00',
-    })
+  it('début vide/undefined : tableau vide (le <select> reste sans option)', () => {
+    expect(optionsFinGrille(undefined, 60)).toEqual([])
+    expect(optionsFinGrille('', 60)).toEqual([])
   })
 
-  it('début 09:00 pas 60 : 11:59 (déjà inclusive) intact', () => {
-    // 11:59 − 09:00 = 179, pas un multiple de 60.
-    expect(corrigerSaisieFin('11:59', 60, min('09:00'))).toEqual({
-      valeur: '11:59',
-      original: null,
-    })
+  it('début mal formé : tableau vide', () => {
+    expect(optionsFinGrille('pas-une-heure', 60)).toEqual([])
   })
 
-  it('début 09:00 pas 60 : 11:37 (hors-cycle) intact', () => {
-    // CD 6850 : « n'invente pas de correction pour ce cas ».
-    expect(corrigerSaisieFin('11:37', 60, min('09:00'))).toEqual({
-      valeur: '11:37',
-      original: null,
-    })
-  })
-
-  it('début 09:00 pas 30 : 18:30 (frontière) → 18:29', () => {
-    // 18:30 − 09:00 = 570 = 19 × 30.
-    expect(corrigerSaisieFin('18:30', 30, min('09:00'))).toEqual({
-      valeur: '18:29',
-      original: '18:30',
-    })
-  })
-
-  it('début 09:00 pas 30 : 18:29 (déjà inclusive) intact — verrou bug CD 6850', () => {
-    // Incident 14/09 : la version pre-fix convertissait 18:29 en 18:28
-    // et dérivait à chaque ré-édition. 569 % 30 = 29 ≠ 0, donc intact.
-    expect(corrigerSaisieFin('18:29', 30, min('09:00'))).toEqual({
-      valeur: '18:29',
-      original: null,
-    })
-  })
-
-  it('début 09:00 pas 30 : 18:37 (hors-cycle) intact', () => {
-    expect(corrigerSaisieFin('18:37', 30, min('09:00'))).toEqual({
-      valeur: '18:37',
-      original: null,
-    })
-  })
-
-  it('début 09:00 pas 45 : 12:45 (frontière) → 12:44', () => {
-    // 12:45 − 09:00 = 225 = 5 × 45.
-    expect(corrigerSaisieFin('12:45', 45, min('09:00'))).toEqual({
-      valeur: '12:44',
-      original: '12:45',
-    })
-  })
-
-  // Non-régression : une valeur re-éditée plusieurs fois ne dérive pas.
-  it('ne dérive pas : convertir puis re-éditer la valeur convertie ne re-convertit pas', () => {
-    const r1 = corrigerSaisieFin('12:00', 60, min('09:00'))
-    expect(r1.valeur).toBe('11:59')
-    // L'utilisateur remet 11:59 (par exemple en re-cliquant OK).
-    const r2 = corrigerSaisieFin(r1.valeur, 60, min('09:00'))
-    expect(r2.valeur).toBe('11:59')
-    expect(r2.original).toBeNull()
-    // Et ainsi de suite sur autant d'itérations qu'on veut.
-    const r3 = corrigerSaisieFin(r2.valeur, 60, min('09:00'))
-    expect(r3.valeur).toBe('11:59')
-  })
-
-  it('fin ≤ début : laisse tel quel (le contrôle de plage vide se fait ailleurs)', () => {
-    // `decouper` retourne [] si `end <= start` — la couche de
-    // conversion ne se prononce pas dans ce cas.
-    expect(corrigerSaisieFin('09:00', 60, min('09:00'))).toEqual({
-      valeur: '09:00',
-      original: null,
-    })
-    expect(corrigerSaisieFin('08:00', 60, min('09:00'))).toEqual({
-      valeur: '08:00',
-      original: null,
-    })
-  })
-
-  it('court-circuite sur entrée mal formée, pas invalide ou début invalide', () => {
-    expect(corrigerSaisieFin('pas-une-heure', 60, min('09:00'))).toEqual({
-      valeur: 'pas-une-heure',
-      original: null,
-    })
-    expect(corrigerSaisieFin('12:00', 0, min('09:00'))).toEqual({ valeur: '12:00', original: null })
-    expect(corrigerSaisieFin('12:00', -30, min('09:00'))).toEqual({ valeur: '12:00', original: null })
-    expect(corrigerSaisieFin('12:00', 60, NaN)).toEqual({ valeur: '12:00', original: null })
-  })
-})
-
-describe('appliquerCorrectionFinSaisie', () => {
-  it('applique la correction quand fin est sur frontière relative au début', () => {
-    const o: { fin?: string; fin_saisie_original?: string } = { fin: '12:00' }
-    appliquerCorrectionFinSaisie(o, 60, '09:00')
-    expect(o.fin).toBe('11:59')
-    expect(o.fin_saisie_original).toBe('12:00')
-  })
-
-  it('applique la correction pour un début non aligné (13:30 → 18:30 pas 60)', () => {
-    const o: { fin?: string; fin_saisie_original?: string } = { fin: '18:30' }
-    appliquerCorrectionFinSaisie(o, 60, '13:30')
-    expect(o.fin).toBe('18:29')
-    expect(o.fin_saisie_original).toBe('18:30')
-  })
-
-  it('n’applique pas la correction si fin_saisie_original est déjà renseigné (idempotence)', () => {
-    const o: { fin?: string; fin_saisie_original?: string } = {
-      fin: '11:59',
-      fin_saisie_original: '12:00',
-    }
-    appliquerCorrectionFinSaisie(o, 60, '09:00')
-    expect(o.fin).toBe('11:59')
-    expect(o.fin_saisie_original).toBe('12:00')
-  })
-
-  it('court-circuite proprement quand fin est absent (Indispo optionnel)', () => {
-    const o: { fin?: string; fin_saisie_original?: string } = {}
-    appliquerCorrectionFinSaisie(o, 60, '09:00')
-    expect(o.fin).toBeUndefined()
-    expect(o.fin_saisie_original).toBeUndefined()
-  })
-
-  it('laisse une valeur déjà inclusive (11:59 après début 09:00 pas 60) intacte', () => {
-    const o: { fin?: string; fin_saisie_original?: string } = { fin: '11:59' }
-    appliquerCorrectionFinSaisie(o, 60, '09:00')
-    expect(o.fin).toBe('11:59')
-    expect(o.fin_saisie_original).toBeUndefined()
-  })
-
-  it('pas = null court-circuite (contexte sans pas propre — CD 6850)', () => {
-    const o: { fin?: string; fin_saisie_original?: string } = { fin: '18:29' }
-    appliquerCorrectionFinSaisie(o, null, undefined)
-    expect(o.fin).toBe('18:29')
-    expect(o.fin_saisie_original).toBeUndefined()
-  })
-
-  it('début invalide court-circuite', () => {
-    const o: { fin?: string; fin_saisie_original?: string } = { fin: '12:00' }
-    appliquerCorrectionFinSaisie(o, 60, undefined)
-    expect(o.fin).toBe('12:00')
-    expect(o.fin_saisie_original).toBeUndefined()
+  it('pas ≤ 0 : tableau vide (formulaire dans un état intermédiaire)', () => {
+    expect(optionsFinGrille('09:00', 0)).toEqual([])
+    expect(optionsFinGrille('09:00', -30)).toEqual([])
   })
 })
 

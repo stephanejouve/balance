@@ -1,10 +1,5 @@
 <script lang="ts">
-  import {
-    appliquerCorrectionFinSaisie,
-    butoirDeGroupe,
-    diagnostiquerGrille,
-    genererCreneaux,
-  } from './domain/grille'
+  import { butoirDeGroupe, diagnostiquerGrille, genererCreneaux } from './domain/grille'
   import { parseMaintenantUrlParam, propositionRejouer } from './domain/maintenant'
   import { parseLegacyInscriptions } from './domain/legacy'
   import { migrerInscriptions } from './domain/migrate'
@@ -478,35 +473,15 @@
     const patch = construireCandidatJson(detection, session.id)
     if (patch.lieu) {
       const parsed = Lieu.parse(patch.lieu)
-      // Restrictions de salle : pas de pas propre → aucune correction
-      // (CD 6850). L'utilisateur saisit une plage brute, à respecter.
-      parsed.salles.forEach((s) =>
-        s.restrictions.forEach((r) => appliquerCorrectionFinSaisie(r, null, undefined)),
-      )
       Object.assign(lieu, parsed)
       lieu.salles.splice(0, lieu.salles.length, ...parsed.salles)
     }
     if (patch.session) {
       const parsed = Session.parse(patch.session)
-      // Règles de grille : le critère est le multiple du pas RELATIF
-      // AU DÉBUT (CD 6853). Une valeur telle que `(fin − debut) % pas
-      // === 0` est convertie ; sinon intact.
-      parsed.grille.forEach((r) =>
-        appliquerCorrectionFinSaisie(r, r.pas_minutes, r.debut),
-      )
       Object.assign(session, parsed)
       session.grille.splice(0, session.grille.length, ...parsed.grille)
     }
     if (patch.inscriptions) {
-      // Indispos & séances imposées : pas de pas propre → aucune
-      // correction (CD 6850). Le patch peut avoir `fin` optionnel côté
-      // Indispo — le helper court-circuite proprement dans ce cas.
-      patch.inscriptions.personnes.forEach((p) =>
-        p.indispos.forEach((i) => appliquerCorrectionFinSaisie(i, null, undefined)),
-      )
-      patch.inscriptions.imposes.forEach((imp) =>
-        imp.seances.forEach((s) => appliquerCorrectionFinSaisie(s, null, undefined)),
-      )
       inscriptions = patch.inscriptions
     }
     if (patch.contraintesActives) {

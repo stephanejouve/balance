@@ -6,6 +6,7 @@ import {
   Lieu,
   Personne,
   Refus,
+  RegleCreneau,
   RestrictionHoraire,
   Seance,
   Session,
@@ -363,10 +364,25 @@ describe('Cap durée (CD 6876+6891) — preprocess Zod fin → duree_minutes', (
     })
   })
 
-  describe('Non-régression : fin_saisie_original retiré des 3 schémas', () => {
-    it('Indispo accepte un JSON sans fin_saisie_original (strip mode par défaut)', () => {
+  describe('Non-régression : fin_saisie_original retiré des 4 schémas', () => {
+    // Retrait cascadé : Indispo/Restriction/Seance en PR D (14/09),
+    // RegleCreneau en PR E (15/09). Zod strip mode par défaut : un vieux
+    // JSON avec `fin_saisie_original` voit ce champ ignoré silencieusement
+    // (pas d'erreur, pas de préservation).
+    it('Indispo accepte un JSON sans fin_saisie_original', () => {
       const parsed = Indispo.parse({ debut: '18:00' })
       expect(parsed).not.toHaveProperty('fin_saisie_original')
+    })
+
+    it('RegleCreneau ignore silencieusement un fin_saisie_original legacy', () => {
+      const parsed = RegleCreneau.parse({
+        debut: '13:30',
+        fin: '18:29',
+        pas_minutes: 60,
+        fin_saisie_original: '18:30',
+      })
+      expect(parsed).not.toHaveProperty('fin_saisie_original')
+      expect(parsed.fin).toBe('18:29')
     })
   })
 })
