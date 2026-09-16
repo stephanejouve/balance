@@ -1,6 +1,7 @@
 <script lang="ts">
   import { butoirDeGroupe, finInclusive, type Creneau } from '../domain/grille'
   import type { Groupe, Inscriptions, Lieu, Salle, Session } from '../domain/model'
+  import { imposesOccupantCreneau } from '../engine/imposes'
   import { ciblesValides } from '../engine/manuel'
   import type { Assignation } from '../engine/types'
 
@@ -87,19 +88,30 @@
     {#each creneauxTries as c}
       {@const assCr = assignations.filter((a) => a.creneau_id === c.id)}
       {@const parSalle = new Map(assCr.map((a) => [a.salle_id, a]))}
+      {@const imposeParSalle = imposesOccupantCreneau(inscriptions, c, lieu.salles)}
       {@const salleOuverte = new Set(c.salles)}
       {@const nbOuvertes = sallesAffichees.filter((s) => salleOuverte.has(s.id)).length}
-      {@const nbOccupees = assCr.length}
+      {@const nbOccupees = assCr.length + [...imposeParSalle.keys()].filter((sid) => !parSalle.has(sid) && salleOuverte.has(sid)).length}
       <tr>
         <td class="mono">{c.date.slice(5).replace('-', '/')} · {c.debut}–{finInclusive(c.fin)}</td>
         {#each sallesAffichees as s}
           {@const ass = parSalle.get(s.id)}
+          {@const imp = imposeParSalle.get(s.id)}
           {@const ouvert = salleOuverte.has(s.id)}
           {#if !ouvert}
             <td class="fermee">—</td>
           {:else if ass}
             {@const g = groupesParId.get(ass.groupe_id)}
-            <td class="occ" class:figee={estFigee(ass)}>{g?.titre ?? ass.groupe_id}</td>
+            <td class="occ" class:figee={estFigee(ass)}>
+              {g?.titre ?? ass.groupe_id}
+              {#if imp}
+                <span class="conflit-impose" title="Conflit : cette salle est aussi réservée pour « {imp.morceau} » (séance imposée)">⚠</span>
+              {/if}
+            </td>
+          {:else if imp}
+            <td class="occ impose" title="Séance imposée « {imp.morceau} »">
+              {imp.morceau} <span class="mention-impose">(séance imposée)</span>
+            </td>
           {:else}
             <td
               class="libre-cell"

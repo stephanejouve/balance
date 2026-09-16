@@ -43,7 +43,7 @@
   import { registrePersonnalise } from './engine/contraintes'
   import { analyserCapaciteStage, analyserInfaisabilite, capaciteEstEnAlerte } from './engine/diagnostic'
   import { preparerInscriptionsPourSolveur } from './engine/fonctions-activees'
-  import { enrichirIndispos } from './engine/imposes'
+  import { enrichirIndispos, warningsSalleImposeeInconnue } from './engine/imposes'
   import { ciblesValides } from './engine/manuel'
   import { plusGrandeJaugeActive } from './engine/plafond-salle'
   import { suggererRenforts } from './engine/renforts'
@@ -478,6 +478,12 @@
     if (detection?.type !== 'xlsx') return
     const candidat = construireCandidatExcel(detection, sel, inscriptions, session.id)
     const b = bilanExcel(detection, sel)
+    // Alerte salle imposée inconnue (CD 7016) — une seance porte un
+    // salle_id texte libre qui ne matche aucune salle du lieu. Sans
+    // ça, Carte/Par salle affichent le créneau libre et l'organisateur
+    // ne voit pas qu'il a écrit un nom de salle inexact. Ne bloque
+    // pas l'import — warn pour que l'utilisateur corrige.
+    b.warnings.push(...warningsSalleImposeeInconnue(candidat, lieu.salles))
     // Analyse d'identités (Sujet C) : on ne commit pas encore — l'user
     // valide via EcranRelectureIdentites. Franchissable en 1 clic si
     // 0 alerte (blocage vient du contenu, pas de la mécanique).
@@ -1616,6 +1622,7 @@
       {:else if vue === 'salles'}
         <ParSalle
           {lieu}
+          {inscriptions}
           {creneaux}
           assignations={solveurStore.solution.assignations}
           {groupesParId}

@@ -3,10 +3,12 @@
   import { finInclusive } from '../domain/grille'
   import type { Groupe, Inscriptions, Lieu, Personne, Salle } from '../domain/model'
   import { libellePersonne } from '../domain/model'
+  import { imposesOccupantCreneau } from '../engine/imposes'
   import type { Assignation } from '../engine/types'
 
   interface Props {
     lieu: Lieu
+    inscriptions: Inscriptions
     creneaux: Creneau[]
     assignations: Assignation[]
     groupesParId: Map<string, Groupe>
@@ -21,6 +23,7 @@
   }
   let {
     lieu,
+    inscriptions,
     creneaux,
     assignations,
     groupesParId,
@@ -55,14 +58,26 @@
         {@const ass = assignations.find((a) => a.creneau_id === c.id && a.salle_id === salle.id)}
         {@const g = ass ? groupesParId.get(ass.groupe_id) : undefined}
         {@const resp = g ? personnesParId.get(g.responsable_id) : undefined}
+        {@const impose = imposesOccupantCreneau(inscriptions, c, lieu.salles).get(salle.id)}
         <tr
-          class:libre={!ass}
+          class:libre={!ass && !impose}
           class:figee={ass && estFigee(ass)}
+          class:impose={!ass && impose}
           class:cible={deplacementEnCours && estCibleValide(c.id, salle.id)}
         >
           <td>{salle.nom}</td>
           <td class="mono">{c.date.slice(5).replace('-', '/')} · {c.debut}–{finInclusive(c.fin)}</td>
-          <td>{g ? g.titre : '—'}</td>
+          <td>
+            {#if g}
+              {g.titre}{#if impose}
+                <span class="conflit-impose" title="Conflit : « {impose.morceau} » (séance imposée) réserve aussi cette salle">⚠</span>
+              {/if}
+            {:else if impose}
+              {impose.morceau} <span class="mention-impose">(séance imposée)</span>
+            {:else}
+              —
+            {/if}
+          </td>
           <td>{resp ? libellePersonne(resp) : g?.responsable_id ?? ''}</td>
           <td class="center">
             {#if ass}
