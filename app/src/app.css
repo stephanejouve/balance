@@ -297,6 +297,35 @@ code {
     font-weight: 500;
   }
   table.carte td.occ.figee { background: #fbf2df; }
+  /*
+   * Séance imposée occupant une salle (CD 7016 (A) — l'affichage cesse
+   * de mentir). Teinte distincte de la salle libre et de la salle
+   * assignée (groupe volontaire), pour que l'organisateur voie au
+   * premier coup d'œil qu'une salle est réservée par un imposé.
+   */
+  table.carte td.occ.impose {
+    background: #e6ecf5;
+    color: var(--ink);
+    font-style: italic;
+  }
+  table.carte td.occ .mention-impose,
+  table.par-salle td .mention-impose {
+    font-size: 11px;
+    color: var(--ink-soft);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+  /*
+   * Marqueur de conflit : quand une assignation groupe + une séance
+   * imposée coexistent sur (créneau, salle). Non-bloquant à ce stade
+   * (contrainte solveur pas encore alimentée — ticket B), mais
+   * l'affichage cesse de le passer sous silence.
+   */
+  .conflit-impose {
+    color: var(--rouge);
+    font-size: 12px;
+    margin-left: 4px;
+  }
   table.carte td.libre-cell {
     text-align: center;
     color: var(--vert);
