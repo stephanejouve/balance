@@ -4,6 +4,7 @@ import {
   estDismissee,
   lireManifestDistant,
   marquerDismissee,
+  preparerEtatMaJPathSW,
   versionEstPlusRecente,
   type Manifest,
 } from './mise-a-jour'
@@ -138,5 +139,77 @@ describe('detecterMiseAJour', () => {
     if (etat.statut === 'nouvelle-version') {
       expect(etat.url_telechargement).toContain('balance.html')
     }
+  })
+})
+
+describe('preparerEtatMaJPathSW — SW updatefound sans divergence de version (CD 6980)', () => {
+  // Bug rapporté par l'agent navigateur le 15/09 : sur `e64210d`, le
+  // MàJ bandeau affichait « Nouvelle version v20260916.0009 installée
+  // en tâche de fond — tu utilises v20260916.0009. Recharger. » Comparait
+  // une version à elle-même. Cause : le Path SW ne comparait pas les
+  // versions AVANT d'afficher. Le SW `updatefound` fire quand le fichier
+  // `sw.js` change byte-à-byte, PAS forcément quand `__APP_VERSION__`
+  // change. Un rebuild qui touche le SW sans bumper la version
+  // provoquait le faux positif. Reload = destructeur (cf PR #140), donc
+  // clic accidentel = perte de travail.
+
+  it('version distante == locale → null (verrou de non-régression)', async () => {
+    // Le cœur du fix : ne pas afficher quand les versions sont égales.
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ version: '20260916.0009' }),
+    } as unknown as Response)
+    const etat = await preparerEtatMaJPathSW(
+      '20260916.0009',
+      'http://x/balance.html',
+      fetcher as unknown as typeof fetch,
+    )
+    expect(etat).toBeNull()
+  })
+
+  it('version distante > locale → EtatMiseAJour.nouvelle-version avec installee_en_tache_de_fond', async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ version: '20260917.0800' }),
+    } as unknown as Response)
+    const etat = await preparerEtatMaJPathSW(
+      '20260916.0009',
+      'http://x/balance.html',
+      fetcher as unknown as typeof fetch,
+    )
+    expect(etat).not.toBeNull()
+    expect(etat!.statut).toBe('nouvelle-version')
+    if (etat!.statut === 'nouvelle-version') {
+      expect(etat!.version_locale).toBe('20260916.0009')
+      expect(etat!.version_distante).toBe('20260917.0800')
+      expect(etat!.installee_en_tache_de_fond).toBe(true)
+      expect(etat!.url_telechargement).toBe('http://x/balance.html')
+    }
+  })
+
+  it('version distante < locale (rollback improbable) → null', async () => {
+    // Défense en profondeur : si le manifest sert une version plus
+    // ancienne (miroir mal synchronisé, rollback), on ne prompt pas
+    // pour un downgrade.
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ version: '20260915.0000' }),
+    } as unknown as Response)
+    const etat = await preparerEtatMaJPathSW(
+      '20260916.0009',
+      'http://x/balance.html',
+      fetcher as unknown as typeof fetch,
+    )
+    expect(etat).toBeNull()
+  })
+
+  it('manifest introuvable (fetch fail) → null', async () => {
+    const fetcher = vi.fn().mockRejectedValue(new Error('network'))
+    const etat = await preparerEtatMaJPathSW(
+      '20260916.0009',
+      'http://x/balance.html',
+      fetcher as unknown as typeof fetch,
+    )
+    expect(etat).toBeNull()
   })
 })
