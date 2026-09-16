@@ -92,6 +92,49 @@ export function marquerDismissee(version_distante: string, stockage: Storage = l
 }
 
 /**
+ * Point d'entrée du Path SW (service worker `updatefound` déjà notifié
+ * côté `sw-register.ts`). Vérifie que la version DISTANTE est
+ * strictement plus récente que la locale AVANT de retourner un état
+ * « nouvelle-version ».
+ *
+ * Fix CD 6980 (2026-09-16) : le SW `updatefound` fire quand le fichier
+ * `sw.js` change byte-à-byte, PAS forcément quand `__APP_VERSION__`
+ * change. Un rebuild qui touche le SW sans bumper la version faisait
+ * apparaître un faux positif « nouvelle version v20260916.0009 —
+ * recharger. Tu utilises v20260916.0009 ». Sur un état chargé, le
+ * beta-tester cliquerait et perdrait son travail (reload légitime →
+ * perte de tout état non-URL, cf PR #140).
+ *
+ * On aligne le Path SW sur la même comparaison que Path fetch
+ * (`detecterMiseAJour::versionEstPlusRecente`) plutôt que de laisser
+ * un second lecteur divergent — cf. les 3 lecteurs du champ jours qui
+ * ont divergé cette semaine, principe de l'implémentation unique.
+ *
+ * Retourne `null` si le manifest est introuvable, si la version est
+ * égale ou plus ancienne (rollback improbable mais géré). Retourne un
+ * `EtatMiseAJour.nouvelle-version` avec `installee_en_tache_de_fond:
+ * true` sinon (le SW a téléchargé la nouvelle version, activation
+ * requiert un reload utilisateur).
+ */
+export async function preparerEtatMaJPathSW(
+  version_locale: string,
+  url_telechargement: string,
+  fetcher: typeof fetch = fetch,
+): Promise<EtatMiseAJour | null> {
+  const manifest = await lireManifestDistant(fetcher)
+  if (!manifest || !versionEstPlusRecente(manifest.version, version_locale)) {
+    return null
+  }
+  return {
+    statut: 'nouvelle-version',
+    version_locale,
+    version_distante: manifest.version,
+    url_telechargement,
+    installee_en_tache_de_fond: true,
+  }
+}
+
+/**
  * Point d'entrée : détermine l'état de mise à jour de l'app.
  *
  * @param version_locale - injectée par vite via `__APP_VERSION__`

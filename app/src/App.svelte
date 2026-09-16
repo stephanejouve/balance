@@ -282,6 +282,19 @@
       return []
     }
   })
+  /**
+   * Session « vide » — aucune personne, aucun groupe, aucun imposé
+   * (CD 6982). Sert au `BandeauMaintenantFixe` à nommer l'état
+   * incohérent post-rechargement (URL `?maintenant=` préservée mais
+   * `inscriptions` réinitialisées). Une date de référence fixée sans
+   * session chargée n'a pas d'objet — le bandeau le dit plutôt que
+   * laisser croire au rejeu qui aurait vidé les données.
+   */
+  const sessionVide = $derived(
+    inscriptions.personnes.length === 0 &&
+      inscriptions.groupes.length === 0 &&
+      inscriptions.imposes.length === 0,
+  )
   // Diagnostic pré-génération — issues #110 + #111. Quand la grille produit
   // 0 créneau, cette structure porte les raisons (règles pathologiques +
   // défauts globaux) qu'`Étape 2b Session` affiche en dépliant sa phrase
@@ -1674,6 +1687,7 @@
 
 <BandeauMaintenantFixe
   {maintenantFixe}
+  sessionVide={sessionVide}
   onRevenirAujourdhui={() => appliquerMaintenant(null)}
 />
 <BandeauSessionTerminee

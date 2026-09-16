@@ -28,6 +28,16 @@
     /** Date de référence si le paramètre `?maintenant=` est présent, sinon null. */
     maintenantFixe: Date | null
     /**
+     * Vrai quand `inscriptions` est complètement vide (aucune personne,
+     * aucun groupe, aucun imposé) — CD 6982. Une date de référence fixée
+     * sans session chargée n'a pas d'objet ; l'écran doit le NOMMER
+     * plutôt que laisser croire que le rejeu a fait perdre les données.
+     * Cas typique : F5 accidentel (ou clic sur MàJ bandeau faussement
+     * positif — corrigé PR #141 SW path) qui préserve `?maintenant=` via
+     * URL mais vide `inscriptions` (init back to empty).
+     */
+    sessionVide: boolean
+    /**
      * Callback appelé au clic « Revenir à aujourd'hui » — le parent mute
      * `maintenantFixe` à `null` en place (post CD 6972). Avant : ce
      * composant faisait un `window.location.href = ...` qui vidait toutes
@@ -36,7 +46,7 @@
     onRevenirAujourdhui: () => void
   }
 
-  let { maintenantFixe, onRevenirAujourdhui }: Props = $props()
+  let { maintenantFixe, sessionVide, onRevenirAujourdhui }: Props = $props()
 
   const libelleDate = $derived.by(() => {
     if (!maintenantFixe) return ''
@@ -66,6 +76,9 @@
     <div class="contenu">
       <b>Date de référence fixée</b>
       <span class="valeur">au {libelleDate}</span>
+      {#if sessionVide}
+        <span class="vide">— aucune session chargée</span>
+      {/if}
     </div>
     <button type="button" class="sortir" onclick={revenirAujourdhui}>
       Revenir à aujourd'hui
@@ -97,6 +110,10 @@
   }
   .valeur {
     font-variant-numeric: tabular-nums;
+  }
+  .vide {
+    font-style: italic;
+    opacity: 0.85;
   }
   .sortir {
     background: #664d03;

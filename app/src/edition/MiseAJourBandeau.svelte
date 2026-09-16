@@ -3,8 +3,8 @@
   import {
     detecterMiseAJour,
     estDismissee,
-    lireManifestDistant,
     marquerDismissee,
+    preparerEtatMaJPathSW,
     type EtatMiseAJour,
   } from './mise-a-jour'
   import { enregistrer } from './sw-register'
@@ -27,15 +27,23 @@
     //    nouvelle est prête). On fetch le manifest pour l'afficher —
     //    sans ça, on tombait sur « vinstallée en tâche de fond » (bug
     //    smoke Stéphane 2026-09-03) qui n'aide pas l'user à juger.
+    //
+    //    Ne PAS afficher si le manifest indique une version identique à
+    //    la locale (CD 6980 : le SW `updatefound` fire quand le fichier
+    //    sw.js change byte-à-byte, PAS forcément quand la version
+    //    applicative change — un rebuild qui touche le SW sans bumper
+    //    `__APP_VERSION__` provoquerait un faux positif « nouvelle
+    //    version = version courante, recharger ». Sur un état chargé,
+    //    l'utilisateur cliquerait et perdrait son travail, même famille
+    //    de risque que les 2 reloads fermés par PR #140.
+    //
+    //    La logique de vérification vit dans `preparerEtatMaJPathSW`
+    //    (mise-a-jour.ts) — testable en unité, aligné sur la même
+    //    `versionEstPlusRecente` que Path fetch (pas de 2ᵉ lecteur qui
+    //    divergerait un jour).
     enregistrer(async () => {
-      const manifest = await lireManifestDistant()
-      afficher({
-        statut: 'nouvelle-version',
-        version_locale: __APP_VERSION__,
-        version_distante: manifest?.version ?? '',
-        url_telechargement: window.location.href,
-        installee_en_tache_de_fond: true,
-      })
+      const etat = await preparerEtatMaJPathSW(__APP_VERSION__, window.location.href)
+      if (etat) afficher(etat)
     })
     // 2. Path fetch fallback (usage file:// ou pour vérification proactive
     //    même sur http). Ne fait rien si offline.
