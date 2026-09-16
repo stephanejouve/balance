@@ -167,8 +167,47 @@
   /* --- État réactif ----------------------------------------------------- */
 
   const _demoInit = initialDemo()
-  /** `Date` de référence figée si `?maintenant=` fourni, sinon null (→ new Date() live). */
-  const maintenantFixe = initialMaintenant()
+  /**
+   * `Date` de référence figée si `?maintenant=` fourni, sinon null (→
+   * `new Date()` live).
+   *
+   * **Reactive** (post CD 6972) : muté en place par `appliquerMaintenant`
+   * quand l'utilisateur clique « Rejouer à cette date » ou « Revenir à
+   * aujourd'hui ». Auparavant, ces boutons rechargeaient la page avec
+   * `window.location.href = ...`, ce qui vidait TOUT l'état non-URL —
+   * inscriptions, imports en cours, mutations de contraintes, etc. Le
+   * lieu/session/grille survivaient par illusion (recréés depuis un
+   * template hardcodé identique à la démo), mais Stéphane aurait perdu
+   * silencieusement toute modification qu'il aurait apportée. La mutation
+   * en place règle les deux d'un coup.
+   */
+  let maintenantFixe = $state<Date | null>(initialMaintenant())
+
+  /**
+   * Applique une nouvelle valeur de « maintenant » (Rejouer à une date, ou
+   * Revenir à aujourd'hui) SANS recharger la page. Mute `maintenantFixe`
+   * ($state), et met à jour l'URL via `history.pushState` pour garder la
+   * shareabilité et le comportement back-button.
+   *
+   * `iso === null` → retour au présent live (supprime `?maintenant=` de
+   * l'URL). `iso` chaîne `YYYY-MM-DD` → fige à midi local (défaut de
+   * `parseMaintenantUrlParam`).
+   */
+  function appliquerMaintenant(iso: string | null) {
+    if (iso === null) {
+      maintenantFixe = null
+    } else {
+      const parsed = parseMaintenantUrlParam(iso)
+      if (parsed === null) return
+      maintenantFixe = parsed
+    }
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (iso === null) url.searchParams.delete('maintenant')
+    else url.searchParams.set('maintenant', iso)
+    window.history.pushState({}, '', url.toString())
+  }
+
   let inscriptions = $state<Inscriptions>(_demoInit ? chargerDemo() : inscriptionsVides())
   let modeDemo = $state<boolean>(_demoInit)
   let sourceLabel = $state<string>(
@@ -1633,8 +1672,14 @@
   {/if}
 </main>
 
-<BandeauMaintenantFixe {maintenantFixe} />
-<BandeauSessionTerminee proposition={propositionRejouerCourante} />
+<BandeauMaintenantFixe
+  {maintenantFixe}
+  onRevenirAujourdhui={() => appliquerMaintenant(null)}
+/>
+<BandeauSessionTerminee
+  proposition={propositionRejouerCourante}
+  onRejouer={(dateIso) => appliquerMaintenant(dateIso)}
+/>
 
 <MiseAJourBandeau />
 

@@ -11,8 +11,10 @@
    * - **Dire la valeur** : « date de référence fixée au 23 août 2026 »,
    *   pas « mode test ». L'utilisateur doit voir CE QUE l'application
    *   croit être aujourd'hui.
-   * - **Moyen d'en sortir** : lien « Revenir à aujourd'hui » qui retire
-   *   le paramètre de l'URL et recharge.
+   * - **Moyen d'en sortir** : lien « Revenir à aujourd'hui » qui remet
+   *   `maintenantFixe` à null en place (via callback parent) et retire
+   *   le paramètre de l'URL via `history.pushState`. Post CD 6972 : plus
+   *   de reload, l'état de travail (inscriptions, imports) est préservé.
    *
    * Pourquoi ce bandeau existe : sans lui, quelqu'un qui ajoute
    * `?maintenant=` à son URL (favoris, lien partagé) peut se retrouver
@@ -25,9 +27,16 @@
   interface Props {
     /** Date de référence si le paramètre `?maintenant=` est présent, sinon null. */
     maintenantFixe: Date | null
+    /**
+     * Callback appelé au clic « Revenir à aujourd'hui » — le parent mute
+     * `maintenantFixe` à `null` en place (post CD 6972). Avant : ce
+     * composant faisait un `window.location.href = ...` qui vidait toutes
+     * les inscriptions et imports en cours (bug jumeau du Rejouer).
+     */
+    onRevenirAujourdhui: () => void
   }
 
-  let { maintenantFixe }: Props = $props()
+  let { maintenantFixe, onRevenirAujourdhui }: Props = $props()
 
   const libelleDate = $derived.by(() => {
     if (!maintenantFixe) return ''
@@ -42,15 +51,13 @@
   })
 
   /**
-   * Retire le paramètre `maintenant` de l'URL courante puis recharge.
-   * Utilise `window.location.href = ...` plutôt que `history.replaceState`
-   * pour forcer le re-mount de l'app avec la valeur réelle de `new Date()`.
+   * Propage l'action au parent, qui mute `maintenantFixe` à null et
+   * supprime `?maintenant=` de l'URL via `history.pushState`. Pas de
+   * reload — post CD 6972 : reload détruisait toutes les inscriptions
+   * et imports en cours (bug jumeau du « Rejouer »).
    */
   function revenirAujourdhui() {
-    if (typeof window === 'undefined') return
-    const url = new URL(window.location.href)
-    url.searchParams.delete('maintenant')
-    window.location.href = url.toString()
+    onRevenirAujourdhui()
   }
 </script>
 

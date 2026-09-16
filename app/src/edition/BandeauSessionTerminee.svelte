@@ -24,9 +24,16 @@
   interface Props {
     /** Proposition calculée par `propositionRejouer`, null = rien à proposer. */
     proposition: { dateFin: string; dateProposee: string } | null
+    /**
+     * Callback appelé au clic — le parent mute `maintenantFixe` en place
+     * (post CD 6972). Avant : ce composant faisait un
+     * `window.location.href = ...` qui vidait toutes les inscriptions et
+     * imports en cours.
+     */
+    onRejouer: (dateIso: string) => void
   }
 
-  let { proposition }: Props = $props()
+  let { proposition, onRejouer }: Props = $props()
 
   const libelleFin = $derived.by(() => {
     if (!proposition) return ''
@@ -50,15 +57,14 @@
   }
 
   /**
-   * Recharge l'URL avec `?maintenant=<dateProposee>` ajouté. Utilise
-   * `window.location.href = ...` (comme le bandeau symétrique) pour forcer
-   * le re-mount de l'app avec le nouveau paramètre.
+   * Propage la date proposée au parent, qui mute `maintenantFixe` en
+   * place et met à jour l'URL via `history.pushState`. Pas de reload —
+   * post CD 6972 : reload détruisait toutes les inscriptions et imports
+   * en cours (bug destructeur observé en ligne le 15/09).
    */
   function rejouer() {
-    if (typeof window === 'undefined' || !proposition) return
-    const url = new URL(window.location.href)
-    url.searchParams.set('maintenant', proposition.dateProposee)
-    window.location.href = url.toString()
+    if (!proposition) return
+    onRejouer(proposition.dateProposee)
   }
 </script>
 
