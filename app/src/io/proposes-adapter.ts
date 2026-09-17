@@ -1,5 +1,6 @@
+import { toFinMinutes } from '../domain/grille'
 import { detacherNomInstrument } from '../domain/legacy'
-import type { Impose, Personne, Seance } from '../domain/model'
+import type { HhMm, Impose, Personne, Seance } from '../domain/model'
 import { slug } from '../domain/model'
 
 /**
@@ -79,6 +80,19 @@ function parseIntStrict(s: string): number | undefined {
   const trimmed = s.trim()
   if (!/^\d+$/.test(trimmed)) return undefined
   return Number(trimmed)
+}
+
+/**
+ * Minutes → `HH:MM`, convention exclusive : 1440 → `'00:00'` (fin de
+ * journée, cohérent avec `toFinMinutes('00:00') = 1439`). Utilisé pour
+ * dériver la borne `fin` depuis `debut + duree_minutes` — symétrie du
+ * parseur Seance (CD 7057 point 1).
+ */
+function hhmmFromMinutes(min: number): string {
+  if (min === 24 * 60) return '00:00'
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
 function indexerColonnes(entete: Cellule[]): Map<string, number> {
@@ -210,35 +224,48 @@ export function extraireProposes(
       continue
     }
 
-    // Divergence fin ↔ durée : durée canonique (CD 6885 raison
+    // Cohérence fin ↔ durée : durée canonique (CD 6885 raison
     // structurelle). Pas d'alarme sur écart d'une minute — le cas
     // fréquent `18:00 → 19:00 + 60` est cohérent avec la formule
     // exclusive `fin − debut = duree` post-#134.
+    //
+    // Symétrie du parseur (CD 6990 anomalie 1, feu vert CD 7007) :
+    // les 3 chemins (fin+durée, fin only, durée only) produisent
+    // TOUJOURS les 2 champs. Avant, le chemin « fin only » laissait
+    // `seance.duree_minutes` à undefined → l'UI Imposes affichait le
+    // champ durée VIDE sur les 36 séances du fichier stress-test.
+    const [dh, dm] = debut.split(':').map(Number)
+    const debutMin = dh * 60 + dm
     let finCanonique: string
+    let dureeCanonique: number
     if (fin !== undefined && duree_minutes !== undefined) {
       // Les deux présents. Vérif cohérence silencieuse : sinon la
       // durée l'emporte, `fin` recalculée.
-      const [dh, dm] = debut.split(':').map(Number)
-      const [fh, fm] = fin.split(':').map(Number)
-      const dureeCalc = fh * 60 + fm - (dh * 60 + dm)
+      const finMinFin = toFinMinutes(fin as HhMm)
+      const dureeCalc = finMinFin - debutMin
       if (dureeCalc !== duree_minutes) {
         // Recalcule fin depuis durée pour canoniser (silencieux).
-        const finMin = dh * 60 + dm + duree_minutes
-        finCanonique = `${String(Math.floor(finMin / 60) % 24).padStart(2, '0')}:${String(finMin % 60).padStart(2, '0')}`
+        finCanonique = hhmmFromMinutes(debutMin + duree_minutes)
       } else {
         finCanonique = fin
       }
+      dureeCanonique = duree_minutes
     } else if (fin !== undefined) {
+      // Fin seule → dériver durée (convention exclusive CD 6891, sans +1).
       finCanonique = fin
+      dureeCanonique = toFinMinutes(fin as HhMm) - debutMin
     } else {
-      // Seule la durée est renseignée → dériver la fin.
-      const [dh, dm] = debut.split(':').map(Number)
-      const finMin = dh * 60 + dm + (duree_minutes as number)
-      finCanonique = `${String(Math.floor(finMin / 60) % 24).padStart(2, '0')}:${String(finMin % 60).padStart(2, '0')}`
+      // Durée seule → dériver fin.
+      finCanonique = hhmmFromMinutes(debutMin + (duree_minutes as number))
+      dureeCanonique = duree_minutes as number
     }
 
-    const seance: Seance = { date, debut, fin: finCanonique }
-    if (duree_minutes !== undefined) seance.duree_minutes = duree_minutes
+    const seance: Seance = {
+      date,
+      debut,
+      fin: finCanonique,
+      duree_minutes: dureeCanonique,
+    }
     const salle = iSalle !== undefined ? texte(row[iSalle]) : ''
     if (salle) seance.salle_id = salle
 

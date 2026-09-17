@@ -183,18 +183,23 @@ describe('parserIndispoLibre', () => {
     expect(ind.motif).toBe('mercredi après-midi')
   })
 
-  it('extrait une plage horaire au format 9h-10h', () => {
+  it('extrait une plage horaire au format 9h-10h + duree_minutes dérivée', () => {
+    // Symétrie du parseur (CD 7057) : Grammaire 1 (plage) doit
+    // TOUJOURS produire `fin` ET `duree_minutes`. Convention exclusive
+    // CD 6891 : `duree = toFinMinutes(fin) − toMinutes(debut)`, sans +1.
     const ind = parserIndispoLibre('9h-10h chant')!
     expect(ind.debut).toBe('09:00')
     expect(ind.fin).toBe('10:00')
+    expect(ind.duree_minutes).toBe(60)
     expect(ind.roles).toEqual(['chant'])
   })
 
-  it('extrait une plage horaire au format HH:MM-HH:MM', () => {
+  it('extrait une plage horaire au format HH:MM-HH:MM + duree_minutes dérivée', () => {
     const ind = parserIndispoLibre('mardi 14:30 - 16:00')!
     expect(ind.jours).toEqual(['mardi'])
     expect(ind.debut).toBe('14:30')
     expect(ind.fin).toBe('16:00')
+    expect(ind.duree_minutes).toBe(90)
   })
 
   it("garde le texte brut dans motif quand rien n'est reconnu", () => {
@@ -216,11 +221,12 @@ describe('parserIndispoLibre', () => {
   // durée après). Pas de colonne séparée dans le template — le format
   // libre gère plusieurs indispos par cellule (séparateur `;`/`\n`).
 
-  it('extrait duree_minutes depuis « 9h + 60min »', () => {
+  it('extrait duree_minutes depuis « 9h + 60min » + fin dérivée', () => {
+    // Symétrie Grammaire 2 (CD 7057) : la durée seule produit aussi `fin`.
     const ind = parserIndispoLibre('9h + 60min')!
     expect(ind.debut).toBe('09:00')
     expect(ind.duree_minutes).toBe(60)
-    expect(ind.fin).toBeUndefined()
+    expect(ind.fin).toBe('10:00')
   })
 
   it('extrait duree_minutes depuis « 9h + 1h » (unité heures pleines)', () => {
@@ -259,10 +265,51 @@ describe('parserIndispoLibre', () => {
 
   it('grammaire plage prend priorité si les deux séparateurs présents (« 9h-10h »)', () => {
     // Pas d'ambiguïté : `-` prime, la grammaire durée n'est même pas
-    // évaluée si la plage matche. Cohérent avec l'existant.
+    // évaluée si la plage matche. Cohérent avec l'existant. Symétrie
+    // Grammaire 1 (CD 7057) : `duree_minutes` dérivée depuis fin−debut.
     const ind = parserIndispoLibre('9h-10h')!
     expect(ind.debut).toBe('09:00')
     expect(ind.fin).toBe('10:00')
+    expect(ind.duree_minutes).toBe(60)
+  })
+
+  // ─── Invariant symétrie (CD 6990 anomalie 1, feu vert CD 7007) ────────────
+  // Garde-fou négatif : verrouille l'invariant post-fix pour prévenir
+  // la régression asymétrique. Reference feedback CD 6701 (test positif
+  // + contre-exemple qui verrouille l'invariant).
+
+  it('invariant : `fin` et `duree_minutes` sont cohérents pour toute grammaire produisant un horaire', () => {
+    // Sur toutes les entrées qui produisent au moins un `debut`, si
+    // l'une des 2 bornes (fin ou duree_minutes) est présente, l'autre
+    // DOIT être dérivée. Le cas des 2 absents (aucun horaire, ex :
+    // « convalescence ») reste licite.
+    const entrees = [
+      '9h-10h',
+      'mardi 14:30 - 16:00',
+      '9h + 60min',
+      '9h + 1h30',
+      '9h30 + 2h',
+      'mardi 9h + 90 min',
+    ]
+    for (const brut of entrees) {
+      const ind = parserIndispoLibre(brut)!
+      expect(ind, `entree=${brut}`).not.toBeNull()
+      expect(ind.debut, `entree=${brut}`).toBeDefined()
+      expect(ind.fin, `entree=${brut} fin absente`).toBeDefined()
+      expect(ind.duree_minutes, `entree=${brut} duree absente`).toBeDefined()
+      // Cohérence duree = toFinMinutes(fin) − toMinutes(debut).
+      const [dh, dm] = ind.debut!.split(':').map(Number)
+      const [fh, fm] = ind.fin!.split(':').map(Number)
+      const debutMin = dh * 60 + dm
+      const finMin = fh === 0 && fm === 0 ? 1439 : fh * 60 + fm
+      expect(finMin - debutMin, `entree=${brut} incoherent`).toBe(ind.duree_minutes)
+    }
+  })
+
+  it('invariant : sans horaire (motif seul), les 2 bornes restent absentes', () => {
+    const ind = parserIndispoLibre('convalescence')!
+    expect(ind.debut).toBeUndefined()
+    expect(ind.fin).toBeUndefined()
     expect(ind.duree_minutes).toBeUndefined()
   })
 })

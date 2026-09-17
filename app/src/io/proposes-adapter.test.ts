@@ -63,6 +63,7 @@ describe('extraireProposes', () => {
       date: '2026-08-28',
       debut: '09:00',
       fin: '10:00',
+      duree_minutes: 60,
       salle_id: 'XV',
     })
     expect(imposes[1].morceau).toBe('Autumn')
@@ -128,6 +129,7 @@ describe('extraireProposes', () => {
       date: '2026-08-28',
       debut: '09:00',
       fin: '10:30',
+      duree_minutes: 90,
     })
   })
 
@@ -200,7 +202,11 @@ describe('extraireProposes', () => {
     expect(warnings.some((w) => w.includes('ni Fin ni Durée'))).toBe(true)
   })
 
-  it('rétro-compat : template sans colonne Durée fonctionne (Fin seule)', () => {
+  it('rétro-compat : template sans colonne Durée dérive duree_minutes depuis Fin (symétrie CD 7057)', () => {
+    // Post-fix symétrie : `seance.duree_minutes` est TOUJOURS renseigné,
+    // même quand la colonne Durée est absente (dérivé fin−debut selon
+    // convention exclusive CD 6891). Avant, l'UI Imposes affichait un
+    // champ durée VIDE pour les 36 séances du fichier stress-test.
     const rows = [
       ['Morceau', 'Membres', 'Date', 'Début', 'Fin'],
       ['Blowin', 'karl', '2026-08-28', '09:00', '10:00'],
@@ -210,6 +216,32 @@ describe('extraireProposes', () => {
       date: '2026-08-28',
       debut: '09:00',
       fin: '10:00',
+      duree_minutes: 60,
     })
+  })
+
+  // ─── Invariant symétrie (CD 6990 anomalie 1, feu vert CD 7007) ────────────
+  it('invariant : toute Seance sortie de extraireProposes a fin ET duree_minutes cohérents', () => {
+    // Garde-fou négatif (feedback CD 6701) : verrouille l'invariant post-fix.
+    // 3 chemins (fin+duree, fin only, duree only) → tous produisent les 2 champs.
+    const rows = [
+      ['Morceau', 'Membres', 'Date', 'Début', 'Fin', 'Durée (min)'],
+      ['A', 'karl', '2026-08-28', '09:00', '10:00', '60'], // les deux
+      ['B', 'karl', '2026-08-28', '09:00', '10:30', ''], // fin only
+      ['C', 'karl', '2026-08-28', '09:00', '', '90'], // durée only
+    ]
+    const { imposes } = extraireProposes(rows, MAPPING_PROPOSES_DEFAUT, personnes(['karl']))
+    const seances = imposes.flatMap((i) => i.seances)
+    expect(seances).toHaveLength(3)
+    for (const s of seances) {
+      expect(s.fin, `seance ${s.date} sans fin`).toBeDefined()
+      expect(s.duree_minutes, `seance ${s.date} sans duree`).toBeDefined()
+      // Cohérence exclusive CD 6891.
+      const [dh, dm] = s.debut.split(':').map(Number)
+      const [fh, fm] = s.fin.split(':').map(Number)
+      const debutMin = dh * 60 + dm
+      const finMin = fh === 0 && fm === 0 ? 1439 : fh * 60 + fm
+      expect(finMin - debutMin).toBe(s.duree_minutes)
+    }
   })
 })

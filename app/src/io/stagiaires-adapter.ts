@@ -1,6 +1,7 @@
+import { toFinMinutes } from '../domain/grille'
 import { pupitreDe } from '../domain/migrate'
 import { estIndispoInterpretable } from '../engine/indispo'
-import type { Indispo, Personne, Pupitre } from '../domain/model'
+import type { HhMm, Indispo, Personne, Pupitre } from '../domain/model'
 import { PUPITRES_DEFAULTS, slug } from '../domain/model'
 
 /**
@@ -92,6 +93,25 @@ function parseHeure(h: string, m: string): string {
   return `${hh}:${mm}`
 }
 
+/** `HH:MM` → total de minutes depuis minuit. */
+function toMinutesHhMm(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number)
+  return h * 60 + m
+}
+
+/**
+ * Minutes → `HH:MM`, convention exclusive : 1440 → `'00:00'` (fin de
+ * journée, cohérent avec `toFinMinutes('00:00') = 1439`). Utilisé pour
+ * dériver la borne `fin` depuis `debut + duree_minutes` — Grammaire 2
+ * de `parserIndispoLibre` (CD 7057 point 1, symétrie du parseur).
+ */
+function hhmmFromMinutes(min: number): string {
+  if (min === 24 * 60) return '00:00'
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
 export function parserIndispoLibre(brut: string): Indispo | null {
   const t = brut.trim()
   if (!t) return null
@@ -132,6 +152,32 @@ export function parserIndispoLibre(brut: string): Indispo | null {
         // `60 min` → 60 min
         duree_minutes = Number(n)
       }
+    }
+  }
+
+  // Symétrie des grammaires (CD 6990 anomalie 1, feu vert CD 7007) : les
+  // 2 grammaires doivent produire À LA FOIS `fin` ET `duree_minutes`.
+  // Avant ce fix, Grammaire 1 (plage) produisait `fin` mais laissait
+  // `duree_minutes` à undefined, et Grammaire 2 (duree) l'inverse. Les
+  // consommateurs UI (Indispos.svelte) lisant `ind.duree_minutes`
+  // affichaient un champ VIDE pour toutes les indispos importées via
+  // grammaire plage — 12 règles sur le fichier stress-test.
+  //
+  // Convention EXCLUSIVE (CD 6891) : `duree_minutes = toFinMinutes(fin) −
+  // toMinutes(debut)`. `toFinMinutes('00:00') = 1439` traite fin-de-
+  // journée. La symétrie garantit que la cohérence des 2 champs se
+  // code UNE fois là où l'objet naît, sans dépendre d'un Zod parse ailleurs
+  // (l'import Excel court-circuite Zod par assignation directe au $state,
+  // ticket séparé pour la porte d'entrée).
+  if (debut !== undefined) {
+    const debutMin = toMinutesHhMm(debut)
+    if (fin !== undefined && duree_minutes === undefined) {
+      // Grammaire 1 chemin : dériver `duree_minutes` depuis fin−debut.
+      const finMin = toFinMinutes(fin as HhMm)
+      if (finMin >= debutMin) duree_minutes = finMin - debutMin
+    } else if (fin === undefined && duree_minutes !== undefined) {
+      // Grammaire 2 chemin : dériver `fin` depuis debut+duree.
+      fin = hhmmFromMinutes(debutMin + duree_minutes)
     }
   }
 
