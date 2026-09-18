@@ -175,7 +175,7 @@
         </p>
         <div class="colonnes">
           {#each classesParPupitre as section (section.pupitre)}
-            {@const nLibres = section.personnes.filter((c) => c.nb_groupes === 0).length}
+            {@const nLibres = section.personnes.filter((c) => c.nb_engagements === 0).length}
             <div class="colonne">
               <h4>
                 <span class="pup">{section.pupitre}</span>
@@ -189,16 +189,18 @@
               <ul>
                 {#each section.personnes as c (c.personne.id)}
                   {@const details = precisionsAffichees(c.personne, section.pupitre)}
-                  <li class:est-libre={c.nb_groupes === 0}>
+                  <li class:est-libre={c.nb_engagements === 0}>
                     <span class="nom">{libellePersonne(c.personne)}</span>
                     {#if details}
                       <span class="details">— {details}</span>
                     {/if}
                     <span class="engagement">
-                      {#if c.nb_groupes === 0}
+                      {#if c.nb_engagements === 0}
                         <span class="tag-mini tag-mini-libre">libre</span>
                       {:else}
-                        <span class="tag-mini">{c.nb_groupes} gr.</span>
+                        <span class="tag-mini"
+                          >{c.nb_engagements} morceau{c.nb_engagements > 1 ? 'x' : ''}</span
+                        >
                       {/if}
                     </span>
                   </li>

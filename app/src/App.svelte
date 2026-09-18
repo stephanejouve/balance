@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { estEngage } from './domain/engagement'
   import { butoirDeGroupe, diagnostiquerGrille, genererCreneaux } from './domain/grille'
   import { parseMaintenantUrlParam, propositionRejouer } from './domain/maintenant'
   import { parseLegacyInscriptions } from './domain/legacy'
@@ -869,9 +870,10 @@
     inscriptions.personnes.reduce((s, p) => s + p.indispos.length, 0),
   )
   const nbPersonnesLibres = $derived(
-    inscriptions.personnes.filter(
-      (p) => !inscriptions.groupes.some((g) => g.membres.some((m) => m.personne_id === p.id)),
-    ).length,
+    // Une personne est « libre » ssi elle n'est engagée NI dans un groupe
+    // volontaire NI dans un morceau imposé. Voir `domain/engagement.ts` —
+    // définition alignée avec le pool (fix CD 7057 point 2).
+    inscriptions.personnes.filter((p) => !estEngage(p.id, inscriptions)).length,
   )
   const personnesAvecIndispo = $derived(inscriptions.personnes.filter((p) => p.indispos.length > 0))
   const personnesSansIndispo = $derived(

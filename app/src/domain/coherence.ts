@@ -267,9 +267,17 @@ function _detecterResponsablesNonCites(
 function _detecterStagiairesOrphelins(
   inscriptions: Inscriptions,
 ): AlerteCoherence[] {
+  // Fix CD 7057 point 2 / CD 6990 anomalie 3 : « cité » inclut aussi les
+  // morceaux imposés. Avant, une personne présente uniquement dans un
+  // imposé (concert, morceau obligatoire) était signalée orpheline à tort
+  // — l'alerte suggérait qu'elle « n'était citée nulle part » alors qu'elle
+  // était bien engagée dans la programmation imposée.
   const idsCites = new Set<string>()
   for (const g of inscriptions.groupes) {
     for (const m of g.membres) idsCites.add(m.personne_id)
+  }
+  for (const imp of inscriptions.imposes) {
+    for (const pid of imp.membres) idsCites.add(pid)
   }
   const alertes: AlerteCoherence[] = []
   for (const p of inscriptions.personnes) {
