@@ -92,6 +92,38 @@ describe('comptageEngagements', () => {
     expect(c.get('alice')).toBe(1)
   })
 
+  it('dédup intra-source (groupe citant 2× la même personne sur 2 pupitres)', () => {
+    // Miroir du test précédent côté groupes (obs 2 review Leader PR #145) :
+    // un groupe peut légitimement citer une personne deux fois si elle joue
+    // 2 instruments dans le même morceau (Marc basse+chant). Le comptage
+    // doit rester 1 par groupe (dédup par personne_id via Set).
+    const ins: Inscriptions = {
+      session_id: 's',
+      personnes: [personne('marc', 'Marc', 'basse')],
+      groupes: [
+        {
+          id: 'g1',
+          titre: 'Multi-instrument',
+          auteur: '',
+          responsable_id: 'r',
+          style: '',
+          tonalite: '',
+          membres: [
+            { personne_id: 'marc', pupitre: 'basse' },
+            { personne_id: 'marc', pupitre: 'chant' },
+          ],
+          postes_cherches: [],
+          repetitions_deja_faites: 0,
+          echeance: 'apero_mercredi',
+        },
+      ],
+      imposes: [],
+      refus: [],
+    }
+    const c = comptageEngagements(ins)
+    expect(c.get('marc')).toBe(1)
+  })
+
   it('inscriptions sans imposes : comportement rétrocompat identique à l\'ancien comptage', () => {
     const ins: Inscriptions = {
       session_id: 's',

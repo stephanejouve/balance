@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { estEngage } from './domain/engagement'
+  import { comptageEngagements, estEngage } from './domain/engagement'
   import { butoirDeGroupe, diagnostiquerGrille, genererCreneaux } from './domain/grille'
   import { parseMaintenantUrlParam, propositionRejouer } from './domain/maintenant'
   import { parseLegacyInscriptions } from './domain/legacy'
@@ -818,16 +818,27 @@
   function supprimerPersonne(pid: string) {
     const p = inscriptions.personnes.find((x) => x.id === pid)
     if (!p) return
-    // Vérifier qu'elle n'est plus dans aucun groupe / imposé
-    const engagements = inscriptions.groupes.filter((g) =>
-      g.membres.some((m) => m.personne_id === pid),
-    ).length
+    // Vérifier qu'elle n'est plus dans aucun groupe / imposé — source unique
+    // via `domain/engagement.ts` (fix follow-up review Leader PR #145).
+    // Bug latent avant : le commentaire mentionnait « groupe / imposé » mais
+    // le check portait uniquement sur groupes → une personne présente
+    // uniquement dans un imposé pouvait être supprimée sans warning, et son
+    // id restait dans `imposes[].membres` (dangling reference).
+    const engagements = comptageEngagements(inscriptions).get(pid) ?? 0
     if (engagements > 0) {
-      if (!confirm(`${libellePersonne(p)} est encore dans ${engagements} groupe(s). Supprimer quand même ?`))
+      if (
+        !confirm(
+          `${libellePersonne(p)} est encore dans ${engagements} morceau(x) (groupes ou imposés). Supprimer quand même ?`,
+        )
+      )
         return
-      // Retire des groupes
+      // Retire des groupes ET des imposés — sans quoi l'id survivrait en
+      // dangling reference dans imposes[].membres.
       for (const g of inscriptions.groupes) {
         g.membres = g.membres.filter((m) => m.personne_id !== pid)
+      }
+      for (const imp of inscriptions.imposes) {
+        imp.membres = imp.membres.filter((m) => m !== pid)
       }
     }
     inscriptions.personnes = inscriptions.personnes.filter((x) => x.id !== pid)

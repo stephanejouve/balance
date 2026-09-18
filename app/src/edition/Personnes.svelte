@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { comptageEngagements } from '../domain/engagement'
   import type { Inscriptions, Lieu, Personne } from '../domain/model'
   import { libellePersonne } from '../domain/model'
   import { classePourPupitre, type StagiaireDuPupitre } from './libres-tri'
@@ -45,6 +46,14 @@
     }
     return sections
   })
+  /**
+   * Compte d'engagements par pid (groupes + imposés) — source unique via
+   * `domain/engagement.ts`. Utilisé par la colonne « Morceaux » du tableau
+   * d'édition (fix follow-up review Leader PR #145 : élimine la définition
+   * inline `inscriptions.groupes.filter(...)` qui divergeait de la source
+   * unique introduite par ce même PR).
+   */
+  const nbEngagementsParPid = $derived(comptageEngagements(inscriptions))
 
   /**
    * Nb personnes distinctes vs nb apparences dans les sections. Une
@@ -96,13 +105,13 @@
           <th style="width:100px">Discriminant</th>
           <th>Instruments</th>
           <th style="width:110px">Rôle</th>
-          <th style="width:70px">Groupes</th>
+          <th style="width:70px">Morceaux</th>
           <th style="width:40px"></th>
         </tr>
       </thead>
       <tbody>
         {#each inscriptions.personnes as p}
-          {@const nGroupes = inscriptions.groupes.filter((g) => g.membres.some((m) => m.personne_id === p.id)).length}
+          {@const nGroupes = (nbEngagementsParPid.get(p.id) ?? 0)}
           <tr>
             <td><input bind:value={p.nom} onchange={onInvalider} /></td>
             <td><input bind:value={p.discriminant} onchange={onInvalider} placeholder="(B), R., L…" /></td>
