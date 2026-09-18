@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { comptageEngagements } from '../domain/engagement'
 import type { Inscriptions, Personne } from '../domain/model'
-import { classePourPupitre, comptageGroupes } from './libres-tri'
+import { classePourPupitre } from './libres-tri'
 
 function personne(id: string, nom: string, pupitres: string[]): Personne {
   return {
@@ -57,9 +58,9 @@ function inscriptions(): Inscriptions {
   }
 }
 
-describe('comptageGroupes', () => {
+describe('comptageEngagements (via libres-tri)', () => {
   it("compte le nombre d'engagements en groupes par personne", () => {
-    const c = comptageGroupes(inscriptions())
+    const c = comptageEngagements(inscriptions())
     expect(c.get('marc')).toBe(1)
     expect(c.get('julia')).toBe(2)
     expect(c.get('emma')).toBeUndefined()
@@ -74,7 +75,7 @@ describe('classePourPupitre', () => {
 
   it('inclut les engagés (pas de filtre libres-only)', () => {
     const c = classePourPupitre('chant', inscriptions())
-    expect(c.find((c) => c.personne.id === 'julia')?.nb_groupes).toBe(2)
+    expect(c.find((c) => c.personne.id === 'julia')?.nb_engagements).toBe(2)
   })
 
   it('trie alphabétiquement par nom pour engagement égal', () => {

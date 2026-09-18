@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { comptageEngagements } from '../domain/engagement'
   import type { Inscriptions, Lieu, Personne } from '../domain/model'
   import { libellePersonne } from '../domain/model'
   import { classePourPupitre, type StagiaireDuPupitre } from './libres-tri'
@@ -45,6 +46,14 @@
     }
     return sections
   })
+  /**
+   * Compte d'engagements par pid (groupes + imposés) — source unique via
+   * `domain/engagement.ts`. Utilisé par la colonne « Morceaux » du tableau
+   * d'édition (fix follow-up review Leader PR #145 : élimine la définition
+   * inline `inscriptions.groupes.filter(...)` qui divergeait de la source
+   * unique introduite par ce même PR).
+   */
+  const nbEngagementsParPid = $derived(comptageEngagements(inscriptions))
 
   /**
    * Nb personnes distinctes vs nb apparences dans les sections. Une
@@ -96,13 +105,13 @@
           <th style="width:100px">Discriminant</th>
           <th>Instruments</th>
           <th style="width:110px">Rôle</th>
-          <th style="width:70px">Groupes</th>
+          <th style="width:70px">Morceaux</th>
           <th style="width:40px"></th>
         </tr>
       </thead>
       <tbody>
         {#each inscriptions.personnes as p}
-          {@const nGroupes = inscriptions.groupes.filter((g) => g.membres.some((m) => m.personne_id === p.id)).length}
+          {@const nGroupes = (nbEngagementsParPid.get(p.id) ?? 0)}
           <tr>
             <td><input bind:value={p.nom} onchange={onInvalider} /></td>
             <td><input bind:value={p.discriminant} onchange={onInvalider} placeholder="(B), R., L…" /></td>
@@ -175,7 +184,7 @@
         </p>
         <div class="colonnes">
           {#each classesParPupitre as section (section.pupitre)}
-            {@const nLibres = section.personnes.filter((c) => c.nb_groupes === 0).length}
+            {@const nLibres = section.personnes.filter((c) => c.nb_engagements === 0).length}
             <div class="colonne">
               <h4>
                 <span class="pup">{section.pupitre}</span>
@@ -189,16 +198,18 @@
               <ul>
                 {#each section.personnes as c (c.personne.id)}
                   {@const details = precisionsAffichees(c.personne, section.pupitre)}
-                  <li class:est-libre={c.nb_groupes === 0}>
+                  <li class:est-libre={c.nb_engagements === 0}>
                     <span class="nom">{libellePersonne(c.personne)}</span>
                     {#if details}
                       <span class="details">— {details}</span>
                     {/if}
                     <span class="engagement">
-                      {#if c.nb_groupes === 0}
+                      {#if c.nb_engagements === 0}
                         <span class="tag-mini tag-mini-libre">libre</span>
                       {:else}
-                        <span class="tag-mini">{c.nb_groupes} gr.</span>
+                        <span class="tag-mini"
+                          >{c.nb_engagements} morceau{c.nb_engagements > 1 ? 'x' : ''}</span
+                        >
                       {/if}
                     </span>
                   </li>

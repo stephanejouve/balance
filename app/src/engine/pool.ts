@@ -1,3 +1,4 @@
+import { comptageEngagements } from '../domain/engagement'
 import { butoirKeyDeGroupe, type Creneau } from '../domain/grille'
 import type { Groupe, Inscriptions, Personne, Pupitre, Session } from '../domain/model'
 import { indispoBloque } from './indispo'
@@ -223,11 +224,15 @@ export function calculerPool(
   // places à pourvoir. Le nouveau filtre compte : un transfert vers un
   // (cible, pupitre) n'est écarté que si `libres_count >= total_cherche`
   // à ce pupitre.
-  const engagesPar = new Map<string, number>()
-  for (const g of groupes) {
-    const membres = new Set(g.membres.map((m) => m.personne_id))
-    for (const pid of membres) engagesPar.set(pid, (engagesPar.get(pid) ?? 0) + 1)
-  }
+  // Fix CD 7057 point 2 / CD 6990 anomalie 3 : `engagesPar` inclut aussi
+  // les personnes citées dans un impose (morceau imposé). Avant, seul
+  // `inscriptions.groupes` était compté — les personnes présentes UNIQUEMENT
+  // dans un imposé étaient considérées LIBRES, faussant le filtre
+  // « libres >= total_cherche » → écarte à tort tous les transferts vers
+  // un pupitre où un « faux libre » (en réalité pris par un imposé) apparaît.
+  // Sur le jeu de stress avec concert imposé, cause du pool à zéro / 25
+  // postes cherchés. Voir `domain/engagement.ts` pour la définition unique.
+  const engagesPar = comptageEngagements(inscriptions)
   const libresCountParPupitre = new Map<Pupitre, number>()
   for (const personne of inscriptions.personnes) {
     if ((engagesPar.get(personne.id) ?? 0) > 0) continue
