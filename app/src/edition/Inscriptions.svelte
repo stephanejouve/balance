@@ -33,6 +33,15 @@
     onRetirerMembre,
     onInvalider,
   }: Props = $props()
+
+  // Liste triée pour le `<select>` Resp. — tri stable par libellé
+  // affichable. Dérivé pour re-évaluer si `inscriptions.personnes`
+  // change (ajout/suppression de personne, relecture d'identités).
+  const personnesTriees = $derived(
+    [...inscriptions.personnes].sort((a, b) =>
+      libellePersonne(a).localeCompare(libellePersonne(b), 'fr'),
+    ),
+  )
 </script>
 
 <details class="sheet">
@@ -65,7 +74,27 @@
           <tr>
             <td class="mono">{i + 1}</td>
             <td><input bind:value={g.titre} onchange={onInvalider} /></td>
-            <td><input bind:value={g.responsable_id} onchange={onInvalider} /></td>
+            <td>
+              <!-- Colonne Resp. étape 1b · Inscriptions. Sujet C garde-fou
+                   (Stéphane 2026-09-02/03) rappelé par CD 7361 (2026-09-20,
+                   anomalie 8 CD 6990) : afficher le libellé de la personne
+                   (« Fanny (A) »), jamais la clé technique slugifiée
+                   (« fanny-a »). Le `<select>` garantit à la fois l'affichage
+                   du libellé ET que l'écriture ne peut poser qu'un id de
+                   personne réellement présente. Fallback `<option>` pour
+                   la valeur courante si elle n'est pas (ou plus) dans
+                   `personnes` — cas legacy import Excel avant relecture
+                   d'identités. -->
+              <select bind:value={g.responsable_id} onchange={onInvalider}>
+                <option value="">— aucun —</option>
+                {#each personnesTriees as p (p.id)}
+                  <option value={p.id}>{libellePersonne(p)}</option>
+                {/each}
+                {#if g.responsable_id && !personnesParId.has(g.responsable_id)}
+                  <option value={g.responsable_id}>{g.responsable_id} (inconnu)</option>
+                {/if}
+              </select>
+            </td>
             <td><input bind:value={g.style} onchange={onInvalider} /></td>
             <td><input bind:value={g.tonalite} onchange={onInvalider} /></td>
             <td>
