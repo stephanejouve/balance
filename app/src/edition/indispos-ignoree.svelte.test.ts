@@ -44,7 +44,7 @@ describe('Indispos.svelte — état visible des règles ignorées (#151)', () =>
     const notes = container.querySelectorAll('.indispo-ignoree')
     expect(notes).toHaveLength(1)
     expect(notes[0].textContent).toContain('Ignorée dans le calcul')
-    expect(notes[0].textContent).toContain('précisez le jour ou l\'heure')
+    expect(notes[0].textContent).toContain('videz le motif')
     unmount(c)
   })
 

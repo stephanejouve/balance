@@ -97,10 +97,17 @@ export function raisonIndispoIgnoree(ind: Indispo): string | null {
   if (estIndispoInterpretable(ind)) return null
   const aHoraire = Boolean(ind.debut || ind.fin || ind.duree_minutes !== undefined)
   if (!aHoraire && ind.jours.length === 0 && ind.roles.length === 0) {
-    return 'Aucun jour, horaire ni rôle renseigné — la règle ne bloque rien. Renseignez au moins un jour ou une heure.'
+    return 'Aucun jour, horaire ni rôle renseigné — la règle ne bloque rien. Pour que la règle compte : renseignez une date ou un horaire.'
   }
+  // Remèdes EXACTS (review Leader #159) : chacun rend l'indispo
+  // interprétable, test dédié. « Précisez le jour » ne suffit pas : un nom
+  // de jour + motif déclenche justement le check de résidu.
   const residu = residuNonReconnu(ind.motif, ind.roles)
-  return `Le texte du motif n'a pas pu être lu (« ${residu.join(' ')} ») — précisez le jour ou l'heure dans les champs.`
+  const remedes = ['videz le motif', 'indiquez un début et une durée']
+  if (ind.roles.length === 0 && ind.jours.some((j) => JOURS_FR.includes(j))) {
+    remedes.push('remplacez le nom de jour par une date')
+  }
+  return `Le texte du motif n'a pas pu être lu (« ${residu.join(' ')} »). Pour que la règle compte : ${remedes.join(', ou ')}.`
 }
 
 /** Jours de semaine indexés par `Date.getDay()` (dimanche = 0, ..., samedi = 6).

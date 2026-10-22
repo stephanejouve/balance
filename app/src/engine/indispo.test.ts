@@ -404,15 +404,43 @@ describe('raisonIndispoIgnoree — état visible d\'une règle ignorée (#151)',
     expect(raisonIndispoIgnoree({ jours: ['2026-08-25'], roles: [], motif: 'kiné' })).toBeNull()
   })
 
-  it('saisie UI « mardi, motif kiné » : nomme le mot non lu et dit quoi faire', () => {
-    const r = raisonIndispoIgnoree({ jours: ['mardi'], roles: [], motif: 'kiné' })
+  it('saisie UI « mardi, motif kiné » : nomme le mot non lu et propose les 3 remèdes', () => {
+    const r = raisonIndispoIgnoree({ jours: ['mardi'], roles: [], motif: 'kiné' })!
     expect(r).toContain('« kine »')
-    expect(r).toContain('précisez le jour ou l\'heure dans les champs')
+    expect(r).toContain('videz le motif')
+    expect(r).toContain('indiquez un début et une durée')
+    expect(r).toContain('remplacez le nom de jour par une date')
+    // « précisez le jour » ne rendait pas la règle lisible (review Leader #159)
+    expect(r).not.toContain('précisez le jour')
+  })
+
+  it('chaque remède proposé rend effectivement la règle interprétable', () => {
+    const base = { jours: ['mardi'], roles: [], motif: 'kiné' }
+    expect(estIndispoInterpretable({ ...base, motif: '' })).toBe(true)
+    expect(estIndispoInterpretable({ ...base, debut: '09:00', duree_minutes: 60 })).toBe(true)
+    expect(estIndispoInterpretable({ ...base, jours: ['2026-08-25'] })).toBe(true)
+    // Contre-exemple : un début seul ne suffit pas — il n'est pas proposé.
+    expect(estIndispoInterpretable({ ...base, debut: '09:00' })).toBe(false)
+  })
+
+  it('avec un rôle : la date n\'est pas proposée (elle ne suffirait pas)', () => {
+    const ind = { jours: [], debut: '09:00', roles: ['chant' as const], motif: 'RDV médecin' }
+    const r = raisonIndispoIgnoree(ind)!
+    expect(r).not.toContain('date')
+    expect(estIndispoInterpretable({ ...ind, jours: ['2026-08-25'] })).toBe(false)
+    expect(estIndispoInterpretable({ ...ind, motif: '' })).toBe(true)
+    expect(estIndispoInterpretable({ ...ind, duree_minutes: 60 })).toBe(true)
   })
 
   it('aucun champ structuré (« convalescence ») : raison distincte', () => {
     const r = raisonIndispoIgnoree({ jours: [], roles: [], motif: 'convalescence' })
     expect(r).toContain('Aucun jour, horaire ni rôle')
+    expect(r).toContain('renseignez une date ou un horaire')
+    // Remèdes exacts : date ou horaire suffisent, un nom de jour non (résidu).
+    const base = { jours: [] as string[], roles: [], motif: 'convalescence' }
+    expect(estIndispoInterpretable({ ...base, jours: ['2026-08-25'] })).toBe(true)
+    expect(estIndispoInterpretable({ ...base, debut: '09:00' })).toBe(true)
+    expect(estIndispoInterpretable({ ...base, jours: ['mardi'] })).toBe(false)
   })
 
   it('même décision que estIndispoInterpretable sur tous les cas du rapport #151', () => {
