@@ -148,3 +148,45 @@ describe('analyseQuotas', () => {
     expect(q[0].pupitre).toBe('batterie')
   })
 })
+
+describe('analyseQuotas — capacité nulle : la raison, pas « Infinity% » (#154)', () => {
+  const groupe = (pid: string) => ({ id: 'g', titre: 'G', echeance: 'apero_mercredi', membres: [{ personne_id: pid, pupitre: 'chant' }] })
+
+  it('aucune personne (onglet Liste seul, smoke CD) → aucun-musicien', () => {
+    const { session, creneaux } = fixtureButoir()
+    const insc = Inscriptions.parse({ session_id: 's', personnes: [], groupes: [groupe('inconnu')] })
+    const [q] = analyseQuotas(session, insc, creneaux)
+    expect(q.ratio).toBe(Infinity)
+    expect(q.capacite_nulle).toBe('aucun-musicien')
+  })
+
+  it('butoir passé : plus aucun créneau dans la fenêtre → aucun-creneau', () => {
+    const { session, creneaux } = fixtureButoir()
+    const apres = creneaux.filter((c) => c.date === '2026-08-25')
+    const insc = Inscriptions.parse({
+      session_id: 's', personnes: [{ id: 'a', nom: 'A', instruments: [{ pupitre: 'chant' }] }], groupes: [groupe('a')],
+    })
+    const [q] = analyseQuotas(session, insc, apres)
+    expect(q.capacite_nulle).toBe('aucun-creneau')
+  })
+
+  it('musiciens présents, créneaux présents, tous bloqués par les indispos → tous-indisponibles', () => {
+    const { session, creneaux } = fixtureButoir()
+    const insc = Inscriptions.parse({
+      session_id: 's',
+      personnes: [{ id: 'a', nom: 'A', instruments: [{ pupitre: 'chant' }], indispos: [{ jours: [], roles: [], debut: '00:00', duree_minutes: 1440 }] }],
+      groupes: [groupe('a')],
+    })
+    const [q] = analyseQuotas(session, insc, creneaux)
+    expect(q.capacite).toBe(0)
+    expect(q.capacite_nulle).toBe('tous-indisponibles')
+  })
+
+  it('capacité non nulle : pas de raison posée', () => {
+    const { session, creneaux } = fixtureButoir()
+    const insc = Inscriptions.parse({
+      session_id: 's', personnes: [{ id: 'a', nom: 'A', instruments: [{ pupitre: 'chant' }] }], groupes: [groupe('a')],
+    })
+    expect(analyseQuotas(session, insc, creneaux)[0].capacite_nulle).toBeUndefined()
+  })
+})
