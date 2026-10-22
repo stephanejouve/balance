@@ -61,6 +61,10 @@ export function estIndispoInterpretable(ind: Indispo): boolean {
   const aRoles = ind.roles.length > 0
   if (!aHoraire && !aJours && !aRoles) return false
 
+  // Saisie dans l'éditeur (#151) : jours / horaire / rôles sont des champs
+  // saisis, le motif n'est qu'un libellé — rien à résidu-vérifier.
+  if (ind.saisie_editeur) return true
+
   // Garde imposé/parser-complet : quand debut ET une borne (fin OU durée)
   // sont posés, l'intention est structurée (parser complet ou construction
   // programmatique via enrichirIndispos). Le motif peut contenir n'importe
@@ -126,6 +130,32 @@ function citerMotif(motif: string): string {
   const coupe = m.slice(0, CITATION_MAX + 1)
   const dernierEspace = coupe.lastIndexOf(' ')
   return `${(dernierEspace > 0 ? coupe.slice(0, dernierEspace) : m.slice(0, CITATION_MAX)).trimEnd()}…`
+}
+
+/**
+ * Ce que bloque une indispo, en clair — « mardi, toute la journée »,
+ * « mardi, 12:00 pendant 1h30, pour chant ». Même lecture que
+ * `indispoBloque` (journée entière, créneau pile, plage).
+ *
+ * Issue #151 (CD 2026-10-22) : quand une écriture dans l'éditeur rend
+ * active une règle jusque-là ignorée, l'éditeur le dit et dit quoi — un
+ * « arrive mardi midi » importé qui se met à bloquer tout le mardi parce
+ * qu'on a touché ses rôles ne doit pas le faire en silence.
+ */
+export function descriptionBlocage(ind: Indispo): string {
+  const quand = ind.jours.length > 0 ? ind.jours.join(', ') : 'tous les jours de la session'
+  let horaire = 'toute la journée'
+  if (ind.debut && ind.duree_minutes !== undefined) horaire = `${ind.debut} pendant ${libelleDuree(ind.duree_minutes)}`
+  else if (ind.debut && ind.fin) horaire = `de ${ind.debut} à ${ind.fin}`
+  else if (ind.debut) horaire = `le créneau de ${ind.debut}`
+  const pour = ind.roles.length > 0 ? `, pour ${ind.roles.join(', ')}` : ''
+  return `${quand}, ${horaire}${pour}`
+}
+
+function libelleDuree(min: number): string {
+  if (min % 60 === 0) return `${min / 60}h`
+  if (min > 60) return `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`
+  return `${min} min`
 }
 
 /** Jours de semaine indexés par `Date.getDay()` (dimanche = 0, ..., samedi = 6).

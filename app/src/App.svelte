@@ -868,6 +868,7 @@
       fin: undefined,
       roles: [],
       motif: '',
+      saisie_editeur: true,
     })
     marquerObsolete()
   }
