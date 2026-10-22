@@ -1,5 +1,5 @@
 import type { Creneau } from '../domain/grille'
-import { finMinutesDe } from '../domain/grille'
+import { dateFr, finMinutesDe } from '../domain/grille'
 import type { Indispo, Personne, Pupitre } from '../domain/model'
 
 /** Helper local — `toMinutes` de `domain/grille.ts` est privé au module. */
@@ -143,7 +143,7 @@ function citerMotif(motif: string): string {
  * qu'on a touché ses rôles ne doit pas le faire en silence.
  */
 export function descriptionBlocage(ind: Indispo): string {
-  const quand = ind.jours.length > 0 ? ind.jours.join(', ') : 'tous les jours de la session'
+  const quand = ind.jours.length > 0 ? ind.jours.map(dateFr).join(', ') : 'tous les jours de la session'
   let horaire = 'toute la journée'
   if (ind.debut && ind.duree_minutes !== undefined) horaire = `${ind.debut} pendant ${libelleDuree(ind.duree_minutes)}`
   else if (ind.debut && ind.fin) horaire = `de ${ind.debut} à ${ind.fin}`

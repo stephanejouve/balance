@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { optionsFinGrille, type DiagnosticGrille } from '../domain/grille'
+  import { dateFr, optionsFinGrille, type DiagnosticGrille } from '../domain/grille'
   import type { Session } from '../domain/model'
 
   interface Props {
@@ -90,7 +90,7 @@
     <p class="eyebrow">Étape 2b · Session</p>
     <h2>{session.nom}</h2>
     <p class="hint">
-      {session.date_debut} → {session.date_fin}, butoirs apéro {session.butoir_apero_date} {session.butoir_apero_heure} / vendredi {session.butoir_vendredi_date} {session.butoir_vendredi_heure}.
+      {dateFr(session.date_debut)} → {dateFr(session.date_fin)}, butoirs apéro {dateFr(session.butoir_apero_date)} {session.butoir_apero_heure} / vendredi {dateFr(session.butoir_vendredi_date)} {session.butoir_vendredi_heure}.
       {session.grille.filter((r) => !r.bloque).length} règle(s) créatrice(s),
       {session.grille.filter((r) => r.bloque).length} règle(s) de blocage —
       <b>{nbCreneaux}</b> créneaux générés.

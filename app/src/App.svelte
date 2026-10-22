@@ -1,6 +1,6 @@
 <script lang="ts">
   import { comptageEngagements, estEngage } from './domain/engagement'
-  import { butoirDeGroupe, diagnostiquerGrille, genererCreneaux } from './domain/grille'
+  import { butoirDeGroupe, dateFr, diagnostiquerGrille, genererCreneaux } from './domain/grille'
   import { parseMaintenantUrlParam, propositionRejouer } from './domain/maintenant'
   import { parseLegacyInscriptions } from './domain/legacy'
   import { migrerInscriptions } from './domain/migrate'
@@ -1107,7 +1107,7 @@
       musiciens, groupes et salles.
       {#if inscriptions.groupes.length > 0 || inscriptions.personnes.length > 0}
         {inscriptions.groupes.length} groupes,
-        {inscriptions.personnes.length} musiciens, {creneaux.length} créneaux avant butoir du {session.butoir_apero_date}.
+        {inscriptions.personnes.length} musiciens, {creneaux.length} créneaux avant butoir du {dateFr(session.butoir_apero_date)}.
       {:else}
         Aucune session chargée — importez un fichier pour commencer.
       {/if}
@@ -1563,7 +1563,7 @@
         <b>{session.nom}</b>
         {#if lieu.nom} · {lieu.nom}{/if}
         {#if session.date_debut && session.date_fin}
-          · {session.date_debut} → {session.date_fin}
+          · {dateFr(session.date_debut)} → {dateFr(session.date_fin)}
         {/if}
         · imprimé le {/* Audit timestamp — reflète l'action réelle d'impression
           (quand le PDF est produit), pas le présent applicatif fixé par

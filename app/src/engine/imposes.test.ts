@@ -253,7 +253,7 @@ describe('warningsSalleImposeeInconnue — alerte import (CD 7016)', () => {
     expect(ws).toHaveLength(1)
     expect(ws[0]).toContain('Autumn Leaves')
     expect(ws[0]).toContain('Salle Inconnue')
-    expect(ws[0]).toContain('2026-08-26')
+    expect(ws[0]).toContain('26/08/2026')
   })
 
   it("ne signale pas une salle qui matche (accents insensible)", () => {

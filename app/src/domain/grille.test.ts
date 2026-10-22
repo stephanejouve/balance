@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  dateFr,
   decouper,
   diagnostiquerGrille,
   finInclusive,
@@ -743,5 +744,17 @@ describe('parseDureeSaisie — accepte minutes/heures/mixte (CD 6950)', () => {
     // Cohérent avec la sémantique preprocess Zod : `debut === fin` = 0.
     expect(parseDureeSaisie('0')).toBe(0)
     expect(parseDureeSaisie('0h')).toBe(0)
+  })
+})
+
+describe('dateFr — affichage JJ/MM/AAAA (Stéphane 2026-10-22)', () => {
+  it('date ISO → JJ/MM/AAAA', () => {
+    expect(dateFr('2026-10-28')).toBe('28/10/2026')
+    expect(dateFr('2026-01-05')).toBe('05/01/2026')
+  })
+
+  it('valeur non ISO rendue telle quelle (champ vide, saisie libre)', () => {
+    expect(dateFr('')).toBe('')
+    expect(dateFr('mardi')).toBe('mardi')
   })
 })

@@ -1,5 +1,5 @@
 import type { Creneau } from '../domain/grille'
-import { finMinutesDe } from '../domain/grille'
+import { dateFr, finMinutesDe } from '../domain/grille'
 import type { Groupe, Inscriptions, Lieu, Personne, Pupitre, Salle, Session } from '../domain/model'
 import { libellePersonne } from '../domain/model'
 import type { RegistreContraintes } from './contraintes'
@@ -126,12 +126,12 @@ export function verifier(
     if (groupe && groupe.echeance === 'restitution_vendredi') {
       return {
         key: butoirKeyVendredi,
-        label: `${session.butoir_vendredi_date} ${session.butoir_vendredi_heure} (vendredi)`,
+        label: `${dateFr(session.butoir_vendredi_date)} ${session.butoir_vendredi_heure} (vendredi)`,
       }
     }
     return {
       key: butoirKeyApero,
-      label: `${session.butoir_apero_date} ${session.butoir_apero_heure} (apéro)`,
+      label: `${dateFr(session.butoir_apero_date)} ${session.butoir_apero_heure} (apéro)`,
     }
   }
 
@@ -164,7 +164,7 @@ export function verifier(
         if (creneauKey >= butoir.key) {
           problemes.push({
             type: 'apres-butoir',
-            message: `${creneau.date} ${creneau.debut} tombe au-delà du butoir ${butoir.label}`,
+            message: `${dateFr(creneau.date)} ${creneau.debut} tombe au-delà du butoir ${butoir.label}`,
             creneau_id,
             groupe_id: a.groupe_id,
           })
@@ -179,7 +179,7 @@ export function verifier(
       if (actif(registre, 'salle-hors-creneau') && !sallesDispo.has(a.salle_id)) {
         problemes.push({
           type: 'salle-hors-creneau',
-          message: `salle ${a.salle_id} non ouverte au créneau ${creneau.date} ${creneau.debut}`,
+          message: `salle ${a.salle_id} non ouverte au créneau ${dateFr(creneau.date)} ${creneau.debut}`,
           creneau_id,
           groupe_id: a.groupe_id,
           salle_id: a.salle_id,
@@ -188,7 +188,7 @@ export function verifier(
       if (actif(registre, 'salle-unique-groupe') && sallesPrises.has(a.salle_id)) {
         problemes.push({
           type: 'salle-double-bookee',
-          message: `salle ${a.salle_id} prise deux fois au créneau ${creneau.date} ${creneau.debut}`,
+          message: `salle ${a.salle_id} prise deux fois au créneau ${dateFr(creneau.date)} ${creneau.debut}`,
           creneau_id,
           salle_id: a.salle_id,
         })
@@ -205,7 +205,7 @@ export function verifier(
         if (restr === 'interdit') {
           problemes.push({
             type: 'salle-hors-creneau',
-            message: `${s.nom} est fermée au créneau ${creneau.date} ${creneau.debut} (restriction horaire)`,
+            message: `${s.nom} est fermée au créneau ${dateFr(creneau.date)} ${creneau.debut} (restriction horaire)`,
             creneau_id,
             salle_id: a.salle_id,
             groupe_id: a.groupe_id,
@@ -213,7 +213,7 @@ export function verifier(
         } else if (restr === 'pas_reduit') {
           problemes.push({
             type: 'salle-hors-creneau',
-            message: `${s.nom} : le créneau ${creneau.date} ${creneau.debut} (${dureeCreneauMin(creneau)} min) dépasse la durée maximale autorisée`,
+            message: `${s.nom} : le créneau ${dateFr(creneau.date)} ${creneau.debut} (${dureeCreneauMin(creneau)} min) dépasse la durée maximale autorisée`,
             creneau_id,
             salle_id: a.salle_id,
             groupe_id: a.groupe_id,
@@ -252,7 +252,7 @@ export function verifier(
             const p = ctx.personnesParId.get(pid)
             problemes.push({
               type: 'personne-double-bookee',
-              message: `${p ? libellePersonne(p) : pid} joue dans deux groupes au créneau ${creneau.date} ${creneau.debut}`,
+              message: `${p ? libellePersonne(p) : pid} joue dans deux groupes au créneau ${dateFr(creneau.date)} ${creneau.debut}`,
               creneau_id,
               personne_id: pid,
             })
@@ -274,7 +274,7 @@ export function verifier(
           if (indispoBloque(p, creneau, pupitres)) {
             problemes.push({
               type: 'personne-indispo',
-              message: `${libellePersonne(p)} est indisponible au créneau ${creneau.date} ${creneau.debut}`,
+              message: `${libellePersonne(p)} est indisponible au créneau ${dateFr(creneau.date)} ${creneau.debut}`,
               creneau_id,
               personne_id: pid,
               groupe_id: a.groupe_id,
@@ -302,7 +302,7 @@ export function verifier(
         if (prev.date === curr.date && prev.fin === curr.debut) {
           problemes.push({
             type: 'creneaux-consecutifs',
-            message: `${groupe_id} : deux créneaux consécutifs le ${curr.date} (${prev.debut}-${prev.fin} puis ${curr.debut}-${curr.fin})`,
+            message: `${groupe_id} : deux créneaux consécutifs le ${dateFr(curr.date)} (${prev.debut}-${prev.fin} puis ${curr.debut}-${curr.fin})`,
             groupe_id,
           })
         }
