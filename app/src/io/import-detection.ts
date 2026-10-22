@@ -326,6 +326,24 @@ export function analyserSheetsExcel(
     }
   }
 
+  // #164 : un onglet Liste sans aucun onglet Stagiaires ne crée aucune
+  // personne. Le dire ICI, avant l'import, plutôt que de le découvrir à la
+  // relecture sous la forme de N signalements « absent de Stagiaires ».
+  const aStagiaires = onglets.some((o) => o.destination === 'stagiaires' && o.statut === 'ok')
+  if (!aStagiaires) {
+    const connus = new Set(personnesConnues.map((p) => p.id))
+    const cites = new Set<string>()
+    for (const pl of payloads.values()) {
+      if (pl.destination !== 'liste') continue
+      for (const g of pl.groupes) for (const m of g.membres) if (!connus.has(m.personne_id)) cites.add(m.personne_id)
+    }
+    if (cites.size > 0) {
+      warningsGlobaux.push(
+        `Aucun onglet Stagiaires : les ${cites.size} personne${cites.size > 1 ? 's' : ''} citée${cites.size > 1 ? 's' : ''} dans la Liste ne ser${cites.size > 1 ? 'ont' : 'a'} pas créée${cites.size > 1 ? 's' : ''}. ${cites.size > 1 ? 'Elles resteront' : 'Elle restera'} de simples noms, sans instruments ni indisponibilités, et la répartition ne pourra pas vérifier ${cites.size > 1 ? 'leur' : 'son'} planning.`,
+      )
+    }
+  }
+
   if (onglets.length > 0 && onglets.every((o) => o.destination === null)) {
     warningsGlobaux.push(
       `Aucun onglet reconnu (Liste, Stagiaires, Proposés). Onglets présents : ${sheets.map((s) => s.sheet).join(', ') || '(aucun)'}.`,

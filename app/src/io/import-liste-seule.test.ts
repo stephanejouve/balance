@@ -10,6 +10,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { Inscriptions, Personne } from '../domain/model'
+import { analyserIdentitesCandidat } from './alertes-import'
 import { analyserSheetsExcel, construireCandidatExcel } from './import-detection'
 import { MAPPING_LISTE_DEFAUT } from './liste-adapter'
 import { MAPPING_PROPOSES_DEFAUT } from './proposes-adapter'
@@ -59,5 +60,38 @@ describe('Liste seule — verrous de résolution des citations (#164)', () => {
     const johnny = candidat.groupes.find((g) => g.titre === 'Johnny B. Goode')!
     const pupitres = johnny.membres.filter((m) => m.personne_id === 'marc-di-stefano').map((m) => m.pupitre)
     expect(pupitres.sort()).toEqual(['chant', 'guitare'])
+  })
+})
+
+describe('Liste seule — l\'absence d\'onglet Stagiaires est dite (#164)', () => {
+  it('extraction : avertissement global avec le nombre de personnes citées non créées', () => {
+    const { detection, candidat } = importer([LISTE])
+    expect(candidat.personnes).toEqual([])
+    expect(detection.warningsGlobaux).toHaveLength(1)
+    expect(detection.warningsGlobaux[0]).toMatch(/^Aucun onglet Stagiaires : les 6 personnes citées dans la Liste ne seront pas créées\./)
+  })
+
+  it('pas d\'avertissement quand un onglet Stagiaires est présent', () => {
+    const stagiaires = { sheet: 'Stagiaires', data: [['Nom', 'Pupitre'], ['Yann Le Goff', 'basse']] }
+    expect(importer([LISTE, stagiaires]).detection.warningsGlobaux).toEqual([])
+  })
+
+  it('pas d\'avertissement quand la session connaît déjà toutes les personnes citées', () => {
+    const connues = ['jean-pierre-delaunay', 'sophie-mercier-lacroix', 'yann-le-goff', 'olivier-rouanet', 'marc-di-stefano', 'agnes-vidal-perrin']
+      .map((id) => Personne.parse({ id, nom: id, instruments: [] }))
+    expect(importer([LISTE], connues).detection.warningsGlobaux).toEqual([])
+  })
+
+  it('relecture : les signalements « nom cité absent » portent aucun_stagiaire_declare sans onglet Stagiaires, pas avec', () => {
+    const sans = analyserIdentitesCandidat(importer([LISTE]).candidat).alertes_coherence
+      .filter((a) => a.type === 'nom_cite_absent_stagiaires')
+    expect(sans.length).toBeGreaterThan(0)
+    expect(sans.every((a) => a.type === 'nom_cite_absent_stagiaires' && a.aucun_stagiaire_declare === true)).toBe(true)
+
+    const stagiaires = { sheet: 'Stagiaires', data: [['Nom', 'Pupitre'], ['Yann Le Goff', 'basse']] }
+    const avec = analyserIdentitesCandidat(importer([LISTE, stagiaires]).candidat).alertes_coherence
+      .filter((a) => a.type === 'nom_cite_absent_stagiaires')
+    expect(avec.length).toBeGreaterThan(0)
+    expect(avec.some((a) => a.type === 'nom_cite_absent_stagiaires' && a.aucun_stagiaire_declare)).toBe(false)
   })
 })

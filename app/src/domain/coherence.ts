@@ -71,6 +71,10 @@ export type AlerteCoherence =
       personne: string
       morceau: string
       pupitre: Pupitre
+      /** Aucune personne déclarée du tout (fichier sans onglet Stagiaires,
+       *  #164) : le libellé « absent de Stagiaires » supposerait un onglet
+       *  qui n'existe pas. */
+      aucun_stagiaire_declare?: true
     }
   | {
       type: 'pupitre_non_declare_polyvalent'  // O — signalement
@@ -332,6 +336,7 @@ function _detecterNomsCitesAbsents(
         personne: p ? _nomAffichage(p) : m.personne_id,
         morceau: g.titre,
         pupitre: m.pupitre,
+        ...(stagiairesIds.size === 0 ? { aucun_stagiaire_declare: true as const } : {}),
       })
     }
   }
