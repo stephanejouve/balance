@@ -1,6 +1,6 @@
 <script lang="ts">
   import { comptageEngagements, estEngage } from './domain/engagement'
-  import { butoirDeGroupe, dateFr, diagnostiquerGrille, genererCreneaux, libelleCreneauxPasses, joursDeSession } from './domain/grille'
+  import { butoirDeGroupe, creneauxAvantButoir, dateFr, diagnostiquerGrille, genererCreneaux, joursDeSession, libelleCreneauxPasses } from './domain/grille'
   import { parseMaintenantUrlParam, propositionRejouer } from './domain/maintenant'
   import { parseLegacyInscriptions } from './domain/legacy'
   import { migrerInscriptions } from './domain/migrate'
@@ -264,6 +264,12 @@
       return []
     }
   })
+  /**
+   * #147 : l'en-tête annonce « N créneaux avant butoir du … ». N comptait
+   * tous les créneaux du présent, butoir compris (50 annoncés pour 28 ;
+   * butoir passé, 19 annoncés pour 0). Même filtre que le solveur.
+   */
+  const nbCreneauxAvantButoirApero = $derived(creneauxAvantButoir(session, 'apero_mercredi', creneaux).length)
   /** #166 : ce que le filtre du présent a écarté, dit dans l'étape Session. */
   const creneauxPasses = $derived.by(() => {
     try {
@@ -1121,7 +1127,7 @@
       musiciens, groupes et salles.
       {#if inscriptions.groupes.length > 0 || inscriptions.personnes.length > 0}
         {inscriptions.groupes.length} groupes,
-        {inscriptions.personnes.length} musiciens, {creneaux.length} créneaux avant butoir du {dateFr(session.butoir_apero_date)}.
+        {inscriptions.personnes.length} musiciens, {nbCreneauxAvantButoirApero} créneaux avant butoir du {dateFr(session.butoir_apero_date)}.
       {:else}
         Aucune session chargée — importez un fichier pour commencer.
       {/if}
@@ -1512,7 +1518,16 @@
                 (une collision personne cross-groupe peut le rendre optimiste),
                 on s'appuie sur `partages` qui, lui, capte la vraie cause.
               -->
-              {#if d.creneaux_ouverts === 0}
+              {#if d.creneaux_avant_butoir === 0}
+                <!-- Cas 0 (#177) : plus aucun créneau avant le butoir de
+                     l'échéance. Cause première, testée avant les indispos et la
+                     capacité — sinon le bloc retombait sur C1 et envoyait
+                     réorganiser des musiciens partagés. -->
+                <br /><span class="ink-soft">
+                  Plus aucun créneau avant le butoir du {dateFr(d.butoir.date)} {d.butoir.heure} : la cause est le calendrier.
+                  Corrigez le butoir ou les dates à l'étape 2b Session.
+                </span>
+              {:else if d.creneaux_ouverts === 0}
                 <!-- Cas A : indispos couvrent tous les créneaux ouverts pour ce groupe.
                      Une seule phrase — afficher exploitables (0 par construction)
                      suggérerait faussement deux constats indépendants. -->

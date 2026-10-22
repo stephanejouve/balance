@@ -765,3 +765,18 @@ export function butoirKeyDeGroupe(
   const b = butoirDeGroupe(session, echeance)
   return `${b.date}T${b.heure.replace(':', '')}`
 }
+
+/**
+ * Créneaux strictement avant le butoir de l'échéance — la règle du solveur
+ * (`solver.ts::estLibre`). Utilisée par le diagnostic « Pourquoi ça bloque »
+ * et l'en-tête (#177, #147), qui comptaient les créneaux du présent sans ce
+ * filtre et contredisaient Quotas une fois le butoir passé.
+ */
+export function creneauxAvantButoir<C extends Pick<Creneau, 'date' | 'debut'>>(
+  session: Pick<Session, 'butoir_apero_date' | 'butoir_apero_heure' | 'butoir_vendredi_date' | 'butoir_vendredi_heure'>,
+  echeance: 'apero_mercredi' | 'restitution_vendredi',
+  creneaux: readonly C[],
+): C[] {
+  const butoirKey = butoirKeyDeGroupe(session, echeance)
+  return creneaux.filter((c) => `${c.date}T${c.debut.replace(':', '')}` < butoirKey)
+}

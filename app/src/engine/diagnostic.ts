@@ -1,4 +1,4 @@
-import type { Creneau } from '../domain/grille'
+import { butoirDeGroupe, creneauxAvantButoir, type Creneau } from '../domain/grille'
 import type { Groupe, Inscriptions, Personne, Pupitre, Session } from '../domain/model'
 import { libellePersonne } from '../domain/model'
 import { enrichirIndispos } from './imposes'
@@ -271,6 +271,19 @@ export interface DiagGroupe {
    */
   creneaux_ouverts: number
   /**
+   * Créneaux AVANT le butoir de l'échéance du groupe, indispos ignorées —
+   * l'univers où le solveur cherche (`solver.ts::estLibre`). Issue #177 :
+   * le diagnostic comptait tous les créneaux du présent, butoir compris ;
+   * butoir passé, il annonçait « 19 créneaux ouverts, ce n'est pas la
+   * capacité » et envoyait chercher des musiciens partagés. À 0, la cause
+   * est le butoir, avant toute autre.
+   *
+   * Invariant : `creneaux_ouverts <= creneaux_avant_butoir`.
+   */
+  creneaux_avant_butoir: number
+  /** Butoir de l'échéance du groupe, pour le dire à l'écran. */
+  butoir: { date: string; heure: string }
+  /**
    * Créneaux ouverts (cf. `creneaux_ouverts`) ET ayant au moins un slot
    * capacité restant : `sallesUtilisables(c) - nb_placements_sur_c > 0`.
    * Version simplifiée qui ne re-simule pas les collisions personnes
@@ -332,8 +345,12 @@ export function diagnostiquer(
     if (obtenu >= cibleG) continue
     const membres = [...new Set(g.membres.map((m) => m.personne_id))]
 
-    // Créneaux ouverts : aucun membre indispo dessus
-    const creneauxOuvertsListe = creneaux.filter((c) => {
+    // Même univers que le solveur : seuls les créneaux avant le butoir de
+    // l'échéance du groupe comptent (#177).
+    const avantButoir = creneauxAvantButoir(session, g.echeance, creneaux)
+
+    // Créneaux ouverts : avant butoir, aucun membre indispo dessus
+    const creneauxOuvertsListe = avantButoir.filter((c) => {
       for (const pid of membres) {
         const p = parId.get(pid)
         if (!p) continue
@@ -386,6 +403,8 @@ export function diagnostiquer(
       obtenu,
       cible: cibleG,
       creneaux_ouverts: ouverts,
+      creneaux_avant_butoir: avantButoir.length,
+      butoir: butoirDeGroupe(session, g.echeance),
       creneaux_exploitables: exploitables,
       partages: partages.slice(0, 4),
       // Le remplacement d'un membre n'a plus de sens si le groupe a déjà répété
