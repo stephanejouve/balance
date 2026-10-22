@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Personne } from '../domain/model'
   import { libellePersonne } from '../domain/model'
+  import { afficherSaisieJours, joursNonReconnus, lireSaisieJours } from '../domain/grille'
   import { descriptionBlocage, raisonIndispoIgnoree } from '../engine/indispo'
   import InputDuree from './InputDuree.svelte'
 
@@ -69,15 +70,12 @@
         {#each p.indispos as ind, i}
           <div class="restr">
             <input
-              value={ind.jours.join(', ')}
+              value={afficherSaisieJours(ind.jours)}
               oninput={(e) => {
-                ind.jours = (e.currentTarget as HTMLInputElement).value
-                  .split(/[,;\s]+/)
-                  .map((s) => s.trim())
-                  .filter(Boolean)
+                ind.jours = lireSaisieJours((e.currentTarget as HTMLInputElement).value)
                 modifie(ind)
               }}
-              placeholder="mardi, 2026-08-25"
+              placeholder="mardi, 25/08/2026"
               title="Vide = l'indisponibilité s'applique à toute la session."
               style="flex:1;min-width:150px"
             />
@@ -113,6 +111,11 @@
           {:else if activee}
             <!-- #151 : le pendant — une règle que l'écriture vient d'activer le dit aussi. -->
             <p class="indispo-activee" role="note">Cette règle compte maintenant : elle bloque {descriptionBlocage(ind)}.</p>
+          {/if}
+          {@const illisibles = joursNonReconnus(ind.jours)}
+          {#if !raison && illisibles.length > 0}
+            <!-- #173 : un jour illisible se voit là où il est saisi, même si d'autres jours de la règle comptent. -->
+            <p class="indispo-ignoree" role="note">Jour non reconnu, ignoré : {illisibles.map((j) => `« ${j} »`).join(', ')}. Écrivez une date JJ/MM/AAAA ou un nom de jour.</p>
           {/if}
         {/each}
       </div>

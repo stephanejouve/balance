@@ -70,25 +70,74 @@ export function decouper(debut: HhMm, fin: HhMm, pasMinutes: number): Tour[] {
 const JOURS_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
 
 /**
- * Convertit une liste de « jours » (dates ISO OU noms de jour FR : lundi,
- * mardi… — tolérant à la casse et aux accents) en dates ISO effectivement
- * présentes dans la session. Les valeurs non reconnues sont ignorées.
+ * Forme canonique d'un jour saisi, ou `null` s'il n'est pas reconnu (#173) :
+ *  - date ISO (`2026-08-25`) ou JJ/MM/AAAA (`25/08/2026`, `5/8/2026`,
+ *    séparateurs `/`, `.` ou `-`) → ISO, si la date existe au calendrier ;
+ *  - nom de jour FR, casse et accents tolérés → nom en minuscules.
+ *
+ * L'interface affiche les dates en JJ/MM/AAAA (#162) : l'utilisateur recopie
+ * ce qu'il voit. Avant ce point, « 25/08/2026 » était ignoré en silence —
+ * 0 créneau en grille, aucune indispo bloquée, et la ligne « compte
+ * maintenant » certifiait le contraire.
+ */
+export function normaliserJourSaisi(saisi: string): string | null {
+  const norm = saisi
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(norm)
+  const fr = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(norm)
+  if (iso || fr) {
+    const [y, m, d] = iso ? [+iso[1], +iso[2], +iso[3]] : [+fr![3], +fr![2], +fr![1]]
+    const dt = new Date(Date.UTC(y, m - 1, d))
+    if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  }
+  return JOURS_FR.includes(norm) ? norm : null
+}
+
+/**
+ * Champ texte « jours » des éditeurs (grille 2B, indispos 1D) → valeurs
+ * stockées : un jour reconnu est stocké sous sa forme canonique (ISO, nom de
+ * jour en minuscules), un jour illisible tel quel — pour que l'éditeur le
+ * montre et le signale au lieu de l'effacer.
+ */
+export function lireSaisieJours(texte: string): string[] {
+  return texte
+    .split(/[,;\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => normaliserJourSaisi(s) ?? s)
+}
+
+/** Valeurs stockées → texte du champ : les dates en JJ/MM/AAAA, comme partout ailleurs. */
+export function afficherSaisieJours(jours: readonly string[]): string {
+  return jours.map(dateFr).join(', ')
+}
+
+/** Jours saisis que `normaliserJourSaisi` ne reconnaît pas, tels que saisis. */
+export function joursNonReconnus(saisi: readonly string[]): string[] {
+  return saisi.filter((s) => normaliserJourSaisi(s) === null)
+}
+
+/**
+ * Convertit une liste de « jours » (dates ISO ou JJ/MM/AAAA, noms de jour FR)
+ * en dates ISO effectivement présentes dans la session. Les valeurs non
+ * reconnues sont ignorées ici — l'éditeur les signale règle par règle
+ * (`joursNonReconnus`).
  */
 export function resoudreJours(saisi: readonly string[], joursSession: readonly IsoDate[]): IsoDate[] {
   const out = new Set<IsoDate>()
   const sessionSet = new Set(joursSession)
   for (const s of saisi) {
-    const norm = s
-      .toLowerCase()
-      .trim()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
+    const norm = normaliserJourSaisi(s)
+    if (norm === null) continue
     if (/^\d{4}-\d{2}-\d{2}$/.test(norm)) {
       if (sessionSet.has(norm)) out.add(norm)
       continue
     }
     const idx = JOURS_FR.indexOf(norm)
-    if (idx < 0) continue
     for (const d of joursSession) {
       const [y, m, day] = d.split('-').map(Number)
       const dt = new Date(Date.UTC(y, m - 1, day))
@@ -287,6 +336,14 @@ function parseHhMmToMinutes(s: string | undefined): number | null {
  * modèle reste en ISO : seul l'affichage change. Une valeur qui n'est pas
  * une date ISO (champ vide, saisie libre) est rendue telle quelle.
  */
+/** Date ISO en JJ/MM, pour les plannings où l'année est implicite (#172).
+ *  Remplace les gabarits `date.slice(5).replace('-', '/')` qui donnaient
+ *  MM/JJ — « 11/03 » lu 11 mars pour le 3 novembre. */
+export function dateCourteFr(iso: string): string {
+  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(iso)
+  return m ? `${m[2]}/${m[1]}` : iso
+}
+
 export function dateFr(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso
