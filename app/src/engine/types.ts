@@ -18,6 +18,8 @@ export type ProblemeType =
   | 'apres-butoir'
   | 'creneaux-consecutifs'
   | 'salle-hors-creneau'
+  | 'aucune-personne'
+  | 'membre-inconnu'
 
 export interface Probleme {
   type: ProblemeType
