@@ -404,14 +404,32 @@ describe('raisonIndispoIgnoree — état visible d\'une règle ignorée (#151)',
     expect(raisonIndispoIgnoree({ jours: ['2026-08-25'], roles: [], motif: 'kiné' })).toBeNull()
   })
 
-  it('saisie UI « mardi, motif kiné » : nomme le mot non lu et propose les 3 remèdes', () => {
+  it('saisie UI « mardi, motif kiné » : cite le motif tel que saisi et propose les 3 remèdes', () => {
     const r = raisonIndispoIgnoree({ jours: ['mardi'], roles: [], motif: 'kiné' })!
-    expect(r).toContain('« kine »')
+    // Accent conservé (smoke CD #159 : « kine » citait un texte absent du champ)
+    expect(r).toContain('« kiné »')
     expect(r).toContain('videz le motif')
     expect(r).toContain('indiquez un début et une durée')
     expect(r).toContain('remplacez le nom de jour par une date')
     // « précisez le jour » ne rendait pas la règle lisible (review Leader #159)
     expect(r).not.toContain('précisez le jour')
+  })
+
+  it('cite le motif COMPLET tel que saisi, pas le résidu d\'extraction (smoke CD #159)', () => {
+    // Jeu démo : le rôle « chant » retiré du motif laissait « eurs peuvent
+    // jouer leur instrument » — troncature apparente, texte introuvable.
+    const motif = 'chanteurs indisponibles pour le chant de 9h à 10h (peuvent jouer leur instrument)'
+    const r = raisonIndispoIgnoree({ jours: ['mardi'], roles: ['chant'], motif })!
+    const cite = /« (.*) »/.exec(r)![1]
+    expect(cite).not.toContain('eurs peuvent')
+    expect(cite.endsWith('…')).toBe(true)
+    expect(motif.startsWith(cite.slice(0, -1))).toBe(true)
+    expect(cite).toBe('chanteurs indisponibles pour le chant de 9h à 10h (peuvent…')
+  })
+
+  it('motif court : cité en entier, sans points de suspension', () => {
+    const r = raisonIndispoIgnoree({ jours: ['mardi'], roles: [], motif: '  arrive mardi midi ' })!
+    expect(r).toContain('« arrive mardi midi »')
   })
 
   it('chaque remède proposé rend effectivement la règle interprétable', () => {

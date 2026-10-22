@@ -102,12 +102,30 @@ export function raisonIndispoIgnoree(ind: Indispo): string | null {
   // Remèdes EXACTS (review Leader #159) : chacun rend l'indispo
   // interprétable, test dédié. « Précisez le jour » ne suffit pas : un nom
   // de jour + motif déclenche justement le check de résidu.
-  const residu = residuNonReconnu(ind.motif, ind.roles)
   const remedes = ['videz le motif', 'indiquez un début et une durée']
   if (ind.roles.length === 0 && ind.jours.some((j) => JOURS_FR.includes(j))) {
     remedes.push('remplacez le nom de jour par une date')
   }
-  return `Le texte du motif n'a pas pu être lu (« ${residu.join(' ')} »). Pour que la règle compte : ${remedes.join(', ou ')}.`
+  return `Le texte du motif n'a pas pu être lu (« ${citerMotif(ind.motif)} »). Pour que la règle compte : ${remedes.join(', ou ')}.`
+}
+
+/** Longueur au-delà de laquelle le motif cité est tronqué, avec « … ». */
+const CITATION_MAX = 60
+
+/**
+ * Le motif tel que saisi, accents compris — smoke CD #159 : citer le
+ * résidu d'extraction (« eurs peuvent jouer leur instrument », « kine »
+ * sans accent) désignait un texte que l'organisateur ne retrouve nulle part
+ * dans son champ. Tronqué au-delà de `CITATION_MAX`, en fin de mot, troncature
+ * explicite.
+ */
+function citerMotif(motif: string): string {
+  const m = motif.trim()
+  if (m.length <= CITATION_MAX) return m
+  // Coupe à la fin d'un mot : « peuvent j… » se lirait comme une faute.
+  const coupe = m.slice(0, CITATION_MAX + 1)
+  const dernierEspace = coupe.lastIndexOf(' ')
+  return `${(dernierEspace > 0 ? coupe.slice(0, dernierEspace) : m.slice(0, CITATION_MAX)).trimEnd()}…`
 }
 
 /** Jours de semaine indexés par `Date.getDay()` (dimanche = 0, ..., samedi = 6).
