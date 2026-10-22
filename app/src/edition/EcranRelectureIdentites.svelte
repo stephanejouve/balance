@@ -117,6 +117,17 @@
           detail: `Une latéralité (droitier/gaucher) a été renseignée mais aucun des instruments déclarés (${a.instruments.join(', ')}) n'est la batterie. Info inexploitée par le solveur — retirer la latéralité ou ajouter batterie aux pupitres si oubli.`,
         }
       case 'nom_cite_absent_stagiaires':
+        // #164 : sans aucune personne déclarée, les trois causes du libellé
+        // général (faute de frappe, oubli, variante) sont toutes fausses.
+        // Remède EXACT (review Leader #169) : une personne saisie en 1A
+        // reçoit un identifiant neuf et ne se rattache pas au nom cité ;
+        // seul un onglet Stagiaires résout les citations (test dédié).
+        if (a.aucun_stagiaire_declare) {
+          return {
+            titre: `Nom cité, aucune personne créée — « ${a.personne} » sur « ${a.morceau} » (${a.pupitre})`,
+            detail: `Le fichier n'a pas d'onglet Stagiaires : les noms cités dans la Liste ne sont pas créés comme personnes. Ils resteront des noms, sans instruments ni indisponibilités. Pour les créer : ajoutez au fichier un onglet Stagiaires qui les déclare, puis réimportez-le.`,
+          }
+        }
         return {
           titre: `Nom cité absent de Stagiaires — « ${a.personne} » sur « ${a.morceau} » (${a.pupitre})`,
           detail: `Cité dans la Liste mais aucune personne à ce nom dans l'onglet Stagiaires. Faute de frappe, oubli de saisir le stagiaire, ou variante non détectée par le rapprochement automatique.`,
