@@ -188,12 +188,13 @@ export function mentionsDepuisCandidat(inscriptions: {
  * CD 7057). Jeu stress : 21 « sans engagement » en relecture contre 0 dans
  * l'en-tête, toutes membres d'un imposé.
  *
- * Le titre est préfixé pour qu'un imposé homonyme d'un groupe compte comme
- * un engagement distinct — même règle que `comptageEngagements`.
+ * La clé de morceau est l'id de l'imposé (préfixé) : un imposé homonyme
+ * d'un groupe, ou deux imposés de même titre, comptent comme des
+ * engagements distincts — même règle que `comptageEngagements` (#156).
  */
 export function mentionsDepuisImposes(inscriptions: {
   readonly personnes: readonly Personne[]
-  readonly imposes: readonly { morceau: string; membres: readonly string[] }[]
+  readonly imposes: readonly { id: string; membres: readonly string[] }[]
 }): MembreMention[] {
   const personneParId = new Map(inscriptions.personnes.map((p) => [p.id, p]))
   const mentions: MembreMention[] = []
@@ -201,7 +202,7 @@ export function mentionsDepuisImposes(inscriptions: {
     for (const pid of imp.membres) {
       const p = personneParId.get(pid)
       if (!p) continue
-      mentions.push({ nom: p.nom, discriminant: p.discriminant, pupitre: '', groupe_titre: `imposé : ${imp.morceau}` })
+      mentions.push({ nom: p.nom, discriminant: p.discriminant, pupitre: '', groupe_titre: `imposé#${imp.id}` })
     }
   }
   return mentions
@@ -235,6 +236,15 @@ export function analyserIdentitesCandidat(
  * Orchestre la détection : construit les mentions cumulées
  * (stagiaires + engagements dans les morceaux), appelle la logique
  * domain, retourne les alertes structurées et la liste pour relecture.
+ *
+ * ⚠ Variante legacy, appelée UNIQUEMENT par les tests — l'app passe par
+ * `analyserIdentitesCandidat` (App.svelte). Elle ne voit pas les imposés
+ * (pas d'`Inscriptions` en entrée) et ne résout pas les identités par id :
+ * sur `identites-ambigues.xlsx` elle trouve 2 rapprochements là où le
+ * chemin de production n'en trouve qu'un (#157, fusion par slug sans
+ * accents). Conservée tant que #157 n'est pas résolu : la retirer
+ * aujourd'hui ferait basculer le contrat du corrigé sur un chemin qui ne
+ * le respecte pas encore (#156 point 3).
  */
 export function analyserIdentitesImport(input: {
   groupes: readonly LegacyGroupe[]
