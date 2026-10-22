@@ -2,6 +2,7 @@
   import { comptageEngagements, estEngage } from './domain/engagement'
   import { butoirDeGroupe, creneauxAvantButoir, dateFr, diagnostiquerGrille, genererCreneaux, joursDeSession, libelleCreneauxPasses, GRILLE_PROPOSEE } from './domain/grille'
   import { parseMaintenantUrlParam, propositionRejouer } from './domain/maintenant'
+  import { datesSessionDemo } from './domain/demo'
   import { parseLegacyInscriptions } from './domain/legacy'
   import { migrerInscriptions } from './domain/migrate'
   import {
@@ -107,9 +108,9 @@
       id: 'session-5',
       nom: 'Session 5 — Musiques Festives',
       lieu_id: 'musiques-festives',
-      date_debut: '2026-08-24',
-      date_fin: '2026-08-28',
-      date_butoir: '2026-08-26',
+      // #195 : dates relatives (lundi → vendredi, butoir le mercredi), au
+      // lieu du 24-28/08/2026 figé qui rendait la démo « terminée ».
+      ...datesSessionDemo(initialMaintenant() ?? new Date(), initialMaintenant() !== null),
       butoir_heure: '18:30',
       grille: [
         // Fins alignées sur le pas (convention horaire, #165) : mêmes créneaux
