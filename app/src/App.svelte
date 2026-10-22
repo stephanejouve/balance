@@ -1,6 +1,6 @@
 <script lang="ts">
   import { comptageEngagements, estEngage } from './domain/engagement'
-  import { butoirDeGroupe, dateFr, diagnostiquerGrille, genererCreneaux } from './domain/grille'
+  import { butoirDeGroupe, dateFr, diagnostiquerGrille, genererCreneaux, libelleCreneauxPasses } from './domain/grille'
   import { parseMaintenantUrlParam, propositionRejouer } from './domain/maintenant'
   import { parseLegacyInscriptions } from './domain/legacy'
   import { migrerInscriptions } from './domain/migrate'
@@ -107,8 +107,10 @@
       date_butoir: '2026-08-26',
       butoir_heure: '18:30',
       grille: [
-        { debut: '09:00', fin: '12:00', pas_minutes: 60 },
-        { debut: '13:30', fin: '18:30', pas_minutes: 60 },
+        // Fins alignées sur le pas (convention horaire, #165) : mêmes créneaux
+        // qu'avec 12:00 / 18:30, sans « hors alignement » dans l'éditeur.
+        { debut: '09:00', fin: '11:59', pas_minutes: 60 },
+        { debut: '13:30', fin: '18:29', pas_minutes: 60 },
         { debut: '22:00', fin: '23:59', pas_minutes: 60 },
       ],
       repetitions_visees: 3,
@@ -251,6 +253,14 @@
       return genererCreneaux(session, lieu, { maintenant: maintenantFixe ?? new Date() })
     } catch {
       return []
+    }
+  })
+  /** #166 : ce que le filtre du présent a écarté, dit dans l'étape Session. */
+  const creneauxPasses = $derived.by(() => {
+    try {
+      return libelleCreneauxPasses(genererCreneaux(session, lieu), creneaux)
+    } catch {
+      return null
     }
   })
   /**
@@ -405,8 +415,10 @@
     session.grille.splice(
       0,
       session.grille.length,
-      { jours: [], debut: '09:00', fin: '12:00', pas_minutes: 60, salles: [], bloque: false },
-      { jours: [], debut: '14:00', fin: '18:00', pas_minutes: 60, salles: [], bloque: false },
+      // #165 : fins alignées sur le pas — une session neuve ne démarre plus
+      // avec deux règles que l'éditeur marque « hors alignement ».
+      { jours: [], debut: '09:00', fin: '11:59', pas_minutes: 60, salles: [], bloque: false },
+      { jours: [], debut: '14:00', fin: '17:59', pas_minutes: 60, salles: [], bloque: false },
     )
     // Inscriptions vides (personnes + groupes + imposés)
     inscriptions = { session_id: 'nouvelle-session', personnes: [], groupes: [], imposes: [], refus: [] }
@@ -712,7 +724,7 @@
     session.grille.push({
       jours: [],
       debut: '09:00',
-      fin: '10:00',
+      fin: '09:59',
       pas_minutes: 60,
       salles: [],
       bloque: false,
@@ -1202,6 +1214,7 @@
   <SessionEdit
     bind:session
     nbCreneaux={creneaux.length}
+    {creneauxPasses}
     diagnostic={diagnosticGrille}
     onAjouterRegle={ajouterRegle}
     onSupprimerRegle={supprimerRegle}

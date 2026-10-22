@@ -5,6 +5,8 @@
   interface Props {
     session: Session
     nbCreneaux: number
+    /** #166 : créneaux écartés car déjà passés, ou `null`. */
+    creneauxPasses?: string | null
     /**
      * Diagnostic pré-génération (issues #110 + #111). Quand `nbCreneaux === 0`
      * alors qu'au moins une règle créatrice est définie, ce diagnostic
@@ -31,6 +33,7 @@
   let {
     session = $bindable(),
     nbCreneaux,
+    creneauxPasses = null,
     diagnostic = null,
     onAjouterRegle,
     onSupprimerRegle,
@@ -93,7 +96,7 @@
       {dateFr(session.date_debut)} → {dateFr(session.date_fin)}, butoirs apéro {dateFr(session.butoir_apero_date)} {session.butoir_apero_heure} / vendredi {dateFr(session.butoir_vendredi_date)} {session.butoir_vendredi_heure}.
       {session.grille.filter((r) => !r.bloque).length} règle(s) créatrice(s),
       {session.grille.filter((r) => r.bloque).length} règle(s) de blocage —
-      <b>{nbCreneaux}</b> créneaux générés.
+      <b>{nbCreneaux}</b> créneaux générés{#if creneauxPasses}{` — ${creneauxPasses}`}{/if}.
     </p>
     <!--
       Issue #110 : quand la génération ne produit rien alors que des règles
