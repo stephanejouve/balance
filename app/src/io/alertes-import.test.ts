@@ -21,8 +21,13 @@ import {
   analyserIdentitesImport,
   mentionsDepuisCandidat,
   mentionsDepuisGroupes,
+  mentionsDepuisImposes,
   mentionsDepuisStagiaires,
 } from './alertes-import'
+import { estEngage } from '../domain/engagement'
+import { Inscriptions } from '../domain/model'
+import { analyserSheetsExcel, construireCandidatExcel } from './import-detection'
+import { MAPPING_PROPOSES_DEFAUT } from './proposes-adapter'
 import { extraireListe, MAPPING_LISTE_DEFAUT } from './liste-adapter'
 import { extraireStagiaires, MAPPING_STAGIAIRES_DEFAUT } from './stagiaires-adapter'
 
@@ -349,5 +354,77 @@ describe('mentionsDepuisCandidat / analyserIdentitesCandidat — wire post-const
     const mentions = mentionsDepuisCandidat(inscriptionsOrphelin)
     // 1 stagiaire + 1 membre valide (l'inexistant est skippé)
     expect(mentions).toHaveLength(2)
+  })
+})
+
+describe('relecture — engagement dans un morceau imposé (#153)', () => {
+  const base = {
+    session_id: 's',
+    personnes: [
+      { id: 'p1', nom: 'Alpha', discriminant: '', role: 'musicien' as const,
+        instruments: [{ pupitre: 'chant', lourd: false }], indispos: [] },
+      { id: 'p2', nom: 'Beta', discriminant: '', role: 'musicien' as const,
+        instruments: [{ pupitre: 'basse', lourd: false }], indispos: [] },
+    ],
+    groupes: [
+      { id: 'g1', titre: 'Concert', auteur: '', style: '', tonalite: '',
+        responsable_id: '', postes_cherches: [], repetitions_deja_faites: 0,
+        echeance: 'apero_mercredi' as const,
+        membres: [{ personne_id: 'p1', pupitre: 'chant' }] },
+    ],
+    refus: [],
+  }
+
+  it('membre d\'un imposé seul : engagé en relecture comme dans l\'en-tête', () => {
+    // Avant #153 : Beta sans_engagement=true en relecture alors que
+    // estEngage (en-tête 1A, pool) la compte engagée.
+    const insc = { ...base, imposes: [{ id: 'i1', morceau: 'Final', membres: ['p2'], seances: [] }] }
+    const beta = analyserIdentitesCandidat(insc).personnes_relecture.find((p) => p.nom_affichage === 'Beta')!
+    expect(beta.sans_engagement).toBe(false)
+    expect(beta.nb_engagements).toBe(1)
+    expect(estEngage('p2', insc)).toBe(true)
+  })
+
+  it('imposé homonyme d\'un groupe : deux engagements distincts, comme comptageEngagements', () => {
+    const insc = { ...base, imposes: [{ id: 'i1', morceau: 'Concert', membres: ['p1'], seances: [] }] }
+    const alpha = analyserIdentitesCandidat(insc).personnes_relecture.find((p) => p.nom_affichage === 'Alpha')!
+    expect(alpha.nb_engagements).toBe(2)
+  })
+
+  it('les mentions d\'imposés ne changent pas les alertes d\'identité A-H', () => {
+    const sans = analyserIdentitesCandidat({ ...base, imposes: [] })
+    const avec = analyserIdentitesCandidat({
+      ...base,
+      imposes: [{ id: 'i1', morceau: 'Final', membres: ['p1', 'p2'], seances: [] }],
+    })
+    expect(avec.alertes_identite).toEqual(sans.alertes_identite)
+    expect(mentionsDepuisImposes({ ...base, imposes: [{ morceau: 'Final', membres: ['p2', 'inconnu'] }] })).toHaveLength(1)
+  })
+
+  it('jeu stress : compte « sans engagement » relecture === en-tête 1A (21 vs 0 avant #153)', async () => {
+    const STRESS = join(__dirname, '..', '..', 'tests', 'fixtures', 'balance-stress-test.xlsx')
+    const buffer = readFileSync(STRESS)
+    const sheets = (await readXlsxFile(buffer, { getSheets: false } as never)) as unknown as Array<{
+      sheet: string
+      data: unknown[][]
+    }>
+    const detection = analyserSheetsExcel(
+      sheets,
+      'balance-stress-test.xlsx',
+      buffer.length,
+      { liste: MAPPING_LISTE_DEFAUT, stagiaires: MAPPING_STAGIAIRES_DEFAUT, proposes: MAPPING_PROPOSES_DEFAUT },
+      [],
+    )
+    const coches = new Set(detection.onglets.filter((o) => o.destination !== null && o.statut === 'ok').map((o) => o.nom))
+    const insc = construireCandidatExcel(
+      detection,
+      { ongletsCoches: coches, destinationsManuelles: new Map() },
+      Inscriptions.parse({ session_id: 's', personnes: [], groupes: [] }),
+      's',
+    )
+    expect(insc.imposes.length).toBeGreaterThan(0)
+    const enTete = insc.personnes.filter((p) => !estEngage(p.id, insc)).length
+    const relecture = analyserIdentitesCandidat(insc).personnes_relecture.filter((p) => p.sans_engagement).length
+    expect(relecture).toBe(enTete)
   })
 })
