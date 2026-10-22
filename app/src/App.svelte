@@ -57,6 +57,7 @@
   import { exporterClasseurExcel } from './io/excel-export'
   import { genererTemplateXlsx } from './io/excel-template'
   import {
+    avertissementBilanNomsNonCrees,
     bilanExcel,
     construireCandidatExcel,
     construireCandidatJson,
@@ -557,7 +558,14 @@
 
   function validerRelectureIdentites() {
     if (!importEnAttente) return
-    const { candidat, bilan: b, sourceLabel: sl, detection: det, sel } = importEnAttente
+    const { candidat, bilan: b, sourceLabel: sl, detection: det, sel, creation } = importEnAttente
+    // #193 : l'avertissement « aucun onglet Stagiaires » est réécrit ici,
+    // à partir de l'état réel (création faite ou non), au lieu d'être
+    // recopié au futur depuis la détection.
+    if (det.warningSansStagiaires) {
+      const avert = avertissementBilanNomsNonCrees(creation.a_creer.length)
+      if (avert) b.warnings.unshift(avert)
+    }
     // Auto-activation Proposés (brief 4b) — même logique qu'avant
     // wire, calculée ici au moment du commit
     const aAppliqueProposes = [...sel.ongletsCoches].some((nom) => {
@@ -1156,8 +1164,8 @@
       Répartition automatique des répétitions d'un stage de musique — équilibre entre
       musiciens, groupes et salles.
       {#if inscriptions.groupes.length > 0 || inscriptions.personnes.length > 0}
-        {inscriptions.groupes.length} groupes,
-        {inscriptions.personnes.length} musiciens, {nbCreneauxAvantButoirApero} créneaux avant butoir du {dateFr(session.butoir_apero_date)}.
+        {inscriptions.groupes.length} groupe{inscriptions.groupes.length > 1 ? 's' : ''},
+        {inscriptions.personnes.length} musicien{inscriptions.personnes.length > 1 ? 's' : ''}, {nbCreneauxAvantButoirApero} créneau{nbCreneauxAvantButoirApero > 1 ? 'x' : ''} avant butoir du {dateFr(session.butoir_apero_date)}.
       {:else}
         Aucune session chargée — importez un fichier pour commencer.
       {/if}

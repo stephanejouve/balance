@@ -62,6 +62,13 @@ export interface DetectionExcel {
   onglets: OngletDetecte[]
   warningsGlobaux: string[]
   /**
+   * #193 : l'avertissement « aucun onglet Stagiaires », tel qu'affiché à la
+   * détection (il est aussi dans `warningsGlobaux`). Vrai à ce moment-là ;
+   * le bilan ne le recopie PAS — il est réécrit à l'enregistrement, à
+   * partir de l'état réel (`avertissementBilanNomsNonCrees`).
+   */
+  warningSansStagiaires: string | null
+  /**
    * Résultats précalculés des adaptateurs, indexés par nom d'onglet.
    * Non exposé au composant UI — utilisé par `construireCandidatExcel`
    * pour assembler l'`Inscriptions` candidat à la confirmation.
@@ -337,6 +344,7 @@ export function analyserSheetsExcel(
   // personne. Le dire ICI, avant l'import, plutôt que de le découvrir à la
   // relecture sous la forme de N signalements « absent de Stagiaires ».
   const aStagiaires = onglets.some((o) => o.destination === 'stagiaires' && o.statut === 'ok')
+  let warningSansStagiaires: string | null = null
   if (!aStagiaires) {
     const connus = new Set(personnesConnues.map((p) => p.id))
     const cites = new Set<string>()
@@ -345,9 +353,13 @@ export function analyserSheetsExcel(
       for (const g of pl.groupes) for (const m of g.membres) if (!connus.has(m.personne_id)) cites.add(m.personne_id)
     }
     if (cites.size > 0) {
-      warningsGlobaux.push(
-        `Aucun onglet Stagiaires : les ${cites.size} personne${cites.size > 1 ? 's' : ''} citée${cites.size > 1 ? 's' : ''} dans la Liste ne ser${cites.size > 1 ? 'ont' : 'a'} pas créée${cites.size > 1 ? 's' : ''} automatiquement. L'écran suivant liste les noms et propose de les créer ; sans ce geste, ${cites.size > 1 ? 'elles resteront' : 'elle restera'} de simples noms, sans instruments ni indisponibilités, et la répartition ne pourra pas vérifier ${cites.size > 1 ? 'leur' : 'son'} planning.`,
-      )
+      const n = cites.size
+      // #193 : accords au singulier (fixture CD à un seul nom).
+      warningSansStagiaires =
+        n > 1
+          ? `Aucun onglet Stagiaires : les ${n} personnes citées dans la Liste ne seront pas créées automatiquement. L'écran suivant liste les noms et propose de les créer ; sans ce geste, elles resteront de simples noms, sans instruments ni indisponibilités, et la répartition ne pourra pas vérifier leur planning.`
+          : `Aucun onglet Stagiaires : la personne citée dans la Liste ne sera pas créée automatiquement. L'écran suivant affiche son nom et propose de la créer ; sans ce geste, elle restera un simple nom, sans instruments ni indisponibilités, et la répartition ne pourra pas vérifier son planning.`
+      warningsGlobaux.push(warningSansStagiaires)
     }
   }
 
@@ -363,6 +375,7 @@ export function analyserSheetsExcel(
     taille,
     onglets,
     warningsGlobaux,
+    warningSansStagiaires,
     _payloads: payloads,
   }
 }
@@ -522,6 +535,19 @@ export function construireCandidatJson(
   return out
 }
 
+/**
+ * #193 (arbitrage CD 2026-10-22) : l'avertissement du bilan s'écrit à
+ * l'enregistrement, à partir de l'état réel. La création des personnes
+ * citées a lieu AVANT « Valider les identités », et elle est tout ou rien :
+ * rien de créé, on le dit au passé ; création faite, rien à signaler.
+ */
+export function avertissementBilanNomsNonCrees(nonCrees: number): string | null {
+  if (nonCrees === 0) return null
+  return nonCrees > 1
+    ? `Les ${nonCrees} noms cités n'ont pas été créés comme personnes : ils resteront de simples noms, sans instruments ni indisponibilités.`
+    : `Le nom cité n'a pas été créé comme personne : il restera un simple nom, sans instruments ni indisponibilités.`
+}
+
 /** Bilan de ce qui a été appliqué (pour l'écran 4). */
 export interface BilanImport {
   onglets_appliques: Array<{ nom: string; destination: DestinationOnglet; effet: EffetOnglet; resume: string }>
@@ -532,7 +558,9 @@ export interface BilanImport {
 export function bilanExcel(detection: DetectionExcel, selection: SelectionExcel): BilanImport {
   const appliques: BilanImport['onglets_appliques'] = []
   const ignores: BilanImport['onglets_ignores'] = []
-  const warnings: string[] = [...detection.warningsGlobaux]
+  // #193 : l'avertissement « aucun onglet Stagiaires » n'est pas recopié :
+  // au futur, il devient faux dès que les personnes sont créées.
+  const warnings: string[] = detection.warningsGlobaux.filter((w) => w !== detection.warningSansStagiaires)
   for (const o of detection.onglets) {
     if (selection.ongletsCoches.has(o.nom) && o.destination !== null && o.statut === 'ok') {
       appliques.push({ nom: o.nom, destination: o.destination, effet: o.effet, resume: o.resume })

@@ -106,3 +106,11 @@ it('#186 : la liste affiche le pupitre annoncé, la précision en complément (f
   expect(lignes).toEqual(['Olivier Rouanet — vents · saxophone', 'Victor Alonso — vents'])
   unmount(c)
 })
+
+it('#193 : un seul nom, l\'introduction parle au singulier', () => {
+  const { container, c } = rendre({ a_creer: [p('lea', 'Léa Martin', 'chant')], rapprochements: [] })
+  const intro = container.querySelector('.hint')!.textContent!.replace(/\s+/g, ' ')
+  expect(intro).toContain('Ce nom est cité dans la Liste mais ne correspond à aucune personne déclarée. Le créer le rend utilisable')
+  expect(intro).not.toContain('Ces noms')
+  unmount(c)
+})

@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest'
 import { Inscriptions, Personne } from '../domain/model'
 import { analyserIdentitesCandidat } from './alertes-import'
-import { analyserSheetsExcel, construireCandidatExcel } from './import-detection'
+import { analyserSheetsExcel, avertissementBilanNomsNonCrees, bilanExcel, construireCandidatExcel } from './import-detection'
 import { MAPPING_LISTE_DEFAUT } from './liste-adapter'
 import { MAPPING_PROPOSES_DEFAUT } from './proposes-adapter'
 import { MAPPING_STAGIAIRES_DEFAUT } from './stagiaires-adapter'
@@ -103,5 +103,38 @@ describe('Liste seule — l\'absence d\'onglet Stagiaires est dite (#164)', () =
       .flatMap((a) => (a.type === 'nom_cite_absent_stagiaires' ? [a.personne] : []))
     expect(absents).not.toContain('yann-le-goff')
     expect(absents).toContain('sophie-mercier-lacroix')
+  })
+})
+
+describe('#193 — cas limite à un seul nom, et bilan écrit à l\'état réel', () => {
+  const UN_NOM = { sheet: 'Liste', data: [ENTETE, ['Blue Bossa', '', '', '', '', 'Léa Martin', 'NON', 'NON', 'NON', 'NON', 'NON', '']] }
+
+  it('détection, un seul nom : la phrase est au singulier partout', () => {
+    const { detection } = importer([UN_NOM])
+    expect(detection.warningsGlobaux).toEqual([
+      "Aucun onglet Stagiaires : la personne citée dans la Liste ne sera pas créée automatiquement. L'écran suivant affiche son nom et propose de la créer ; sans ce geste, elle restera un simple nom, sans instruments ni indisponibilités, et la répartition ne pourra pas vérifier son planning.",
+    ])
+    expect(detection.warningsGlobaux[0]).not.toMatch(/les 1|de simples noms|les noms/)
+  })
+
+  it('détection, plusieurs noms : le pluriel est inchangé', () => {
+    const { detection } = importer([LISTE])
+    expect(detection.warningsGlobaux[0]).toContain('elles resteront de simples noms')
+  })
+
+  it('bilan : l\'avertissement au futur de la détection n\'est PAS recopié', () => {
+    const { detection } = importer([LISTE])
+    const sel = { ongletsCoches: new Set(['Liste']), destinationsManuelles: new Map() }
+    expect(bilanExcel(detection, sel).warnings.some((w) => w.startsWith('Aucun onglet Stagiaires'))).toBe(false)
+  })
+
+  it('bilan réécrit à l\'enregistrement : rien de créé = au passé, accordé ; tout créé = rien', () => {
+    expect(avertissementBilanNomsNonCrees(26)).toBe(
+      "Les 26 noms cités n'ont pas été créés comme personnes : ils resteront de simples noms, sans instruments ni indisponibilités.",
+    )
+    expect(avertissementBilanNomsNonCrees(1)).toBe(
+      "Le nom cité n'a pas été créé comme personne : il restera un simple nom, sans instruments ni indisponibilités.",
+    )
+    expect(avertissementBilanNomsNonCrees(0)).toBeNull()
   })
 })

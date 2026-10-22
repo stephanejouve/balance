@@ -211,6 +211,7 @@ describe('construireCandidatExcel — candidat complet, une seule affectation', 
       actifParDefaut: o.statut === 'ok',
     })),
     warningsGlobaux: [],
+    warningSansStagiaires: null,
     _payloads: payloads,
   })
 

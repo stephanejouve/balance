@@ -47,7 +47,7 @@
 <details class="sheet">
   <summary>
     <p class="eyebrow">Étape 1b · Inscriptions</p>
-    <h2>{inscriptions.groupes.length} groupes, {inscriptions.personnes.length} musiciens</h2>
+    <h2>{inscriptions.groupes.length} groupe{inscriptions.groupes.length > 1 ? 's' : ''}, {inscriptions.personnes.length} musicien{inscriptions.personnes.length > 1 ? 's' : ''}</h2>
     <p class="hint">
       Édition inline titre / responsable / style / tonalité. Les membres se saisissent
       via le classeur Excel importé — édition détaillée pupitre par pupitre à venir.

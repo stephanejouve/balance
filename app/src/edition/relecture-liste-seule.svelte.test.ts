@@ -36,7 +36,10 @@ it('sans onglet Stagiaires : libellé dédié, pas les trois causes générales'
   // Review Leader #169 : la saisie en 1A ne rattache pas au nom cité.
   expect(t).not.toContain('1A')
   // #176 : le remède nomme le bouton qui permet de réimporter
-  expect(t).toContain("onglet Stagiaires qui les déclare, puis « Importer un autre fichier » à l'étape 1 pour le réimporter")
+  expect(t).toContain("onglet Stagiaires qui le déclare, puis « Importer un autre fichier » à l'étape 1 pour le réimporter")
+  // #193 : le signalement porte sur un nom, il en parle au singulier
+  expect(t).toContain("ce nom cité dans la Liste n'est pas créé comme personne. Il restera un simple nom")
+  expect(t).not.toContain('Ils resteront')
   // Lot 2b : le geste de création est nommé dans le remède
   expect(t).toContain('Personnes citées sans déclaration')
 })

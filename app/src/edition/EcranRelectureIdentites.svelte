@@ -152,7 +152,8 @@
         if (a.aucun_stagiaire_declare) {
           return {
             titre: `Nom cité, aucune personne créée — « ${a.personne} » sur « ${a.morceau} » (${a.pupitre})`,
-            detail: `Le fichier n'a pas d'onglet Stagiaires : les noms cités dans la Liste ne sont pas créés comme personnes. Ils resteront des noms, sans instruments ni indisponibilités. Pour les créer : « Créer … » dans « Personnes citées sans déclaration » en tête de cet écran, ou ajoutez au fichier un onglet Stagiaires qui les déclare, puis « Importer un autre fichier » à l'étape 1 pour le réimporter.`,
+            // #193 : le signalement porte sur UN nom — il en parle au singulier.
+            detail: `Le fichier n'a pas d'onglet Stagiaires : ce nom cité dans la Liste n'est pas créé comme personne. Il restera un simple nom, sans instruments ni indisponibilités. Pour le créer : « Créer … » dans « Personnes citées sans déclaration » en tête de cet écran, ou ajoutez au fichier un onglet Stagiaires qui le déclare, puis « Importer un autre fichier » à l'étape 1 pour le réimporter.`,
           }
         }
         return {
