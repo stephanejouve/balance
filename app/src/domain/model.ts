@@ -173,6 +173,18 @@ export const Indispo = z.preprocess(
     duree_minutes: z.number().int().nonnegative().optional(),
     roles: z.array(Pupitre).default([]),
     motif: z.string().default(''),
+    /**
+     * Marqueur de provenance — #151 option B (arbitrage CD 2026-10-22) :
+     * `true` quand la règle a été créée ou modifiée dans l'éditeur
+     * d'indispos, où jours / horaire / rôles sont des CHAMPS et le motif un
+     * libellé libre. Le check de résidu du motif ne s'applique alors pas.
+     *
+     * Jamais posé par `migrate` ni par le parser texte : l'absence de
+     * marqueur conserve exactement le comportement antérieur (un « arrive
+     * mardi midi » importé reste non interprétable). Une ancienne saisie
+     * ignorée se répare au premier contact dans l'éditeur.
+     */
+    saisie_editeur: z.boolean().optional(),
   }),
 )
 export type Indispo = z.infer<typeof Indispo>

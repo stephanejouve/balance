@@ -61,6 +61,10 @@ export function estIndispoInterpretable(ind: Indispo): boolean {
   const aRoles = ind.roles.length > 0
   if (!aHoraire && !aJours && !aRoles) return false
 
+  // Saisie dans l'éditeur (#151) : jours / horaire / rôles sont des champs
+  // saisis, le motif n'est qu'un libellé — rien à résidu-vérifier.
+  if (ind.saisie_editeur) return true
+
   // Garde imposé/parser-complet : quand debut ET une borne (fin OU durée)
   // sont posés, l'intention est structurée (parser complet ou construction
   // programmatique via enrichirIndispos). Le motif peut contenir n'importe
