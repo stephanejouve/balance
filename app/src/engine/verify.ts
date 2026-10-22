@@ -104,6 +104,45 @@ export function salleRestreinte(
   return null
 }
 
+/**
+ * Issue #163 : membres placés qui ne sont pas des personnes du modèle.
+ *
+ * Les contrôles par personne travaillent sur `personne_id` : la double
+ * réservation couvre aussi un identifiant inconnu, mais l'indispo et le
+ * planning individuel le sautent (`if (!p) continue`). Sans ce signalement,
+ * un planning dont AUCUN membre n'existe (import d'un onglet Liste seul,
+ * smoke CD 2026-10-22) sortait « 12/12 groupes complets · 0 problème ·
+ * aucun conflit » — la vérification laissait croire qu'elle avait couvert
+ * ce qu'elle n'avait pas pu voir.
+ *
+ * Modèle sans aucune personne : un seul signalement global, plutôt qu'un
+ * par groupe qui dirait la même chose douze fois.
+ */
+function membresNonResolus(ctx: Contexte, assignations: Assignation[]): Probleme[] {
+  const placés = new Set(assignations.map((a) => a.groupe_id))
+  if (placés.size === 0) return []
+  if (ctx.inscriptions.personnes.length === 0) {
+    return [
+      {
+        type: 'aucune-personne',
+        message:
+          "Aucune personne dans le modèle : les membres des groupes placés ne sont que des noms cités. Ni leurs indisponibilités ni leur planning individuel ne peuvent être vérifiés.",
+      },
+    ]
+  }
+  const out: Probleme[] = []
+  for (const g of ctx.inscriptions.groupes) {
+    if (!placés.has(g.id)) continue
+    const inconnus = personnesDe(g).filter((pid) => !ctx.personnesParId.has(pid))
+    if (inconnus.length === 0) continue
+    out.push({
+      type: 'membre-inconnu',
+      message: `« ${g.titre} » : ${inconnus.length} membre(s) absent(s) des personnes (${inconnus.join(', ')}) — ni leurs indisponibilités ni leur planning individuel ne sont vérifiés`,
+      groupe_id: g.id,
+    })
+  }
+  return out
+}
 
 export function verifier(
   session: Session,
@@ -115,6 +154,8 @@ export function verifier(
 ): Probleme[] {
   const ctx = bâtirContexte(session, lieu, inscriptions, creneaux)
   const problemes: Probleme[] = []
+
+  problemes.push(...membresNonResolus(ctx, assignations))
 
   // Butoir : le créneau doit exister ET tomber avant butoir (le générateur le
   // garantit déjà — on vérifie que l'assignation ne pointe pas hors grille).
