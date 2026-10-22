@@ -54,13 +54,18 @@
    * #186 point 3 (arbitrage CD 2026-10-22) : valider sans avoir créé les
    * personnes citées est un choix légitime, mais il se confirme — l'écran
    * proposait un geste que l'utilisateur quitte sans l'avoir fait.
+   *
+   * Le compte est celui des noms CITÉS (rien n'est résolu sans création,
+   * pas même un nom qu'on avait décidé de rattacher), pas celui du titre
+   * qui décrit ce que la création produirait : la phrase dit qu'on change
+   * de point de vue (« Vous n'avez rien créé »), smoke CD de #190.
    */
   function validerIdentites() {
     const n = creation && onCreerPersonnes ? creation.a_creer.length : 0
     if (
       n > 0 &&
       !confirm(
-        `${n} nom${n > 1 ? 's' : ''} cité${n > 1 ? 's' : ''} n'${n > 1 ? 'ont' : 'a'} pas été créé${n > 1 ? 's' : ''} : ${n > 1 ? 'ils resteront' : 'il restera'} de simples noms, sans instruments ni indisponibilités. Valider sans les créer ?`,
+        `Vous n'avez rien créé : ${n > 1 ? `les ${n} noms cités resteront de simples noms` : 'le nom cité restera un simple nom'}, sans instruments ni indisponibilités. Valider sans les créer ?`,
       )
     )
       return
