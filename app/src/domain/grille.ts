@@ -292,6 +292,22 @@ export function dateFr(iso: string): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso
 }
 
+/**
+ * Créneaux de la grille écartés parce que déjà passés (#166) : ceux de
+ * `tous` (génération sans `maintenant`) absents de `retenus` (génération
+ * avec). L'écran Session annonçait « 42 créneaux générés » sans dire qu'un
+ * jour entier avait été écarté — un état qui ne portait pas sa raison.
+ */
+export function libelleCreneauxPasses(tous: readonly Creneau[], retenus: readonly Creneau[]): string | null {
+  const gardes = new Set(retenus.map((c) => c.id))
+  const passes = tous.filter((c) => !gardes.has(c.id))
+  if (passes.length === 0) return null
+  const dates = [...new Set(passes.map((c) => c.date))].sort().map(dateFr)
+  const n = passes.length
+  const quand = dates.length === 1 ? `du ${dates[0]}` : `des ${dates.slice(0, -1).join(', ')} et ${dates[dates.length - 1]}`
+  return n === 1 ? `le créneau ${quand} est déjà passé` : `les ${n} créneaux ${quand} sont déjà passés`
+}
+
 export function joursDeSession(debut: IsoDate, fin: IsoDate): IsoDate[] {
   const [dy, dm, dd] = debut.split('-').map(Number)
   const [fy, fm, fd] = fin.split('-').map(Number)

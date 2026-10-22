@@ -39,6 +39,21 @@ export interface QuotaPupitre {
   demande: number
   capacite: number
   ratio: number
+  /**
+   * Pourquoi la capacité retenue est nulle alors que la demande ne l'est pas
+   * (ratio `Infinity`), #154. Deux dénominateurs nuls ne disent pas la même
+   * chose : un libellé unique mentirait une fois sur deux (CD 2026-10-22).
+   */
+  capacite_nulle?: CapaciteNulle
+}
+
+export type CapaciteNulle = 'aucun-musicien' | 'aucun-creneau' | 'tous-indisponibles'
+
+/** Libellé affiché à la place d'un « Infinity% ». */
+export const LIBELLE_CAPACITE_NULLE: Record<CapaciteNulle, string> = {
+  'aucun-musicien': 'aucun musicien à ce pupitre',
+  'aucun-creneau': 'plus aucun créneau avant le butoir',
+  'tous-indisponibles': 'musiciens tous indisponibles avant le butoir',
 }
 
 const cleCreneau = (c: Creneau): string => `${c.date}T${c.debut.replace(':', '')}`
@@ -85,7 +100,7 @@ export function analyseQuotas(
 
     // Fenêtre retenue par défaut : la plus longue (aucune demande → ratio 0
     // sur toute la capacité de la session avant dernier butoir).
-    let retenue = { demande: 0, capacite: 0, ratio: -1 }
+    let retenue = { demande: 0, capacite: 0, ratio: -1, nbCreneaux: 0 }
     let demandeCumulee = 0
     for (const f of fenetres) {
       demandeCumulee += groupesDemandeurs.filter((g) => g.echeance === f.echeance).length * cible
@@ -94,14 +109,23 @@ export function analyseQuotas(
         for (const c of f.creneaux) if (!indispoBloque(p, c, [pup])) capacite++
       }
       const ratio = capacite > 0 ? demandeCumulee / capacite : demandeCumulee > 0 ? Infinity : 0
-      if (ratio >= retenue.ratio) retenue = { demande: demandeCumulee, capacite, ratio }
+      if (ratio >= retenue.ratio) retenue = { demande: demandeCumulee, capacite, ratio, nbCreneaux: f.creneaux.length }
+    }
+
+    let capacite_nulle: CapaciteNulle | undefined
+    if (retenue.capacite === 0 && retenue.demande > 0) {
+      capacite_nulle =
+        musiciens.length === 0 ? 'aucun-musicien' : retenue.nbCreneaux === 0 ? 'aucun-creneau' : 'tous-indisponibles'
     }
 
     out.push({
       pupitre: pup,
       nb_musiciens: musiciens.length,
       nb_groupes_demandeurs: groupesDemandeurs.length,
-      ...retenue,
+      demande: retenue.demande,
+      capacite: retenue.capacite,
+      ratio: retenue.ratio,
+      ...(capacite_nulle ? { capacite_nulle } : {}),
     })
   }
 

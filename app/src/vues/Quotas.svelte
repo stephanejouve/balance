@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Creneau } from '../domain/grille'
   import type { Inscriptions, Session } from '../domain/model'
-  import { analyseQuotas } from '../engine/quotas'
+  import { analyseQuotas, LIBELLE_CAPACITE_NULLE } from '../engine/quotas'
 
   interface Props {
     session: Session
@@ -33,7 +33,12 @@
         <td class="center mono">{q.nb_musiciens}</td>
         <td class="center mono">{q.nb_groupes_demandeurs}</td>
         <td class="center mono">
-          {Math.round(q.ratio * 100)}%
+          {#if q.capacite_nulle}
+            <!-- #154 : pas de « Infinity% », la raison du dénominateur nul -->
+            {LIBELLE_CAPACITE_NULLE[q.capacite_nulle]}
+          {:else}
+            {Math.round(q.ratio * 100)}%
+          {/if}
           {#if surcharge}<span class="rouge"> ⚠</span>{/if}
         </td>
       </tr>

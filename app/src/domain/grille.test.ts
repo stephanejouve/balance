@@ -5,6 +5,7 @@ import {
   diagnostiquerGrille,
   finInclusive,
   genererCreneaux,
+  libelleCreneauxPasses,
   joursDeSession,
   optionsFinGrille,
   parseDureeSaisie,
@@ -756,5 +757,51 @@ describe('dateFr — affichage JJ/MM/AAAA (Stéphane 2026-10-22)', () => {
   it('valeur non ISO rendue telle quelle (champ vide, saisie libre)', () => {
     expect(dateFr('')).toBe('')
     expect(dateFr('mardi')).toBe('mardi')
+  })
+})
+
+describe('libelleCreneauxPasses — #166, ce que le filtre du présent écarte', () => {
+  // Relevé CD 2026-10-22 : session 22→28/10, grille 09-12 et 14-18 au pas
+  // 60, relevé à 17h50 le 22 → 42 créneaux annoncés au lieu de 49.
+  const lieu = Lieu.parse({ id: 'l', nom: 'l', salles: [{ id: 's', nom: 's', jauge: 10, equipement: [] }] })
+  const session = Session.parse({
+    id: 's', nom: 'n', lieu_id: 'l', date_debut: '2026-10-22', date_fin: '2026-10-28', date_butoir: '2026-10-28',
+    grille: [{ debut: '09:00', fin: '11:59', pas_minutes: 60 }, { debut: '14:00', fin: '17:59', pas_minutes: 60 }],
+  })
+  const tous = genererCreneaux(session, lieu)
+
+  it('le cas du relevé : les 7 créneaux du 22/10 sont dits', () => {
+    const retenus = genererCreneaux(session, lieu, { maintenant: new Date('2026-10-22T17:50:00') })
+    expect([tous.length, retenus.length]).toEqual([49, 42])
+    expect(libelleCreneauxPasses(tous, retenus)).toBe('les 7 créneaux du 22/10/2026 sont déjà passés')
+  })
+
+  it('plusieurs jours, et un seul créneau', () => {
+    const retenus = genererCreneaux(session, lieu, { maintenant: new Date('2026-10-23T10:30:00') })
+    expect(libelleCreneauxPasses(tous, retenus)).toBe('les 9 créneaux des 22/10/2026 et 23/10/2026 sont déjà passés')
+    const un = genererCreneaux(session, lieu, { maintenant: new Date('2026-10-22T09:30:00') })
+    expect(libelleCreneauxPasses(tous, un)).toBe('le créneau du 22/10/2026 est déjà passé')
+  })
+
+  it('rien de passé : null', () => {
+    expect(libelleCreneauxPasses(tous, genererCreneaux(session, lieu, { maintenant: new Date('2026-10-21T08:00:00') }))).toBeNull()
+  })
+})
+
+describe('#165 — grilles livrées : fins alignées, mêmes créneaux', () => {
+  const lieu = Lieu.parse({ id: 'l', nom: 'l', salles: [{ id: 's', nom: 's', jauge: 10, equipement: [] }] })
+  const avec = (grille: { debut: string; fin: string; pas_minutes: number }[]) =>
+    genererCreneaux(Session.parse({ id: 's', nom: 'n', lieu_id: 'l', date_debut: '2026-10-22', date_fin: '2026-10-28', date_butoir: '2026-10-28', grille }), lieu)
+      .map((c) => `${c.date}T${c.debut}-${c.fin}`)
+
+  it.each([
+    ['session neuve', [['09:00', '12:00', '11:59'], ['14:00', '18:00', '17:59']]],
+    ['démo', [['09:00', '12:00', '11:59'], ['13:30', '18:30', '18:29']]],
+    ['nouvelle règle', [['09:00', '10:00', '09:59']]],
+  ] as const)('%s : fin alignée proposée par l\'éditeur, créneaux identiques à l\'ancienne graine', (_, regles) => {
+    for (const [debut, , fin] of regles) expect(optionsFinGrille(debut, 60)).toContain(fin)
+    const ancienne = avec(regles.map(([debut, fin]) => ({ debut, fin, pas_minutes: 60 })))
+    const nouvelle = avec(regles.map(([debut, , fin]) => ({ debut, fin, pas_minutes: 60 })))
+    expect(nouvelle).toEqual(ancienne)
   })
 })
