@@ -322,6 +322,7 @@ describe('capaciteEstEnAlerte', () => {
     demande_stage: demande,
     capacite_stage: capacite,
     demande_depasse_capacite: demande > capacite,
+    butoir: { date: '2026-08-26', heure: '18:30' },
   })
 
   it('true quand dépassement strict', () => {

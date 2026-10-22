@@ -1284,7 +1284,7 @@
       <div class="msg warn">
         <b>Capacité du stage.</b>
         {capaciteStage.demande_stage} séance{capaciteStage.demande_stage > 1 ? 's' : ''} demandée{capaciteStage.demande_stage > 1 ? 's' : ''}
-        pour {capaciteStage.capacite_stage} place{capaciteStage.capacite_stage > 1 ? 's' : ''} au total.
+        pour {capaciteStage.capacite_stage} place{capaciteStage.capacite_stage > 1 ? 's' : ''} avant le butoir du {dateFr(capaciteStage.butoir.date)} {capaciteStage.butoir.heure}.
       </div>
     {/if}
     {#if infaisabilites.length > 0}
@@ -1321,7 +1321,7 @@
                 ({d.detail.groupes} groupe{d.detail.groupes > 1 ? 's' : ''} × {d.detail.repetitions_visees}
                 {#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} imposés{/if})
                 mais seulement <b>{d.offre}</b> lui sont ouverts
-                (sur {d.detail.creneaux_total} au total).
+                (sur {d.detail.creneaux_total} avant le butoir du {dateFr(d.detail.butoir.date)} {d.detail.butoir.heure}).
                 <!--
                   Remède adapté selon `d.detail.groupes` (feedback Stéphane
                   2026-09-05) : « réduire ses engagements » n'a de sens que
@@ -1384,28 +1384,49 @@
             </div>
           {/if}
         {:else}
-          <div class="msg warn">
-            <b>Contrôle en amont : {exclusions.length} musicien(s) sans aucun créneau disponible.</b>
-            <p class="mini-h">
-              Chacun ci-dessous n'a accès à aucun créneau — souvent parce que ses
-              indisponibilités couvrent toute la semaine, ou parce que les séances
-              imposées lui bloquent tout. À vérifier avant de lancer : le solveur
-              ne pourra pas les placer.
-            </p>
-            <ul>
-              {#each exclusions.slice(0, 8) as d}
-                <li>
-                  <b>{d.nom}</b> — n'a accès à aucun créneau sur
-                  {d.detail.creneaux_total} (demande <b>{d.demande}</b> :
-                  {d.detail.groupes} groupes × {d.detail.repetitions_visees}
-                  {#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} imposés{/if}).
-                </li>
-              {/each}
-              {#if exclusions.length > 8}
-                <li>… et {exclusions.length - 8} autres</li>
-              {/if}
-            </ul>
-          </div>
+          <!--
+            #182 : même court-circuit que #111 quand la cause est le butoir.
+            Une exclusion dont la fenêtre est vide (`creneaux_total === 0`)
+            vient du calendrier, pas du musicien : on la dit une fois, avec
+            la phrase du diagnostic (#177), au lieu d'une ligne par personne.
+          -->
+          {@const parCalendrier = exclusions.filter((d) => d.detail.creneaux_total === 0)}
+          {@const parPersonne = exclusions.filter((d) => d.detail.creneaux_total > 0)}
+          {#if parCalendrier.length > 0}
+            {@const b = parCalendrier[0].detail.butoir}
+            <div class="msg warn">
+              <b>Contrôle en amont : plus aucun créneau avant le butoir du {dateFr(b.date)} {b.heure}.</b>
+              <p class="mini-h">
+                {parCalendrier.length} musicien(s) engagé(s) sont sans place : la cause est le calendrier.
+                Corrigez le butoir ou les dates à l'<b>étape 2b Session</b>.
+              </p>
+            </div>
+          {/if}
+          {#if parPersonne.length > 0}
+            <div class="msg warn">
+              <b>Contrôle en amont : {parPersonne.length} musicien(s) sans aucun créneau disponible.</b>
+              <p class="mini-h">
+                Chacun ci-dessous n'a accès à aucun créneau — souvent parce que ses
+                indisponibilités couvrent toute la semaine, ou parce que les séances
+                imposées lui bloquent tout. À vérifier avant de lancer : le solveur
+                ne pourra pas les placer.
+              </p>
+              <ul>
+                {#each parPersonne.slice(0, 8) as d}
+                  <li>
+                    <b>{d.nom}</b> — n'a accès à aucun des
+                    {d.detail.creneaux_total} créneaux avant le butoir du {dateFr(d.detail.butoir.date)} {d.detail.butoir.heure}
+                    (demande <b>{d.demande}</b> :
+                    {d.detail.groupes} groupes × {d.detail.repetitions_visees}
+                    {#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} imposés{/if}).
+                  </li>
+                {/each}
+                {#if parPersonne.length > 8}
+                  <li>… et {parPersonne.length - 8} autres</li>
+                {/if}
+              </ul>
+            </div>
+          {/if}
         {/if}
       {/if}
     {/if}

@@ -1,4 +1,4 @@
-import type { HhMm, IsoDate, Lieu, Session } from './model'
+import type { Echeance, HhMm, IsoDate, Lieu, Session } from './model'
 
 /**
  * Créneau matérialisé, produit du déploiement d'une `RegleCreneau` sur les
@@ -779,6 +779,31 @@ export function creneauxAvantButoir<C extends Pick<Creneau, 'date' | 'debut'>>(
 ): C[] {
   const butoirKey = butoirKeyDeGroupe(session, echeance)
   return creneaux.filter((c) => `${c.date}T${c.debut.replace(':', '')}` < butoirKey)
+}
+
+/**
+ * Fenêtres de butoir emboîtées, de la plus courte à la plus longue : pour
+ * chaque échéance, les créneaux strictement avant son butoir (même règle
+ * que `creneauxAvantButoir`). Un groupe apéro doit tenir dans la fenêtre
+ * apéro ; apéro + vendredi dans la fenêtre vendredi. Les contrôles de
+ * capacité rapportent à chaque fenêtre la demande cumulée des échéances
+ * qui s'y terminent et retiennent la plus tendue (Quotas #92, Capacité du
+ * stage et Contrôle en amont #182).
+ */
+export function fenetresDeButoir<C extends Pick<Creneau, 'date' | 'debut'>>(
+  session: Pick<Session, 'butoir_apero_date' | 'butoir_apero_heure' | 'butoir_vendredi_date' | 'butoir_vendredi_heure'>,
+  creneaux: readonly C[],
+): Array<{ echeance: Echeance; butoir: { date: string; heure: string }; creneaux: C[] }> {
+  const echeances: Echeance[] = ['apero_mercredi', 'restitution_vendredi']
+  return echeances
+    .map((echeance) => ({
+      echeance,
+      cle: butoirKeyDeGroupe(session, echeance),
+      butoir: butoirDeGroupe(session, echeance),
+      creneaux: creneauxAvantButoir(session, echeance, creneaux),
+    }))
+    .sort((a, b) => a.cle.localeCompare(b.cle))
+    .map(({ echeance, butoir, creneaux }) => ({ echeance, butoir, creneaux }))
 }
 
 /**
