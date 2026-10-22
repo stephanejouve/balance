@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Personne } from '../domain/model'
   import { libellePersonne } from '../domain/model'
+  import { raisonIndispoIgnoree } from '../engine/indispo'
   import InputDuree from './InputDuree.svelte'
 
   interface Props {
@@ -78,6 +79,11 @@
             <input bind:value={ind.motif} onchange={onInvalider} placeholder="motif" style="flex:1;min-width:120px" />
             <button class="mini" onclick={() => onSupprimerIndispo(p.id, i)}>×</button>
           </div>
+          {@const raison = raisonIndispoIgnoree(ind)}
+          {#if raison}
+            <!-- #151 : une règle ignorée par le solveur le dit, là où on l'édite. -->
+            <p class="indispo-ignoree" role="note">Ignorée dans le calcul. {raison}</p>
+          {/if}
         {/each}
       </div>
     {/each}
@@ -97,3 +103,13 @@
     {/if}
   </div>
 </details>
+
+<style>
+  .indispo-ignoree {
+    margin: 2px 0 8px;
+    padding: 4px 8px;
+    border-left: 3px solid var(--rouge);
+    color: var(--rouge);
+    font-size: 0.85em;
+  }
+</style>

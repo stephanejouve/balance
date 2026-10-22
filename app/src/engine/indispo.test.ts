@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Creneau } from '../domain/grille'
 import type { Personne } from '../domain/model'
-import { estIndispoInterpretable, indispoBloque } from './indispo'
+import { estIndispoInterpretable, indispoBloque, raisonIndispoIgnoree } from './indispo'
 
 const personne = (indispos: Personne['indispos']): Personne => ({
   id: 'p',
@@ -395,5 +395,35 @@ describe('indispoBloque — invariant cap durée (CD 6858)', () => {
     ])
     expect(indispoBloque(p, creneau('10:00', '11:00'), [])).toBe(false)
     expect(indispoBloque(p, creneau('09:30', '10:30'), [])).toBe(false)
+  })
+})
+
+describe('raisonIndispoIgnoree — état visible d\'une règle ignorée (#151)', () => {
+  it('null quand l\'indispo est interprétable', () => {
+    expect(raisonIndispoIgnoree({ jours: ['mardi'], roles: [], motif: '' })).toBeNull()
+    expect(raisonIndispoIgnoree({ jours: ['2026-08-25'], roles: [], motif: 'kiné' })).toBeNull()
+  })
+
+  it('saisie UI « mardi, motif kiné » : nomme le mot non lu et dit quoi faire', () => {
+    const r = raisonIndispoIgnoree({ jours: ['mardi'], roles: [], motif: 'kiné' })
+    expect(r).toContain('« kine »')
+    expect(r).toContain('précisez le jour ou l\'heure dans les champs')
+  })
+
+  it('aucun champ structuré (« convalescence ») : raison distincte', () => {
+    const r = raisonIndispoIgnoree({ jours: [], roles: [], motif: 'convalescence' })
+    expect(r).toContain('Aucun jour, horaire ni rôle')
+  })
+
+  it('même décision que estIndispoInterpretable sur tous les cas du rapport #151', () => {
+    const cas = [
+      { jours: ['mardi'], roles: [], motif: 'kiné' },
+      { jours: ['mardi'], roles: [], motif: '' },
+      { jours: [], debut: '09:00', roles: ['chant' as const], motif: 'RDV médecin' },
+      { jours: [], debut: '09:00', duree_minutes: 60, roles: ['chant' as const], motif: 'RDV médecin' },
+      { jours: ['2026-08-25'], roles: [], motif: 'kiné' },
+      { jours: [], roles: [], motif: 'convalescence' },
+    ]
+    for (const ind of cas) expect(raisonIndispoIgnoree(ind) === null).toBe(estIndispoInterpretable(ind))
   })
 })

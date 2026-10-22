@@ -83,6 +83,26 @@ export function estIndispoInterpretable(ind: Indispo): boolean {
   return residuNonReconnu(ind.motif, ind.roles).length === 0
 }
 
+/**
+ * Raison lisible pour laquelle une indispo est ignorée dans le calcul, ou
+ * `null` si elle est interprétable. Même décision que
+ * `estIndispoInterpretable` — elle dit en plus QUOI corriger, là où
+ * l'organisateur regarde (éditeur d'indispos).
+ *
+ * Issue #151 (arbitrage CD 2026-10-22) : seul l'import xlsx avertissait ;
+ * l'éditeur et la migration legacy laissaient une règle visible, éditable
+ * et sans effet. C'est le silence qui fait le défaut.
+ */
+export function raisonIndispoIgnoree(ind: Indispo): string | null {
+  if (estIndispoInterpretable(ind)) return null
+  const aHoraire = Boolean(ind.debut || ind.fin || ind.duree_minutes !== undefined)
+  if (!aHoraire && ind.jours.length === 0 && ind.roles.length === 0) {
+    return 'Aucun jour, horaire ni rôle renseigné — la règle ne bloque rien. Renseignez au moins un jour ou une heure.'
+  }
+  const residu = residuNonReconnu(ind.motif, ind.roles)
+  return `Le texte du motif n'a pas pu être lu (« ${residu.join(' ')} ») — précisez le jour ou l'heure dans les champs.`
+}
+
 /** Jours de semaine indexés par `Date.getDay()` (dimanche = 0, ..., samedi = 6).
  *
  *  Constante partagée avec `coherence.ts` — celle-ci l'importe depuis ici
