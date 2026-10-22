@@ -150,10 +150,19 @@ function citerMotif(motif: string): string {
  * « arrive mardi midi » importé qui se met à bloquer tout le mardi parce
  * qu'on a touché ses rôles ne doit pas le faire en silence.
  */
-export function descriptionBlocage(ind: Indispo): string {
-  // Seuls les jours reconnus bloquent (#173) : la phrase n'en cite pas d'autres.
-  const reconnus = ind.jours.map(normaliserJourSaisi).filter((j): j is string => j !== null)
-  const quand = reconnus.length > 0 ? reconnus.map(dateFr).join(', ') : 'tous les jours de la session'
+export function descriptionBlocage(ind: Indispo, joursSession?: readonly string[]): string {
+  // Seuls les jours reconnus ET dans la session bloquent (#173, review
+  // Leader #178) : la phrase n'en cite pas d'autres.
+  const dansSession = joursSession ? new Set(joursSession) : null
+  const reconnus = ind.jours
+    .map(normaliserJourSaisi)
+    .filter((j): j is string => j !== null && (!dansSession || !/^\d{4}-/.test(j) || dansSession.has(j)))
+  const quand =
+    reconnus.length > 0
+      ? reconnus.map(dateFr).join(', ')
+      : ind.jours.length > 0
+        ? 'aucun jour de la session'
+        : 'tous les jours de la session'
   let horaire = 'toute la journée'
   if (ind.debut && ind.duree_minutes !== undefined) horaire = `${ind.debut} pendant ${libelleDuree(ind.duree_minutes)}`
   else if (ind.debut && ind.fin) horaire = `de ${ind.debut} à ${ind.fin}`
@@ -277,6 +286,8 @@ export function indispoJoursMatche(
 ): boolean {
   if (joursIndispo.length === 0) return true
   for (const brut of joursIndispo) {
+    // Raccourci : la forme stockée par l'éditeur matche telle quelle.
+    if (brut === dateIso || brut === jourSemaineOfDate) return true
     // Même lecture que la grille (#173) : JJ/MM/AAAA, casse et accents
     // tolérés. Un jour illisible ne matche rien.
     const j = normaliserJourSaisi(brut)

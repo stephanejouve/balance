@@ -81,6 +81,18 @@ const JOURS_FR = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi',
  * maintenant » certifiait le contraire.
  */
 export function normaliserJourSaisi(saisi: string): string | null {
+  // Appelée dans la boucle chaude du solveur (indispoJoursMatche) : cache par
+  // valeur saisie, l'ensemble des valeurs distinctes d'une session est petit.
+  const memo = cacheJours.get(saisi)
+  if (memo !== undefined) return memo
+  const r = normaliserJourSaisiBrut(saisi)
+  cacheJours.set(saisi, r)
+  return r
+}
+
+const cacheJours = new Map<string, string | null>()
+
+function normaliserJourSaisiBrut(saisi: string): string | null {
   const norm = saisi
     .toLowerCase()
     .trim()
@@ -114,6 +126,18 @@ export function lireSaisieJours(texte: string): string[] {
 /** Valeurs stockées → texte du champ : les dates en JJ/MM/AAAA, comme partout ailleurs. */
 export function afficherSaisieJours(jours: readonly string[]): string {
   return jours.map(dateFr).join(', ')
+}
+
+/**
+ * Dates (ISO normalisé) d'une règle lisibles mais hors des jours de la
+ * session — elles ne produisent rien (#173, review Leader #178 : en 1D,
+ * « 25/08/2025 » était certifié « compte maintenant » sans rien bloquer).
+ */
+export function joursHorsSession(jours: readonly string[], joursSession: readonly string[]): string[] {
+  const session = new Set(joursSession)
+  return jours
+    .map(normaliserJourSaisi)
+    .filter((j): j is string => j !== null && /^\d{4}-/.test(j) && !session.has(j))
 }
 
 /** Jours saisis que `normaliserJourSaisi` ne reconnaît pas, tels que saisis. */

@@ -40,6 +40,36 @@ it('1D : « 25/08/2026 » stocké en ISO, réaffiché en JJ/MM/AAAA ; « lundo �
   unmount(c)
 })
 
+it('1D : date lisible hors session (« 25/08/2025 ») — jamais « compte maintenant », signalée comme ne bloquant rien', () => {
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+  const personnes = $state([
+    { id: 'p', nom: 'Léa', discriminant: '', instruments: [], role: 'musicien', indispos: [{ jours: ['mardi'], roles: [], motif: 'arrive mardi midi' }] } as Personne,
+  ])
+  const c = mount(Indispos, {
+    target: container,
+    props: {
+      personnesAvecIndispo: personnes, personnesSansIndispo: [], nbIndispoTotal: 1,
+      onAjouterIndispo: () => {}, onSupprimerIndispo: () => {}, onInvalider: () => {},
+      joursSession: ['2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28'],
+    },
+  })
+  flushSync()
+  const champ = () => container.querySelector<HTMLInputElement>('input[placeholder="mardi, 25/08/2026"]')!
+  // règle importée ignorée, puis l'organisateur tape une date dont l'année est fausse
+  taper(champ(), '25/08/2025')
+  const texte = container.textContent ?? ''
+  expect(texte).not.toContain('compte maintenant')
+  expect(container.querySelector('.indispo-ignoree')!.textContent).toMatch(/Hors des dates de la session \(25\/08\/2025\) — la règle ne bloque rien/)
+  // date corrigée : la règle compte, et la phrase cite la bonne date
+  taper(champ(), '25/08/2026')
+  expect(container.querySelector('.indispo-activee')!.textContent).toContain('elle bloque 25/08/2026')
+  taper(champ(), '25/08/2026, 25/08/2025')
+  expect(container.querySelector('.indispo-activee')!.textContent).toContain('elle bloque 25/08/2026, toute la journée')
+  expect(container.querySelector('.indispo-ignoree')!.textContent).toContain('Hors des dates de la session, ignoré : 25/08/2025')
+  unmount(c)
+})
+
 it('2B : règle avec un jour illisible ou hors session — signalé sur la règle, même si la grille produit des créneaux', () => {
   const container = document.createElement('div')
   document.body.appendChild(container)

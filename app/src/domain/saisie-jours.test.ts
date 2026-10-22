@@ -97,6 +97,16 @@ describe('indispo 1D — la phrase affichée confrontée à indispoBloque (garde
     expect(creneaux.some((c) => indispoBloque(pers(ind), c, []))).toBe(false)
   })
 
+  it('date lisible HORS session (« 25/08/2025 », review Leader #178) : la phrase ne la certifie pas, et rien n\'est bloqué', () => {
+    const joursSession = ['2026-08-24', '2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28']
+    const ind = regle(['25/08/2025'])
+    expect(descriptionBlocage(ind, joursSession)).not.toContain('25/08/2025')
+    expect(creneaux.some((c) => indispoBloque(pers(ind), c, []))).toBe(false)
+    const mixte = regle(['25/08/2025', '26/08/2026'])
+    expect(descriptionBlocage(mixte, joursSession)).toBe('26/08/2026, toute la journée')
+    expect([...new Set(creneaux.filter((c) => indispoBloque(pers(mixte), c, [])).map((c) => c.date))]).toEqual(['2026-08-26'])
+  })
+
   it('mélange lisible / illisible : la phrase ne cite que ce qui bloque vraiment', () => {
     const ind = regle(['25/08/2026', 'lundo'])
     expect(raisonIndispoIgnoree(ind)).toBeNull()

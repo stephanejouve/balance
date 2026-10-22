@@ -4,8 +4,8 @@
     dateFr,
     joursDeSession,
     joursNonReconnus,
+    joursHorsSession,
     lireSaisieJours,
-    normaliserJourSaisi,
     optionsFinGrille,
     type DiagnosticGrille,
   } from '../domain/grille'
@@ -187,10 +187,7 @@
           {@const options = optionsFinGrille(regle.debut, regle.pas_minutes)}
           {@const finHorsAlignement = regle.fin && !options.includes(regle.fin) ? regle.fin : null}
           {@const illisibles = joursNonReconnus(regle.jours)}
-          {@const horsSession = regle.jours.filter((j) => {
-            const n = normaliserJourSaisi(j)
-            return n !== null && /^\d{4}-/.test(n) && !joursSession.includes(n)
-          })}
+          {@const horsSession = joursHorsSession(regle.jours, joursSession)}
           <tr>
             <td>
               <input

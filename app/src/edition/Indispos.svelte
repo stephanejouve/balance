@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Personne } from '../domain/model'
   import { libellePersonne } from '../domain/model'
-  import { afficherSaisieJours, joursNonReconnus, lireSaisieJours } from '../domain/grille'
+  import { afficherSaisieJours, dateFr, joursHorsSession, joursNonReconnus, lireSaisieJours, normaliserJourSaisi } from '../domain/grille'
   import { descriptionBlocage, raisonIndispoIgnoree } from '../engine/indispo'
   import InputDuree from './InputDuree.svelte'
 
@@ -12,6 +12,8 @@
     onAjouterIndispo: (pid: string) => void
     onSupprimerIndispo: (pid: string, i: number) => void
     onInvalider: () => void
+    /** Jours ISO de la session — une date hors session ne bloque rien (#173). */
+    joursSession?: string[]
   }
   let {
     personnesAvecIndispo,
@@ -20,7 +22,18 @@
     onAjouterIndispo,
     onSupprimerIndispo,
     onInvalider,
+    joursSession,
   }: Props = $props()
+
+  /** Aucun jour de la règle ne tombe dans la session : elle ne bloque rien (review Leader #178). */
+  function horsSessionTotale(ind: Personne['indispos'][number]): boolean {
+    if (!joursSession || ind.jours.length === 0) return false
+    const session = new Set(joursSession)
+    return ind.jours.every((j) => {
+      const n = normaliserJourSaisi(j)
+      return n === null || (/^\d{4}-/.test(n) && !session.has(n))
+    })
+  }
 
   /**
    * Toute écriture dans l'éditeur pose le marqueur de saisie (#151) : ce que
@@ -104,18 +117,26 @@
             <button class="mini" onclick={() => onSupprimerIndispo(p.id, i)}>×</button>
           </div>
           {@const raison = raisonIndispoIgnoree(ind)}
-          {@const activee = activeeParEcriture(ind, raison)}
+          {@const horsTout = !raison && horsSessionTotale(ind)}
+          {@const hs = joursSession ? joursHorsSession(ind.jours, joursSession) : []}
+          {@const activee = activeeParEcriture(ind, raison ?? (horsTout ? 'hors-session' : null))}
           {#if raison}
             <!-- #151 : une règle ignorée par le solveur le dit, là où on l'édite. -->
             <p class="indispo-ignoree" role="note">Ignorée dans le calcul. {raison}</p>
+          {:else if horsTout}
+            <!-- #173 (review Leader #178) : lisible mais hors session, elle ne bloque rien — jamais « compte maintenant ». -->
+            <p class="indispo-ignoree" role="note">Ignorée dans le calcul. Hors des dates de la session ({hs.map(dateFr).join(', ')}) — la règle ne bloque rien. Pour que la règle compte : corrigez la date.</p>
           {:else if activee}
             <!-- #151 : le pendant — une règle que l'écriture vient d'activer le dit aussi. -->
-            <p class="indispo-activee" role="note">Cette règle compte maintenant : elle bloque {descriptionBlocage(ind)}.</p>
+            <p class="indispo-activee" role="note">Cette règle compte maintenant : elle bloque {descriptionBlocage(ind, joursSession)}.</p>
           {/if}
           {@const illisibles = joursNonReconnus(ind.jours)}
-          {#if !raison && illisibles.length > 0}
-            <!-- #173 : un jour illisible se voit là où il est saisi, même si d'autres jours de la règle comptent. -->
-            <p class="indispo-ignoree" role="note">Jour non reconnu, ignoré : {illisibles.map((j) => `« ${j} »`).join(', ')}. Écrivez une date JJ/MM/AAAA ou un nom de jour.</p>
+          {#if !raison && !horsTout && (illisibles.length > 0 || hs.length > 0)}
+            <!-- #173 : un jour illisible ou hors session se voit là où il est saisi, même si d'autres jours de la règle comptent. -->
+            <p class="indispo-ignoree" role="note">
+              {#if illisibles.length > 0}Jour non reconnu, ignoré : {illisibles.map((j) => `« ${j} »`).join(', ')}. Écrivez une date JJ/MM/AAAA ou un nom de jour.{/if}
+              {#if hs.length > 0}Hors des dates de la session, ignoré : {hs.map(dateFr).join(', ')}.{/if}
+            </p>
           {/if}
         {/each}
       </div>
