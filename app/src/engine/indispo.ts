@@ -83,6 +83,51 @@ export function estIndispoInterpretable(ind: Indispo): boolean {
   return residuNonReconnu(ind.motif, ind.roles).length === 0
 }
 
+/**
+ * Raison lisible pour laquelle une indispo est ignorée dans le calcul, ou
+ * `null` si elle est interprétable. Même décision que
+ * `estIndispoInterpretable` — elle dit en plus QUOI corriger, là où
+ * l'organisateur regarde (éditeur d'indispos).
+ *
+ * Issue #151 (arbitrage CD 2026-10-22) : seul l'import xlsx avertissait ;
+ * l'éditeur et la migration legacy laissaient une règle visible, éditable
+ * et sans effet. C'est le silence qui fait le défaut.
+ */
+export function raisonIndispoIgnoree(ind: Indispo): string | null {
+  if (estIndispoInterpretable(ind)) return null
+  const aHoraire = Boolean(ind.debut || ind.fin || ind.duree_minutes !== undefined)
+  if (!aHoraire && ind.jours.length === 0 && ind.roles.length === 0) {
+    return 'Aucun jour, horaire ni rôle renseigné — la règle ne bloque rien. Pour que la règle compte : renseignez une date ou un horaire.'
+  }
+  // Remèdes EXACTS (review Leader #159) : chacun rend l'indispo
+  // interprétable, test dédié. « Précisez le jour » ne suffit pas : un nom
+  // de jour + motif déclenche justement le check de résidu.
+  const remedes = ['videz le motif', 'indiquez un début et une durée']
+  if (ind.roles.length === 0 && ind.jours.some((j) => JOURS_FR.includes(j))) {
+    remedes.push('remplacez le nom de jour par une date')
+  }
+  return `Le texte du motif n'a pas pu être lu (« ${citerMotif(ind.motif)} »). Pour que la règle compte : ${remedes.join(', ou ')}.`
+}
+
+/** Longueur au-delà de laquelle le motif cité est tronqué, avec « … ». */
+const CITATION_MAX = 60
+
+/**
+ * Le motif tel que saisi, accents compris — smoke CD #159 : citer le
+ * résidu d'extraction (« eurs peuvent jouer leur instrument », « kine »
+ * sans accent) désignait un texte que l'organisateur ne retrouve nulle part
+ * dans son champ. Tronqué au-delà de `CITATION_MAX`, en fin de mot, troncature
+ * explicite.
+ */
+function citerMotif(motif: string): string {
+  const m = motif.trim()
+  if (m.length <= CITATION_MAX) return m
+  // Coupe à la fin d'un mot : « peuvent j… » se lirait comme une faute.
+  const coupe = m.slice(0, CITATION_MAX + 1)
+  const dernierEspace = coupe.lastIndexOf(' ')
+  return `${(dernierEspace > 0 ? coupe.slice(0, dernierEspace) : m.slice(0, CITATION_MAX)).trimEnd()}…`
+}
+
 /** Jours de semaine indexés par `Date.getDay()` (dimanche = 0, ..., samedi = 6).
  *
  *  Constante partagée avec `coherence.ts` — celle-ci l'importe depuis ici

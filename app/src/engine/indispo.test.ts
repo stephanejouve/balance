@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Creneau } from '../domain/grille'
 import type { Personne } from '../domain/model'
-import { estIndispoInterpretable, indispoBloque } from './indispo'
+import { estIndispoInterpretable, indispoBloque, raisonIndispoIgnoree } from './indispo'
 
 const personne = (indispos: Personne['indispos']): Personne => ({
   id: 'p',
@@ -395,5 +395,81 @@ describe('indispoBloque — invariant cap durée (CD 6858)', () => {
     ])
     expect(indispoBloque(p, creneau('10:00', '11:00'), [])).toBe(false)
     expect(indispoBloque(p, creneau('09:30', '10:30'), [])).toBe(false)
+  })
+})
+
+describe('raisonIndispoIgnoree — état visible d\'une règle ignorée (#151)', () => {
+  it('null quand l\'indispo est interprétable', () => {
+    expect(raisonIndispoIgnoree({ jours: ['mardi'], roles: [], motif: '' })).toBeNull()
+    expect(raisonIndispoIgnoree({ jours: ['2026-08-25'], roles: [], motif: 'kiné' })).toBeNull()
+  })
+
+  it('saisie UI « mardi, motif kiné » : cite le motif tel que saisi et propose les 3 remèdes', () => {
+    const r = raisonIndispoIgnoree({ jours: ['mardi'], roles: [], motif: 'kiné' })!
+    // Accent conservé (smoke CD #159 : « kine » citait un texte absent du champ)
+    expect(r).toContain('« kiné »')
+    expect(r).toContain('videz le motif')
+    expect(r).toContain('indiquez un début et une durée')
+    expect(r).toContain('remplacez le nom de jour par une date')
+    // « précisez le jour » ne rendait pas la règle lisible (review Leader #159)
+    expect(r).not.toContain('précisez le jour')
+  })
+
+  it('cite le motif COMPLET tel que saisi, pas le résidu d\'extraction (smoke CD #159)', () => {
+    // Jeu démo : le rôle « chant » retiré du motif laissait « eurs peuvent
+    // jouer leur instrument » — troncature apparente, texte introuvable.
+    const motif = 'chanteurs indisponibles pour le chant de 9h à 10h (peuvent jouer leur instrument)'
+    const r = raisonIndispoIgnoree({ jours: ['mardi'], roles: ['chant'], motif })!
+    const cite = /« (.*) »/.exec(r)![1]
+    expect(cite).not.toContain('eurs peuvent')
+    expect(cite.endsWith('…')).toBe(true)
+    expect(motif.startsWith(cite.slice(0, -1))).toBe(true)
+    expect(cite).toBe('chanteurs indisponibles pour le chant de 9h à 10h (peuvent…')
+  })
+
+  it('motif court : cité en entier, sans points de suspension', () => {
+    const r = raisonIndispoIgnoree({ jours: ['mardi'], roles: [], motif: '  arrive mardi midi ' })!
+    expect(r).toContain('« arrive mardi midi »')
+  })
+
+  it('chaque remède proposé rend effectivement la règle interprétable', () => {
+    const base = { jours: ['mardi'], roles: [], motif: 'kiné' }
+    expect(estIndispoInterpretable({ ...base, motif: '' })).toBe(true)
+    expect(estIndispoInterpretable({ ...base, debut: '09:00', duree_minutes: 60 })).toBe(true)
+    expect(estIndispoInterpretable({ ...base, jours: ['2026-08-25'] })).toBe(true)
+    // Contre-exemple : un début seul ne suffit pas — il n'est pas proposé.
+    expect(estIndispoInterpretable({ ...base, debut: '09:00' })).toBe(false)
+  })
+
+  it('avec un rôle : la date n\'est pas proposée (elle ne suffirait pas)', () => {
+    const ind = { jours: [], debut: '09:00', roles: ['chant' as const], motif: 'RDV médecin' }
+    const r = raisonIndispoIgnoree(ind)!
+    expect(r).not.toContain('date')
+    expect(estIndispoInterpretable({ ...ind, jours: ['2026-08-25'] })).toBe(false)
+    expect(estIndispoInterpretable({ ...ind, motif: '' })).toBe(true)
+    expect(estIndispoInterpretable({ ...ind, duree_minutes: 60 })).toBe(true)
+  })
+
+  it('aucun champ structuré (« convalescence ») : raison distincte', () => {
+    const r = raisonIndispoIgnoree({ jours: [], roles: [], motif: 'convalescence' })
+    expect(r).toContain('Aucun jour, horaire ni rôle')
+    expect(r).toContain('renseignez une date ou un horaire')
+    // Remèdes exacts : date ou horaire suffisent, un nom de jour non (résidu).
+    const base = { jours: [] as string[], roles: [], motif: 'convalescence' }
+    expect(estIndispoInterpretable({ ...base, jours: ['2026-08-25'] })).toBe(true)
+    expect(estIndispoInterpretable({ ...base, debut: '09:00' })).toBe(true)
+    expect(estIndispoInterpretable({ ...base, jours: ['mardi'] })).toBe(false)
+  })
+
+  it('même décision que estIndispoInterpretable sur tous les cas du rapport #151', () => {
+    const cas = [
+      { jours: ['mardi'], roles: [], motif: 'kiné' },
+      { jours: ['mardi'], roles: [], motif: '' },
+      { jours: [], debut: '09:00', roles: ['chant' as const], motif: 'RDV médecin' },
+      { jours: [], debut: '09:00', duree_minutes: 60, roles: ['chant' as const], motif: 'RDV médecin' },
+      { jours: ['2026-08-25'], roles: [], motif: 'kiné' },
+      { jours: [], roles: [], motif: 'convalescence' },
+    ]
+    for (const ind of cas) expect(raisonIndispoIgnoree(ind) === null).toBe(estIndispoInterpretable(ind))
   })
 })
