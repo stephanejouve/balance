@@ -68,7 +68,14 @@ export interface DetectionExcel {
    */
   _payloads: Map<
     string,
-    | { destination: 'liste'; groupes: Inscriptions['groupes'] }
+    | {
+        destination: 'liste'
+        groupes: Inscriptions['groupes']
+        /** Personnes déduites des citations (nom cité, pupitres des colonnes).
+         *  Jamais ajoutées d'office : créées sur décision à la relecture
+         *  (lot 2b #164, `io/personnes-citees.ts`). */
+        personnesCitees: Inscriptions['personnes']
+      }
     | { destination: 'stagiaires'; personnes: Personne[] }
     | { destination: 'proposes'; imposes: Impose[] }
   >
@@ -265,7 +272,7 @@ export function analyserSheetsExcel(
           actifParDefaut: statut === 'ok',
         })
         if (statut === 'ok') {
-          payloads.set(s.sheet, { destination: 'liste', groupes: inscMigre.groupes })
+          payloads.set(s.sheet, { destination: 'liste', groupes: inscMigre.groupes, personnesCitees: inscMigre.personnes })
         }
       } else if (destination === 'stagiaires') {
         const { personnes, warnings } = extraireStagiaires(data, mappings.stagiaires)
@@ -339,7 +346,7 @@ export function analyserSheetsExcel(
     }
     if (cites.size > 0) {
       warningsGlobaux.push(
-        `Aucun onglet Stagiaires : les ${cites.size} personne${cites.size > 1 ? 's' : ''} citée${cites.size > 1 ? 's' : ''} dans la Liste ne ser${cites.size > 1 ? 'ont' : 'a'} pas créée${cites.size > 1 ? 's' : ''}. ${cites.size > 1 ? 'Elles resteront' : 'Elle restera'} de simples noms, sans instruments ni indisponibilités, et la répartition ne pourra pas vérifier ${cites.size > 1 ? 'leur' : 'son'} planning.`,
+        `Aucun onglet Stagiaires : les ${cites.size} personne${cites.size > 1 ? 's' : ''} citée${cites.size > 1 ? 's' : ''} dans la Liste ne ser${cites.size > 1 ? 'ont' : 'a'} pas créée${cites.size > 1 ? 's' : ''} automatiquement. L'écran suivant liste les noms et propose de les créer ; sans ce geste, ${cites.size > 1 ? 'elles resteront' : 'elle restera'} de simples noms, sans instruments ni indisponibilités, et la répartition ne pourra pas vérifier ${cites.size > 1 ? 'leur' : 'son'} planning.`,
       )
     }
   }
@@ -358,6 +365,18 @@ export function analyserSheetsExcel(
     warningsGlobaux,
     _payloads: payloads,
   }
+}
+
+/**
+ * Personnes déduites des citations des onglets Liste cochés — matière du
+ * geste « créer les personnes citées » de la relecture (lot 2b #164).
+ */
+export function personnesCiteesSelection(detection: DetectionExcel, selection: SelectionExcel): Inscriptions['personnes'] {
+  const out: Inscriptions['personnes'] = []
+  for (const [nom, p] of detection._payloads) {
+    if (p.destination === 'liste' && selection.ongletsCoches.has(nom)) out.push(...p.personnesCitees)
+  }
+  return out
 }
 
 /**

@@ -34,7 +34,9 @@ it('sans onglet Stagiaires : libellé dédié, pas les trois causes générales'
   expect(t).not.toContain('Faute de frappe')
   // Review Leader #169 : la saisie en 1A ne rattache pas au nom cité.
   expect(t).not.toContain('1A')
-  expect(t).toContain('onglet Stagiaires qui les déclare, puis réimportez-le')
+  expect(t).toContain('onglet Stagiaires qui les déclare, puis réimport')
+  // Lot 2b : le geste de création est nommé dans le remède
+  expect(t).toContain('Personnes citées sans déclaration')
 })
 
 it('avec des stagiaires déclarés : libellé général inchangé', () => {

@@ -59,9 +59,11 @@
     bilanExcel,
     construireCandidatExcel,
     construireCandidatJson,
+    personnesCiteesSelection,
     preparerImportExcel,
     preparerImportJson,
   } from './io/import-detection'
+  import { appliquerCreation, preparerCreation, type CreationPersonnes, type DecisionRapprochement } from './io/personnes-citees'
   import type { BilanImport, Detection, DetectionExcel, SelectionExcel } from './io/import-detection'
   import { MAPPING_LISTE_DEFAUT } from './io/liste-adapter'
   import { MAPPING_PROPOSES_DEFAUT } from './io/proposes-adapter'
@@ -498,6 +500,8 @@
     bilan: BilanImport
     sourceLabel: string
     analyse: AnalyseIdentitesImport
+    /** Lot 2b #164 : personnes citées non déclarées, créées seulement sur décision. */
+    creation: CreationPersonnes
     detection: DetectionExcel
     sel: SelectionExcel
   } | null>(null)
@@ -520,8 +524,26 @@
       bilan: b,
       sourceLabel: `${detection.nomFichier} — ${b.onglets_appliques.length} onglet(s) appliqué(s)`,
       analyse: analyserIdentitesCandidat(candidat),
+      creation: preparerCreation(candidat, personnesCiteesSelection(detection, sel)),
       detection,
       sel,
+    }
+  }
+
+  /**
+   * Geste « créer les personnes citées » (lot 2b #164) : le candidat en
+   * attente est remplacé, l'analyse recalculée — les signalements « nom
+   * cité absent » des personnes créées disparaissent de la relecture.
+   * Rien n'est encore enregistré : la validation reste un geste distinct.
+   */
+  function creerPersonnesCitees(decisions: ReadonlyMap<string, DecisionRapprochement>) {
+    if (!importEnAttente) return
+    const candidat = appliquerCreation(importEnAttente.candidat, importEnAttente.creation, decisions)
+    importEnAttente = {
+      ...importEnAttente,
+      candidat,
+      analyse: analyserIdentitesCandidat(candidat),
+      creation: preparerCreation(candidat, []),
     }
   }
 
@@ -1140,6 +1162,8 @@
          du contenu, pas de la mécanique). -->
     <EcranRelectureIdentites
       analyse={importEnAttente.analyse}
+      creation={importEnAttente.creation}
+      onCreerPersonnes={creerPersonnesCitees}
       onValider={validerRelectureIdentites}
       onAnnuler={annulerRelectureIdentites}
     />
