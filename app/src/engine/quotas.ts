@@ -1,18 +1,35 @@
-import type { Creneau } from '../domain/grille'
-import type { Groupe, Inscriptions, Pupitre, Session } from '../domain/model'
+import { butoirKeyDeGroupe, type Creneau } from '../domain/grille'
+import { Echeance, type Inscriptions, type Pupitre, type Session } from '../domain/model'
+import { indispoBloque } from './indispo'
 
 /**
- * Simulation de quotas — brief §11 (piste à forte valeur) et §14 (argument
- * démo n°3) : « avec tant de batteurs, de bassistes et de pianistes
- * inscrits, combien de groupes pourra-t-on servir ? »
+ * Saturation par pupitre — brief §11 et §14 : « avec tant de batteurs, de
+ * bassistes et de pianistes inscrits, où reste-t-il de la marge ? »
  *
  * Analyse par pupitre :
  *  - nb de musiciens qui le tiennent
- *  - nb de groupes qui l'exigent (au moins un membre à ce pupitre)
- *  - capacité théorique = nb_musiciens × nb_créneaux × (répétitions moyennes)
+ *  - nb de groupes qui l'exigent (au moins un membre à ce pupitre, ou un
+ *    poste cherché)
  *  - demande = nb_groupes × répétitions_visées
+ *  - capacité = places-répétitions réellement ouvertes aux musiciens du
+ *    pupitre : Σ musiciens Σ créneaux AVANT le butoir de l'échéance, hors
+ *    créneaux bloqués par leurs indispos (`indispoBloque`, même contrôle
+ *    que le solveur)
  *  - ratio saturation = demande / capacité (>1 = surcharge structurelle)
- *  - simulation : combien de groupes serviables avec un delta de musiciens
+ *
+ * Ticket #92 (mesure 2026-10-22) : l'ancienne capacité `musiciens ×
+ * créneaux` comptait toute la session. Sur nos deux jeux, tous les groupes
+ * sont en échéance apéro (28 créneaux avant butoir sur 50) : la saturation
+ * affichée était près de deux fois trop basse — en amont de la décision de
+ * recrutement. Les indispos pèsent < 1 % sur ces jeux, mais rien ne le
+ * garantit sur un stage réel, d'où leur prise en compte.
+ *
+ * Échéances mélangées : les fenêtres sont emboîtées (un groupe apéro doit
+ * tenir avant le butoir apéro ; apéro + vendredi avant le butoir vendredi).
+ * Pour chaque butoir, on rapporte la demande cumulée des groupes dont le
+ * butoir tombe au plus tard à cette date à la capacité avant ce butoir, et
+ * on retient la fenêtre la plus tendue. `demande` et `capacite` exposés
+ * sont ceux de cette fenêtre — le ratio affiché reste leur quotient.
  */
 
 export interface QuotaPupitre {
@@ -22,9 +39,9 @@ export interface QuotaPupitre {
   demande: number
   capacite: number
   ratio: number
-  /** Nombre de groupes qui pourraient être servis avec `nb_musiciens + delta`. */
-  simuler_delta(delta: number): number
 }
+
+const cleCreneau = (c: Creneau): string => `${c.date}T${c.debut.replace(':', '')}`
 
 export function analyseQuotas(
   session: Session,
@@ -46,45 +63,45 @@ export function analyseQuotas(
     for (const c of g.postes_cherches) pupitresPresents.add(c.pupitre)
   }
 
+  // Fenêtres de butoir triées de la plus courte à la plus longue. Même
+  // règle que `solver.ts::estLibre` : un créneau dont la clé est >= butoir
+  // est exclu.
+  const fenetres = Echeance.options
+    .map((echeance) => {
+      const butoir = butoirKeyDeGroupe(session, echeance)
+      return { echeance, butoir, creneaux: creneaux.filter((c) => cleCreneau(c) < butoir) }
+    })
+    .sort((a, b) => a.butoir.localeCompare(b.butoir))
+
   const out: QuotaPupitre[] = []
   for (const pup of pupitresPresents) {
-    const musiciens = new Set<string>()
-    for (const p of inscriptions.personnes) {
-      if (p.instruments.some((i) => i.pupitre === pup)) musiciens.add(p.id)
-    }
+    const musiciens = inscriptions.personnes.filter((p) => p.instruments.some((i) => i.pupitre === pup))
     // Groupes qui demandent ce pupitre (au moins un membre y joue, ou postes_cherches)
     const groupesDemandeurs = inscriptions.groupes.filter(
       (g) =>
         g.membres.some((m) => m.pupitre === pup) ||
         g.postes_cherches.some((pc) => pc.pupitre === pup),
     )
-    const nb_musiciens = musiciens.size
-    const nb_groupes = groupesDemandeurs.length
-    const demande = nb_groupes * cible
-    const capacite = nb_musiciens * creneaux.length
-    const ratio = capacite > 0 ? demande / capacite : Infinity
 
-    /**
-     * Nombre de groupes serviables avec `nb_musiciens + delta` musiciens
-     * à ce pupitre. Approximation : chaque musicien peut tenir au plus
-     * `nb_creneaux / cible` groupes (idéal, sans conflits croisés).
-     */
-    const simuler_delta = (delta: number): number => {
-      const n = Math.max(0, nb_musiciens + delta)
-      // Capacité brute en places-répétitions
-      const capaciteN = n * creneaux.length
-      // Groupes serviables si demande = groupes × cible
-      return Math.floor(capaciteN / cible)
+    // Fenêtre retenue par défaut : la plus longue (aucune demande → ratio 0
+    // sur toute la capacité de la session avant dernier butoir).
+    let retenue = { demande: 0, capacite: 0, ratio: -1 }
+    let demandeCumulee = 0
+    for (const f of fenetres) {
+      demandeCumulee += groupesDemandeurs.filter((g) => g.echeance === f.echeance).length * cible
+      let capacite = 0
+      for (const p of musiciens) {
+        for (const c of f.creneaux) if (!indispoBloque(p, c, [pup])) capacite++
+      }
+      const ratio = capacite > 0 ? demandeCumulee / capacite : demandeCumulee > 0 ? Infinity : 0
+      if (ratio >= retenue.ratio) retenue = { demande: demandeCumulee, capacite, ratio }
     }
 
     out.push({
       pupitre: pup,
-      nb_musiciens,
-      nb_groupes_demandeurs: nb_groupes,
-      demande,
-      capacite,
-      ratio,
-      simuler_delta,
+      nb_musiciens: musiciens.length,
+      nb_groupes_demandeurs: groupesDemandeurs.length,
+      ...retenue,
     })
   }
 
