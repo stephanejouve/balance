@@ -43,6 +43,10 @@ describe('descriptionBlocage', () => {
   })
 
   it('durée courte en minutes', () => {
-    expect(descriptionBlocage(ind({ jours: [mardi], debut: '09:00', duree_minutes: 45 }))).toBe(`${mardi}, 09:00 pendant 45 min`)
+    expect(descriptionBlocage(ind({ jours: [mardi], debut: '09:00', duree_minutes: 45 }))).toBe('25/08/2026, 09:00 pendant 45 min')
+  })
+
+  it('jours en JJ/MM/AAAA (#162), noms de jour inchangés', () => {
+    expect(descriptionBlocage(ind({ jours: ['2026-08-25', 'mercredi'] }))).toBe('25/08/2026, mercredi, toute la journée')
   })
 })
