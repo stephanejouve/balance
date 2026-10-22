@@ -68,7 +68,7 @@ describe('Liste seule — l\'absence d\'onglet Stagiaires est dite (#164)', () =
     const { detection, candidat } = importer([LISTE])
     expect(candidat.personnes).toEqual([])
     expect(detection.warningsGlobaux).toHaveLength(1)
-    expect(detection.warningsGlobaux[0]).toMatch(/^Aucun onglet Stagiaires : les 6 personnes citées dans la Liste ne seront pas créées\./)
+    expect(detection.warningsGlobaux[0]).toMatch(/^Aucun onglet Stagiaires : les 6 personnes citées dans la Liste ne seront pas créées automatiquement\. L'écran suivant liste les noms et propose de les créer/)
   })
 
   it('pas d\'avertissement quand un onglet Stagiaires est présent', () => {

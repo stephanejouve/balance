@@ -29,6 +29,8 @@
   import type { AlerteCoherence } from '../domain/coherence'
   import { grouperAlertesCoherence } from '../domain/coherence'
   import { dateFr, finInclusive } from '../domain/grille'
+  import type { CreationPersonnes, DecisionRapprochement } from '../io/personnes-citees'
+  import CreationPersonnesCitees from './CreationPersonnesCitees.svelte'
   import {
     filtrerPersonnes,
     grouperAlertes,
@@ -40,10 +42,13 @@
 
   interface Props {
     analyse: AnalyseIdentitesImport
+    /** Lot 2b #164 : personnes citées non déclarées, à créer sur décision. */
+    creation?: CreationPersonnes | null
+    onCreerPersonnes?: (decisions: ReadonlyMap<string, DecisionRapprochement>) => void
     onValider: () => void
     onAnnuler: () => void
   }
-  let { analyse, onValider, onAnnuler }: Props = $props()
+  let { analyse, creation = null, onCreerPersonnes, onValider, onAnnuler }: Props = $props()
 
   let recherche = $state('')
   let tri = $state<TriPersonnes>('alpha')
@@ -125,12 +130,12 @@
         if (a.aucun_stagiaire_declare) {
           return {
             titre: `Nom cité, aucune personne créée — « ${a.personne} » sur « ${a.morceau} » (${a.pupitre})`,
-            detail: `Le fichier n'a pas d'onglet Stagiaires : les noms cités dans la Liste ne sont pas créés comme personnes. Ils resteront des noms, sans instruments ni indisponibilités. Pour les créer : ajoutez au fichier un onglet Stagiaires qui les déclare, puis réimportez-le.`,
+            detail: `Le fichier n'a pas d'onglet Stagiaires : les noms cités dans la Liste ne sont pas créés comme personnes. Ils resteront des noms, sans instruments ni indisponibilités. Pour les créer : « Créer … » dans « Personnes citées sans déclaration » en tête de cet écran, ou ajoutez au fichier un onglet Stagiaires qui les déclare, puis « Importer un autre fichier » à l'étape 1 pour le réimporter.`,
           }
         }
         return {
           titre: `Nom cité absent de Stagiaires — « ${a.personne} » sur « ${a.morceau} » (${a.pupitre})`,
-          detail: `Cité dans la Liste mais aucune personne à ce nom dans l'onglet Stagiaires. Faute de frappe, oubli de saisir le stagiaire, ou variante non détectée par le rapprochement automatique.`,
+          detail: `Cité dans la Liste mais aucune personne à ce nom dans l'onglet Stagiaires. Faute de frappe, oubli de saisir le stagiaire, ou variante non détectée par le rapprochement automatique. Si c'est un oubli : « Créer … » dans « Personnes citées sans déclaration » en tête de cet écran.`,
         }
       case 'pupitre_non_declare_polyvalent':
         return {
@@ -164,6 +169,12 @@
       </span>
     </div>
   </header>
+
+  {#if creation && creation.a_creer.length > 0 && onCreerPersonnes}
+    {#key creation}
+      <CreationPersonnesCitees {creation} onCreer={onCreerPersonnes} />
+    {/key}
+  {/if}
 
   {#if groupes.decisions.length + groupesCoherence.alertes.length > 0}
     <section class="section-decisions" aria-labelledby="titre-decisions">

@@ -258,6 +258,7 @@ describe('construireCandidatExcel — candidat complet, une seule affectation', 
           {
             destination: 'liste',
             groupes: [{ id: 'nouveau', titre: 'Nouveau', auteur: '', style: '', tonalite: '', responsable_id: '', membres: [], postes_cherches: [], repetitions_deja_faites: 0, echeance: 'apero_mercredi' }],
+            personnesCitees: [],
           },
         ],
       ]),
