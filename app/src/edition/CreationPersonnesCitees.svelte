@@ -12,6 +12,7 @@
   import { libellePersonne } from '../domain/model'
   import {
     cleRapprochement,
+    fusionsRetenues,
     rapprochementsATrancher,
     type CreationPersonnes,
     type DecisionRapprochement,
@@ -26,15 +27,7 @@
   const decisions = new SvelteMap<string, DecisionRapprochement>()
   const restants = $derived(rapprochementsATrancher(creation, decisions))
   /** Ids qui ne seront pas créés : fusionnés vers une autre orthographe ou une personne déclarée. */
-  const fusionnes = $derived.by(() => {
-    const out = new Set<string>()
-    for (const r of creation.rapprochements) {
-      const d = decisions.get(cleRapprochement(r))
-      if (!d || d === 'distinctes') continue
-      out.add(d.garder === r.cite.id ? r.proche.id : r.cite.id)
-    }
-    return out
-  })
+  const fusionnes = $derived(new Set(fusionsRetenues(creation, decisions).keys()))
   const nbCreees = $derived(creation.a_creer.filter((p) => !fusionnes.has(p.id)).length)
 
   function decider(cle: string, d: DecisionRapprochement) {

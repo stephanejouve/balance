@@ -59,3 +59,28 @@ it('« deux personnes » : les deux restent à créer', () => {
   expect(bouton().textContent).toContain('Créer 2 personnes')
   unmount(c)
 })
+
+it('triangle de noms proches, trois noms gardés différents : l\'écran annonce UNE création (review Leader #185)', () => {
+  const a = p('martin', 'Martin', 'chant')
+  const b = p('martine', 'Martine', 'piano')
+  const m = p('martins', 'Martins', 'basse')
+  const { container, c, bouton } = rendre({
+    a_creer: [a, b, m],
+    rapprochements: [
+      { cite: a, proche: b, proche_declaree: false },
+      { cite: a, proche: m, proche_declaree: false },
+      { cite: b, proche: m, proche_declaree: false },
+    ],
+  })
+  const choisir = (ligne: number, texte: string) => {
+    const li = container.querySelectorAll('.rapprochements li')[ligne]
+    ;[...li.querySelectorAll<HTMLButtonElement>('button')].find((x) => x.textContent!.trim() === texte)!.click()
+    flushSync()
+  }
+  choisir(0, 'Même personne, garder « Martin »')
+  choisir(1, 'Même personne, garder « Martins »')
+  choisir(2, 'Même personne, garder « Martine »')
+  expect(bouton().textContent).toContain('Créer 1 personne et rattacher 2 orthographes')
+  expect(container.querySelectorAll('.noms li.fusionne')).toHaveLength(2)
+  unmount(c)
+})

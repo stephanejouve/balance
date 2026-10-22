@@ -109,6 +109,61 @@ export function rapprochementsATrancher(
 }
 
 /**
+ * Fusions décidées : id fusionné → id retenu, une seule entrée par nom
+ * absorbé. Partagée par l'écran (noms barrés, compte du bouton) et par
+ * `appliquerCreation`, pour que l'annonce et le résultat ne divergent pas.
+ *
+ * Les « même personne » sont lues comme des arêtes non orientées et
+ * regroupées en composantes : trois noms proches deux à deux tranchés
+ * « même personne » avec trois noms gardés différents donnent UNE personne,
+ * pas un cycle où chacune se garde elle-même (review Leader #185). Le nom
+ * retenu d'une composante : la personne déclarée s'il y en a une, sinon le
+ * nom gardé par la première décision de la composante (ordre des
+ * rapprochements). Les décisions sans réponse sont ignorées ici :
+ * `rapprochementsATrancher` les porte.
+ */
+export function fusionsRetenues(
+  creation: CreationPersonnes,
+  decisions: ReadonlyMap<string, DecisionRapprochement>,
+): Map<string, string> {
+  const parent = new Map<string, string>()
+  const racine = (id: string): string => {
+    let r = id
+    while (parent.has(r)) r = parent.get(r)!
+    return r
+  }
+  const declarees = new Set<string>()
+  const retenuParRacine = new Map<string, string>()
+  const membres = new Set<string>()
+  for (const r of creation.rapprochements) {
+    const d = decisions.get(cleRapprochement(r))
+    if (!d || d === 'distinctes') continue
+    if (r.proche_declaree) declarees.add(r.proche.id)
+    membres.add(r.cite.id)
+    membres.add(r.proche.id)
+    const a = racine(r.cite.id)
+    const b = racine(r.proche.id)
+    const retenu = retenuParRacine.get(a) ?? retenuParRacine.get(b) ?? d.garder
+    if (a !== b) {
+      parent.set(b, a)
+      retenuParRacine.delete(b)
+    }
+    retenuParRacine.set(a, retenu)
+  }
+  // La personne déclarée prime : on ne crée pas un doublon de quelqu'un qui existe.
+  for (const id of declarees) {
+    const r = racine(id)
+    if (!declarees.has(retenuParRacine.get(r)!)) retenuParRacine.set(r, id)
+  }
+  const out = new Map<string, string>()
+  for (const id of membres) {
+    const retenu = retenuParRacine.get(racine(id))!
+    if (id !== retenu && !declarees.has(id)) out.set(id, retenu)
+  }
+  return out
+}
+
+/**
  * Nouveau candidat : personnes citées créées, citations des noms fusionnés
  * réécrites vers la personne retenue. Ne mute rien (même invariant que
  * `construireCandidatExcel`).
@@ -124,22 +179,8 @@ export function appliquerCreation(
   if (rapprochementsATrancher(creation, decisions).length > 0) {
     throw new Error('rapprochements non tranchés : création refusée')
   }
-  // id fusionné → id retenu, chaînes résolues (A→B, B→C donne A→C).
-  const vers = new Map<string, string>()
-  for (const r of creation.rapprochements) {
-    const d = decisions.get(cleRapprochement(r))!
-    if (d === 'distinctes') continue
-    const perdu = d.garder === r.cite.id ? r.proche.id : r.cite.id
-    vers.set(perdu, d.garder)
-  }
-  const resoudre = (id: string): string => {
-    const vus = new Set<string>()
-    while (vers.has(id) && !vus.has(id)) {
-      vus.add(id)
-      id = vers.get(id)!
-    }
-    return id
-  }
+  const vers = fusionsRetenues(creation, decisions)
+  const resoudre = (id: string): string => vers.get(id) ?? id
 
   // Personnes créées : clones, pupitres des noms fusionnés ajoutés à la
   // personne retenue quand elle est elle-même créée ici.

@@ -13,6 +13,7 @@ import { MAPPING_STAGIAIRES_DEFAUT } from './stagiaires-adapter'
 import {
   appliquerCreation,
   cleRapprochement,
+  fusionsRetenues,
   preparerCreation,
   rapprochementsATrancher,
   type DecisionRapprochement,
@@ -147,5 +148,63 @@ describe('appliquerCreation', () => {
     const c = preparerCreation(candidat, citees)
     const apres = appliquerCreation(candidat, c, new Map([[cleRapprochement(c.rapprochements[0]), { garder: 'helene-barrault' }]]))
     expect(apres.groupes[0].membres).toEqual([expect.objectContaining({ personne_id: 'helene-barrault', pupitre: 'chant' })])
+  })
+
+  it('trois noms proches deux à deux, trois « même personne » qui gardent chacun un nom différent : UNE personne, celle annoncée (review Leader #185)', () => {
+    const { candidat, citees } = importer([
+      ligne('Blue Bossa', { Chant: 'Martin' }),
+      ligne('Autumn Leaves', { Piano: 'Martine' }),
+      ligne('So What', { Basse: 'Martins' }),
+    ])
+    const c = preparerCreation(candidat, citees)
+    expect(c.rapprochements).toHaveLength(3)
+    // Chaque paire garde un nom différent : avant le correctif, les arêtes
+    // formaient un cycle et les trois personnes étaient créées.
+    expect(c.rapprochements.map(cleRapprochement)).toEqual(['martin|martine', 'martin|martins', 'martine|martins'])
+    const d = new Map<string, DecisionRapprochement>([
+      ['martin|martine', { garder: 'martin' }],
+      ['martine|martins', { garder: 'martine' }],
+      ['martin|martins', { garder: 'martins' }],
+    ])
+    const apres = appliquerCreation(candidat, c, d)
+    expect(apres.personnes).toHaveLength(1)
+    // ce que l'écran annonce (noms barrés) est ce qui est créé
+    const fusions = fusionsRetenues(c, d)
+    expect(fusions.size).toBe(2)
+    expect(apres.personnes.map((p) => p.id)).toEqual(c.a_creer.filter((p) => !fusions.has(p.id)).map((p) => p.id))
+    const ids = new Set(apres.groupes.flatMap((g) => g.membres.map((m) => m.personne_id)))
+    expect([...ids]).toEqual([apres.personnes[0].id])
+    expect(apres.personnes[0].instruments.map((i) => i.pupitre).sort()).toEqual(['basse', 'chant', 'piano'])
+    expect(nomsAbsents(apres)).toBe(0)
+  })
+
+  it('un nom rattaché à deux orthographes différentes : la seconde décision n\'efface pas la première', () => {
+    // martin ~ martine, martin ~ marti ; martine et marti sont à deux lettres.
+    const { candidat, citees } = importer([
+      ligne('Blue Bossa', { Chant: 'Martin' }),
+      ligne('Autumn Leaves', { Piano: 'Martine' }),
+      ligne('So What', { Basse: 'Marti' }),
+    ])
+    const c = preparerCreation(candidat, citees)
+    expect(c.rapprochements.map(cleRapprochement).sort()).toEqual(['martin|marti', 'martin|martine'])
+    const d = new Map<string, DecisionRapprochement>(c.rapprochements.map((r) => [cleRapprochement(r), { garder: r.proche.id }]))
+    const apres = appliquerCreation(candidat, c, d)
+    expect(apres.personnes).toHaveLength(1)
+    expect(fusionsRetenues(c, d).size).toBe(2)
+  })
+
+  it('composante qui touche une personne déclarée : la déclarée est retenue, rien n\'est créé', () => {
+    const { candidat, citees } = importer(
+      [ligne('Blue Bossa', { Chant: 'Martin' }), ligne('Autumn Leaves', { Piano: 'Martine' })],
+      [['Martins', 'basse']],
+    )
+    const c = preparerCreation(candidat, citees)
+    // la première décision garde une citation, la déclarée doit quand même primer
+    const d = new Map<string, DecisionRapprochement>(
+      c.rapprochements.map((r) => [cleRapprochement(r), { garder: r.proche_declaree ? r.proche.id : r.cite.id }]),
+    )
+    const apres = appliquerCreation(candidat, c, d)
+    expect(apres.personnes.map((p) => p.id)).toEqual(['martins'])
+    expect(new Set(apres.groupes.flatMap((g) => g.membres.map((m) => m.personne_id)))).toEqual(new Set(['martins']))
   })
 })
