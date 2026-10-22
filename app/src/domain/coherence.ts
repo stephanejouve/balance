@@ -32,6 +32,7 @@
  */
 
 import { estIndispoInterpretable, indispoJoursMatche, jourSemaine } from '../engine/indispo'
+import { comptageEngagements } from './engagement'
 import type { Groupe, Impose, Inscriptions, Personne, Pupitre } from './model'
 
 export type AlerteCoherence =
@@ -272,16 +273,14 @@ function _detecterStagiairesOrphelins(
   // imposé (concert, morceau obligatoire) était signalée orpheline à tort
   // — l'alerte suggérait qu'elle « n'était citée nulle part » alors qu'elle
   // était bien engagée dans la programmation imposée.
-  const idsCites = new Set<string>()
-  for (const g of inscriptions.groupes) {
-    for (const m of g.membres) idsCites.add(m.personne_id)
-  }
-  for (const imp of inscriptions.imposes) {
-    for (const pid of imp.membres) idsCites.add(pid)
-  }
+  //
+  // #156 : la définition vient de `domain/engagement.ts`, source unique
+  // partagée avec le pool, l'en-tête 1A et la relecture — plus de boucle
+  // locale qui pourrait diverger (cf. #153).
+  const engagements = comptageEngagements(inscriptions)
   const alertes: AlerteCoherence[] = []
   for (const p of inscriptions.personnes) {
-    if (idsCites.has(p.id)) continue
+    if (engagements.has(p.id)) continue
     alertes.push({
       type: 'stagiaire_orphelin',
       personne: _nomAffichage(p),

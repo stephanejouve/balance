@@ -24,7 +24,7 @@ import {
   mentionsDepuisImposes,
   mentionsDepuisStagiaires,
 } from './alertes-import'
-import { estEngage } from '../domain/engagement'
+import { comptageEngagements, estEngage } from '../domain/engagement'
 import { Inscriptions } from '../domain/model'
 import { analyserSheetsExcel, construireCandidatExcel } from './import-detection'
 import { MAPPING_PROPOSES_DEFAUT } from './proposes-adapter'
@@ -391,6 +391,20 @@ describe('relecture — engagement dans un morceau imposé (#153)', () => {
     expect(alpha.nb_engagements).toBe(2)
   })
 
+  it('deux imposés de même titre : deux engagements, comme comptageEngagements (#156)', () => {
+    // Avant #156 : clé = titre → 1 engagement en relecture, 2 dans comptageEngagements.
+    const insc = {
+      ...base,
+      imposes: [
+        { id: 'i1', morceau: 'Final', membres: ['p2'], seances: [] },
+        { id: 'i2', morceau: 'Final', membres: ['p2'], seances: [] },
+      ],
+    }
+    const beta = analyserIdentitesCandidat(insc).personnes_relecture.find((p) => p.nom_affichage === 'Beta')!
+    expect(beta.nb_engagements).toBe(2)
+    expect(comptageEngagements(insc).get('p2')).toBe(2)
+  })
+
   it('les mentions d\'imposés ne changent pas les alertes d\'identité A-H', () => {
     const sans = analyserIdentitesCandidat({ ...base, imposes: [] })
     const avec = analyserIdentitesCandidat({
@@ -398,7 +412,7 @@ describe('relecture — engagement dans un morceau imposé (#153)', () => {
       imposes: [{ id: 'i1', morceau: 'Final', membres: ['p1', 'p2'], seances: [] }],
     })
     expect(avec.alertes_identite).toEqual(sans.alertes_identite)
-    expect(mentionsDepuisImposes({ ...base, imposes: [{ morceau: 'Final', membres: ['p2', 'inconnu'] }] })).toHaveLength(1)
+    expect(mentionsDepuisImposes({ ...base, imposes: [{ id: 'i1', membres: ['p2', 'inconnu'] }] })).toHaveLength(1)
   })
 
   it('jeu stress : compte « sans engagement » relecture === en-tête 1A (21 vs 0 avant #153)', async () => {
@@ -427,4 +441,36 @@ describe('relecture — engagement dans un morceau imposé (#153)', () => {
     const relecture = analyserIdentitesCandidat(insc).personnes_relecture.filter((p) => p.sans_engagement).length
     expect(relecture).toBe(enTete)
   })
+})
+
+describe('engagement — une seule définition sur les 3 sites (#156)', () => {
+  for (const f of ['balance-stress-test.xlsx', 'coherence-onglets.xlsx']) {
+    it(`${f} : en-tête 1A === alerte stagiaire_orphelin === relecture « sans engagement »`, async () => {
+      const buffer = readFileSync(join(__dirname, '..', '..', 'tests', 'fixtures', f))
+      const sheets = (await readXlsxFile(buffer, { getSheets: false } as never)) as unknown as Array<{
+        sheet: string
+        data: unknown[][]
+      }>
+      const detection = analyserSheetsExcel(
+        sheets,
+        f,
+        buffer.length,
+        { liste: MAPPING_LISTE_DEFAUT, stagiaires: MAPPING_STAGIAIRES_DEFAUT, proposes: MAPPING_PROPOSES_DEFAUT },
+        [],
+      )
+      const coches = new Set(detection.onglets.filter((o) => o.destination !== null && o.statut === 'ok').map((o) => o.nom))
+      const insc = construireCandidatExcel(
+        detection,
+        { ongletsCoches: coches, destinationsManuelles: new Map() },
+        Inscriptions.parse({ session_id: 's', personnes: [], groupes: [] }),
+        's',
+      )
+      const analyse = analyserIdentitesCandidat(insc)
+      const enTete = insc.personnes.filter((p) => !estEngage(p.id, insc)).length
+      const orphelins = analyse.alertes_coherence.filter((a) => a.type === 'stagiaire_orphelin').length
+      const relecture = analyse.personnes_relecture.filter((p) => p.sans_engagement).length
+      expect(orphelins).toBe(enTete)
+      expect(relecture).toBe(enTete)
+    })
+  }
 })
