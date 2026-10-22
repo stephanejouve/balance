@@ -176,6 +176,38 @@ export function mentionsDepuisCandidat(inscriptions: {
 }
 
 /**
+ * Mentions des membres de morceaux imposés — RÉSERVÉES au comptage
+ * d'engagements de la relecture (`personnesPourRelecture`), jamais
+ * passées à `detecterAlertesIdentite` : un imposé ne porte pas de pupitre
+ * par membre, les alertes A-H (homonymie, doublon intra-groupe) raisonnent
+ * sur des pupitres cités.
+ *
+ * Issue #153 : sans elles, la relecture appliquait l'ancienne définition
+ * d'engagement (groupes seuls) alors que l'en-tête 1A, le pool et l'alerte
+ * `stagiaire_orphelin` comptent les imposés (définition `domain/engagement.ts`,
+ * CD 7057). Jeu stress : 21 « sans engagement » en relecture contre 0 dans
+ * l'en-tête, toutes membres d'un imposé.
+ *
+ * Le titre est préfixé pour qu'un imposé homonyme d'un groupe compte comme
+ * un engagement distinct — même règle que `comptageEngagements`.
+ */
+export function mentionsDepuisImposes(inscriptions: {
+  readonly personnes: readonly Personne[]
+  readonly imposes: readonly { morceau: string; membres: readonly string[] }[]
+}): MembreMention[] {
+  const personneParId = new Map(inscriptions.personnes.map((p) => [p.id, p]))
+  const mentions: MembreMention[] = []
+  for (const imp of inscriptions.imposes) {
+    for (const pid of imp.membres) {
+      const p = personneParId.get(pid)
+      if (!p) continue
+      mentions.push({ nom: p.nom, discriminant: p.discriminant, pupitre: '', groupe_titre: `imposé : ${imp.morceau}` })
+    }
+  }
+  return mentions
+}
+
+/**
  * Variante de `analyserIdentitesImport` qui opère sur un `Inscriptions`
  * candidat (post `construireCandidatExcel`). Utilisée par l'écran de
  * relecture wire dans le flow d'import (App.svelte).
@@ -195,7 +227,7 @@ export function analyserIdentitesCandidat(
   return {
     alertes_identite: detecterAlertesIdentite(mentions),
     alertes_coherence: detecterAlertesCoherence(inscriptions, { stagiaires_ids }),
-    personnes_relecture: personnesPourRelecture(mentions),
+    personnes_relecture: personnesPourRelecture([...mentions, ...mentionsDepuisImposes(inscriptions)]),
   }
 }
 
