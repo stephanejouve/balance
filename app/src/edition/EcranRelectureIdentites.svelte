@@ -50,6 +50,23 @@
   }
   let { analyse, creation = null, onCreerPersonnes, onValider, onAnnuler }: Props = $props()
 
+  /**
+   * #186 point 3 (arbitrage CD 2026-10-22) : valider sans avoir créé les
+   * personnes citées est un choix légitime, mais il se confirme — l'écran
+   * proposait un geste que l'utilisateur quitte sans l'avoir fait.
+   */
+  function validerIdentites() {
+    const n = creation && onCreerPersonnes ? creation.a_creer.length : 0
+    if (
+      n > 0 &&
+      !confirm(
+        `${n} nom${n > 1 ? 's' : ''} cité${n > 1 ? 's' : ''} n'${n > 1 ? 'ont' : 'a'} pas été créé${n > 1 ? 's' : ''} : ${n > 1 ? 'ils resteront' : 'il restera'} de simples noms, sans instruments ni indisponibilités. Valider sans les créer ?`,
+      )
+    )
+      return
+    onValider()
+  }
+
   let recherche = $state('')
   let tri = $state<TriPersonnes>('alpha')
   let signalementsDeplies = $state(false)
@@ -313,7 +330,7 @@
     <button type="button" class="bouton-annuler" onclick={onAnnuler}>
       ← Retour extraction
     </button>
-    <button type="button" class="bouton-valider" onclick={onValider}>
+    <button type="button" class="bouton-valider" onclick={validerIdentites}>
       Valider les identités →
     </button>
   </footer>

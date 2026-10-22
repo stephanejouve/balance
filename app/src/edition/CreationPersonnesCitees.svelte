@@ -39,11 +39,16 @@
     if (actuel === 'distinctes' || d === 'distinctes') return actuel === d
     return actuel.garder === d.garder
   }
-  const pupitres = (p: CreationPersonnes['a_creer'][number]) => p.instruments.map((i) => i.precision ?? i.pupitre).join(', ')
+  // #186 : le pupitre, comme l'annonce l'intro, précision en complément (même forme que 1B).
+  const pupitres = (p: CreationPersonnes['a_creer'][number]) =>
+    p.instruments.map((i) => (i.precision ? `${i.pupitre} · ${i.precision}` : i.pupitre)).join(', ')
 </script>
 
 <section class="creation-citees" aria-labelledby="titre-creation-citees">
-  <h3 id="titre-creation-citees">Personnes citées sans déclaration ({creation.a_creer.length})</h3>
+  <!-- #186 : le compteur suit les rapprochements tranchés, comme le bouton. -->
+  <h3 id="titre-creation-citees">
+    Personnes citées sans déclaration ({nbCreees} à créer{#if fusionnes.size > 0}{`, ${fusionnes.size} rattachée${fusionnes.size > 1 ? 's' : ''}`}{/if})
+  </h3>
   <p class="hint">
     Ces noms sont cités dans la Liste mais ne correspondent à aucune personne déclarée. Les créer les
     rend utilisables : instruments, indisponibilités, planning individuel. Le pupitre vient de la
