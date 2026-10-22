@@ -1,5 +1,5 @@
 import type { Creneau } from '../domain/grille'
-import { finMinutesDe } from '../domain/grille'
+import { dateFr, finMinutesDe } from '../domain/grille'
 import type { HhMm, Indispo, Inscriptions, Personne, Salle } from '../domain/model'
 
 /** `HH:MM` → total de minutes depuis minuit. */
@@ -106,7 +106,7 @@ export function warningsSalleImposeeInconnue(
       if (!seance.salle_id) continue
       if (resoudreSalleImposeeVersLieu(seance.salle_id, salles) !== null) continue
       out.push(
-        `« ${imp.morceau} » le ${seance.date} à ${seance.debut} : salle « ${seance.salle_id} » ne correspond à aucune salle du lieu — la séance n'apparaîtra pas dans l'affichage`,
+        `« ${imp.morceau} » le ${dateFr(seance.date)} à ${seance.debut} : salle « ${seance.salle_id} » ne correspond à aucune salle du lieu — la séance n'apparaîtra pas dans l'affichage`,
       )
     }
   }
