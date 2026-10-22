@@ -67,7 +67,15 @@ describe('#186 point 3 : valider sans avoir créé se confirme', () => {
     const spy = vi.spyOn(window, 'confirm').mockReturnValue(false)
     expect(monter({ creation, onCreerPersonnes: () => {} })).toBe(0)
     expect(spy).toHaveBeenCalledOnce()
-    expect(spy.mock.calls[0][0]).toContain('1 nom cité n\'a pas été créé')
+    expect(spy.mock.calls[0][0]).toContain('Vous n\'avez rien créé : le nom cité restera un simple nom, sans instruments')
+    expect(spy.mock.calls[0][0]).toContain('Valider sans le créer ?')
+  })
+
+  it('plusieurs noms : le compte est celui des noms cités, annoncé comme tel', () => {
+    const spy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const deux = { ...creation, a_creer: [...creation.a_creer, Personne.parse({ id: 'rose', nom: 'Rose', instruments: [{ pupitre: 'chant' }] })] }
+    monter({ creation: deux, onCreerPersonnes: () => {} })
+    expect(spy.mock.calls[0][0]).toContain('Vous n\'avez rien créé : les 2 noms cités resteront de simples noms')
     expect(spy.mock.calls[0][0]).toContain('Valider sans les créer ?')
   })
 
