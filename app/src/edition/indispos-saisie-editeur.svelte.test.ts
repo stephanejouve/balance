@@ -71,3 +71,68 @@ describe('Indispos.svelte — marqueur saisie_editeur (#151)', () => {
     unmount(c)
   })
 })
+
+/**
+ * Le pendant de « Ignorée dans le calcul » (CD 2026-10-22, saut signalé par
+ * Leader) : quand une écriture rend active une règle jusque-là ignorée,
+ * l'éditeur le dit au même endroit — sinon un « arrive mardi midi » importé
+ * se met à bloquer tout le mardi en silence dès qu'on touche ses rôles.
+ */
+describe('Indispos.svelte — une règle activée par l\'écriture le dit (#151)', () => {
+  let container: HTMLDivElement
+  beforeEach(() => {
+    container = document.createElement('div')
+    document.body.appendChild(container)
+  })
+
+  function rendre(indispos: Personne['indispos']) {
+    const personnes = $state([
+      { id: 'p', nom: 'Léa', discriminant: '', instruments: [], role: 'musicien', indispos } as Personne,
+    ])
+    const c = mount(Indispos, {
+      target: container,
+      props: {
+        personnesAvecIndispo: personnes,
+        personnesSansIndispo: [],
+        nbIndispoTotal: indispos.length,
+        onAjouterIndispo: () => {},
+        onSupprimerIndispo: () => {},
+        onInvalider: () => {},
+      },
+    })
+    flushSync()
+    return { c, ind: () => personnes[0].indispos[0] }
+  }
+  const note = () => container.querySelector('[role="note"]')?.textContent ?? null
+  const taperRoles = (v: string) => {
+    const roles = container.querySelector<HTMLInputElement>('input[placeholder^="rôles"]')!
+    roles.value = v
+    roles.dispatchEvent(new Event('input', { bubbles: true }))
+    flushSync()
+  }
+
+  it('« arrive mardi midi » importé : ignorée, puis toucher les rôles → « compte maintenant : elle bloque mardi, toute la journée »', () => {
+    const { c, ind } = rendre([{ jours: ['mardi'], roles: [], motif: 'arrive mardi midi' }])
+    expect(note()).toMatch(/^Ignorée dans le calcul/)
+    taperRoles('')
+    expect(ind().saisie_editeur).toBe(true)
+    expect(note()).toBe('Cette règle compte maintenant : elle bloque mardi, toute la journée.')
+    unmount(c)
+  })
+
+  it('une règle déjà active n\'annonce rien quand on l\'édite', () => {
+    const { c } = rendre([{ jours: ['mardi'], roles: [], motif: 'absent mardi' }])
+    expect(note()).toBeNull()
+    taperRoles('chant')
+    expect(note()).toBeNull()
+    unmount(c)
+  })
+
+  it('une règle créée dans l\'éditeur (marquée d\'emblée) n\'annonce rien', () => {
+    const { c } = rendre([{ jours: [], roles: [], motif: '', saisie_editeur: true }])
+    expect(note()).toMatch(/^Ignorée dans le calcul/)
+    taperRoles('chant')
+    expect(note()).toBeNull()
+    unmount(c)
+  })
+})
