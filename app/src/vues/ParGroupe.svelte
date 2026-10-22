@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dateCourteFr } from '../domain/grille'
   import type { Creneau } from '../domain/grille'
   import type { Groupe, Inscriptions, Salle } from '../domain/model'
   import { formatPostesCherches, libellePersonne } from '../domain/model'
@@ -102,7 +103,7 @@
           {/if}
           {#each cs as { a, c }}
             <span class="chip" class:figee={estFigee(a)}>
-              {c!.date.slice(5).replace('-', '/')} · {c!.debut}
+              {dateCourteFr(c!.date)} · {c!.debut}
               <em>{sallesParId.get(a.salle_id)?.nom ?? a.salle_id}</em>
               <button
                 class="lock"

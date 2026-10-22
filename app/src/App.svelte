@@ -1,6 +1,6 @@
 <script lang="ts">
   import { comptageEngagements, estEngage } from './domain/engagement'
-  import { butoirDeGroupe, dateFr, diagnostiquerGrille, genererCreneaux, libelleCreneauxPasses } from './domain/grille'
+  import { butoirDeGroupe, dateFr, diagnostiquerGrille, genererCreneaux, libelleCreneauxPasses, joursDeSession } from './domain/grille'
   import { parseMaintenantUrlParam, propositionRejouer } from './domain/maintenant'
   import { parseLegacyInscriptions } from './domain/legacy'
   import { migrerInscriptions } from './domain/migrate'
@@ -251,6 +251,14 @@
       // laisser ce comportement en option n'avait pas de sens (« c'est
       // une blague ? »). Comportement désormais automatique.
       return genererCreneaux(session, lieu, { maintenant: maintenantFixe ?? new Date() })
+    } catch {
+      return []
+    }
+  })
+  /** Jours de la session, pour l'éditeur d'indispos : une date hors session ne bloque rien (#173). */
+  const joursSessionCourante = $derived.by(() => {
+    try {
+      return joursDeSession(session.date_debut, session.date_fin)
     } catch {
       return []
     }
@@ -1192,6 +1200,7 @@
   />
 
   <IndisposEdit
+    joursSession={joursSessionCourante}
     {personnesAvecIndispo}
     {personnesSansIndispo}
     {nbIndispoTotal}

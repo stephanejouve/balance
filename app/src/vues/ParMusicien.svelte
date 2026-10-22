@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dateCourteFr } from '../domain/grille'
   import type { Creneau } from '../domain/grille'
   import type { Groupe, Inscriptions, Personne, Salle } from '../domain/model'
   import { libellePersonne } from '../domain/model'
@@ -92,7 +93,7 @@
             {#each items as { a, c }}
               {@const g = groupesParId.get(a.groupe_id)}
               <span class="chip">
-                {c.date.slice(5).replace('-', '/')} · {c.debut}
+                {dateCourteFr(c.date)} · {c.debut}
                 <em>{g?.titre ?? a.groupe_id}</em>
                 <em>{sallesParId.get(a.salle_id)?.nom ?? a.salle_id}</em>
               </span>

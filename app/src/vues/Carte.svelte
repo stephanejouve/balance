@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { butoirDeGroupe, finInclusive, type Creneau } from '../domain/grille'
+  import { butoirDeGroupe, finInclusive, type Creneau, dateCourteFr } from '../domain/grille'
   import type { Groupe, Inscriptions, Lieu, Salle, Session } from '../domain/model'
   import { imposesOccupantCreneau } from '../engine/imposes'
   import { ciblesValides } from '../engine/manuel'
@@ -93,7 +93,7 @@
       {@const nbOuvertes = sallesAffichees.filter((s) => salleOuverte.has(s.id)).length}
       {@const nbOccupees = assCr.length + [...imposeParSalle.keys()].filter((sid) => !parSalle.has(sid) && salleOuverte.has(sid)).length}
       <tr>
-        <td class="mono">{c.date.slice(5).replace('-', '/')} · {c.debut}–{finInclusive(c.fin)}</td>
+        <td class="mono">{dateCourteFr(c.date)} · {c.debut}–{finInclusive(c.fin)}</td>
         {#each sallesAffichees as s}
           {@const ass = parSalle.get(s.id)}
           {@const imp = imposeParSalle.get(s.id)}
@@ -140,7 +140,7 @@
   {@const c = creneauxParId.get(inspecteCase.creneauId)}
   {@const s = sallesParId.get(inspecteCase.salleId)}
   <div class="candidats">
-    <b>{s?.nom} · {c?.date.slice(5).replace('-', '/')} · {c?.debut}–{c?.fin ? finInclusive(c.fin) : ''}</b>
+    <b>{s?.nom} · {c ? dateCourteFr(c.date) : ''} · {c?.debut}–{c?.fin ? finInclusive(c.fin) : ''}</b>
     <span class="ink-soft mono"> — {candidatsCase.length} groupe(s) compatible(s)</span>
     {#if candidatsCase.length > 0}
       <p class="hint" style="margin-top:6px">

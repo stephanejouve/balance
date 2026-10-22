@@ -1,5 +1,5 @@
 import type { Creneau } from '../domain/grille'
-import { dateFr, finMinutesDe } from '../domain/grille'
+import { dateFr, finMinutesDe, joursNonReconnus, normaliserJourSaisi } from '../domain/grille'
 import type { Indispo, Personne, Pupitre } from '../domain/model'
 
 /** Helper local — `toMinutes` de `domain/grille.ts` est privé au module. */
@@ -60,6 +60,10 @@ export function estIndispoInterpretable(ind: Indispo): boolean {
   const aJours = ind.jours.length > 0
   const aRoles = ind.roles.length > 0
   if (!aHoraire && !aJours && !aRoles) return false
+  // Jours tous illisibles (#173 : « lundo », « 25/13/2026 ») : la règle ne
+  // tombe sur aucun créneau. La déclarer active serait certifier un blocage
+  // qui n'existe pas — elle est ignorée, et la raison le dit.
+  if (aJours && joursNonReconnus(ind.jours).length === ind.jours.length) return false
 
   // Saisie dans l'éditeur (#151) : jours / horaire / rôles sont des champs
   // saisis, le motif n'est qu'un libellé — rien à résidu-vérifier.
@@ -100,6 +104,10 @@ export function estIndispoInterpretable(ind: Indispo): boolean {
 export function raisonIndispoIgnoree(ind: Indispo): string | null {
   if (estIndispoInterpretable(ind)) return null
   const aHoraire = Boolean(ind.debut || ind.fin || ind.duree_minutes !== undefined)
+  const illisibles = joursNonReconnus(ind.jours)
+  if (ind.jours.length > 0 && illisibles.length === ind.jours.length) {
+    return `Jour non reconnu (${illisibles.map((j) => `« ${j} »`).join(', ')}) — la règle ne bloque rien. Pour que la règle compte : écrivez une date JJ/MM/AAAA ou un nom de jour.`
+  }
   if (!aHoraire && ind.jours.length === 0 && ind.roles.length === 0) {
     return 'Aucun jour, horaire ni rôle renseigné — la règle ne bloque rien. Pour que la règle compte : renseignez une date ou un horaire.'
   }
@@ -142,8 +150,19 @@ function citerMotif(motif: string): string {
  * « arrive mardi midi » importé qui se met à bloquer tout le mardi parce
  * qu'on a touché ses rôles ne doit pas le faire en silence.
  */
-export function descriptionBlocage(ind: Indispo): string {
-  const quand = ind.jours.length > 0 ? ind.jours.map(dateFr).join(', ') : 'tous les jours de la session'
+export function descriptionBlocage(ind: Indispo, joursSession?: readonly string[]): string {
+  // Seuls les jours reconnus ET dans la session bloquent (#173, review
+  // Leader #178) : la phrase n'en cite pas d'autres.
+  const dansSession = joursSession ? new Set(joursSession) : null
+  const reconnus = ind.jours
+    .map(normaliserJourSaisi)
+    .filter((j): j is string => j !== null && (!dansSession || !/^\d{4}-/.test(j) || dansSession.has(j)))
+  const quand =
+    reconnus.length > 0
+      ? reconnus.map(dateFr).join(', ')
+      : ind.jours.length > 0
+        ? 'aucun jour de la session'
+        : 'tous les jours de la session'
   let horaire = 'toute la journée'
   if (ind.debut && ind.duree_minutes !== undefined) horaire = `${ind.debut} pendant ${libelleDuree(ind.duree_minutes)}`
   else if (ind.debut && ind.fin) horaire = `de ${ind.debut} à ${ind.fin}`
@@ -266,9 +285,15 @@ export function indispoJoursMatche(
   jourSemaineOfDate: string | null,
 ): boolean {
   if (joursIndispo.length === 0) return true
-  for (const j of joursIndispo) {
+  for (const brut of joursIndispo) {
+    // Raccourci : la forme stockée par l'éditeur matche telle quelle.
+    if (brut === dateIso || brut === jourSemaineOfDate) return true
+    // Même lecture que la grille (#173) : JJ/MM/AAAA, casse et accents
+    // tolérés. Un jour illisible ne matche rien.
+    const j = normaliserJourSaisi(brut)
+    if (j === null) continue
     if (j === dateIso) return true
-    if (jourSemaineOfDate && j.toLowerCase() === jourSemaineOfDate) return true
+    if (jourSemaineOfDate && j === jourSemaineOfDate) return true
   }
   return false
 }

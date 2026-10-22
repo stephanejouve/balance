@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Creneau } from '../domain/grille'
-  import { finInclusive } from '../domain/grille'
+  import { finInclusive, dateCourteFr } from '../domain/grille'
   import type { Groupe, Inscriptions, Lieu, Personne, Salle } from '../domain/model'
   import { libellePersonne } from '../domain/model'
   import { imposesOccupantCreneau } from '../engine/imposes'
@@ -66,7 +66,7 @@
           class:cible={deplacementEnCours && estCibleValide(c.id, salle.id)}
         >
           <td>{salle.nom}</td>
-          <td class="mono">{c.date.slice(5).replace('-', '/')} · {c.debut}–{finInclusive(c.fin)}</td>
+          <td class="mono">{dateCourteFr(c.date)} · {c.debut}–{finInclusive(c.fin)}</td>
           <td>
             {#if g}
               {g.titre}{#if impose}

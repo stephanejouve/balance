@@ -49,7 +49,7 @@ describe('Indispos.svelte — marqueur saisie_editeur (#151)', () => {
   it('réécrire le champ jours avec la MÊME valeur pose le marqueur et répare la règle', () => {
     const p = ancienne()
     const { c, invalide } = rendre(p)
-    const jours = container.querySelector<HTMLInputElement>('input[placeholder="mardi, 2026-08-25"]')!
+    const jours = container.querySelector<HTMLInputElement>('input[placeholder="mardi, 25/08/2026"]')!
     jours.value = 'mardi'
     jours.dispatchEvent(new Event('input', { bubbles: true }))
     flushSync()

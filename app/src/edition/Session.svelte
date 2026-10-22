@@ -1,5 +1,14 @@
 <script lang="ts">
-  import { dateFr, optionsFinGrille, type DiagnosticGrille } from '../domain/grille'
+  import {
+    afficherSaisieJours,
+    dateFr,
+    joursDeSession,
+    joursNonReconnus,
+    joursHorsSession,
+    lireSaisieJours,
+    optionsFinGrille,
+    type DiagnosticGrille,
+  } from '../domain/grille'
   import type { Session } from '../domain/model'
 
   interface Props {
@@ -39,6 +48,15 @@
     onSupprimerRegle,
     onInvalider,
   }: Props = $props()
+
+  /** Jours de la session, pour signaler une date de règle hors session (#173). */
+  const joursSession = $derived.by(() => {
+    try {
+      return joursDeSession(session.date_debut, session.date_fin)
+    } catch {
+      return []
+    }
+  })
 
   /**
    * Libellé de règle affichable — utilise l'index humain (1-based) et la
@@ -147,8 +165,8 @@
     <h3>Grille de créneaux</h3>
     <p class="hint">
       Chaque règle génère des créneaux sur les jours ciblés (colonne <b>Jours</b> —
-      vide = tous les jours de la session). Accepte des dates ISO (<code>2026-08-26</code>)
-      ou des noms de jour FR (<code>mercredi</code>, <code>lundi</code>…).
+      vide = tous les jours de la session). Accepte des dates (<code>26/08/2026</code>)
+      ou des noms de jour FR (<code>mercredi</code>, <code>lundi</code>…), séparés par des virgules.
       « Bloque » retire les créneaux qui tombent dans la plage. La <b>Fin</b> se
       choisit dans une liste alignée sur le <b>Pas</b> depuis le <b>Début</b> — la
       liste s'arrête à la dernière fin possible dans la journée.
@@ -156,7 +174,7 @@
     <table>
       <thead>
         <tr>
-          <th>Jours (ISO, CSV)</th>
+          <th>Jours (dates ou noms de jour)</th>
           <th style="width:110px">Début</th>
           <th style="width:110px">Fin</th>
           <th style="width:80px">Pas (min)</th>
@@ -168,19 +186,25 @@
         {#each session.grille as regle, i}
           {@const options = optionsFinGrille(regle.debut, regle.pas_minutes)}
           {@const finHorsAlignement = regle.fin && !options.includes(regle.fin) ? regle.fin : null}
+          {@const illisibles = joursNonReconnus(regle.jours)}
+          {@const horsSession = joursHorsSession(regle.jours, joursSession)}
           <tr>
             <td>
               <input
-                value={regle.jours.join(', ')}
+                value={afficherSaisieJours(regle.jours)}
                 oninput={(e) => {
-                  regle.jours = (e.currentTarget as HTMLInputElement).value
-                    .split(/[,;\s]+/)
-                    .map((s) => s.trim())
-                    .filter(Boolean)
+                  regle.jours = lireSaisieJours((e.currentTarget as HTMLInputElement).value)
                   onInvalider()
                 }}
                 placeholder="tous les jours"
               />
+              {#if illisibles.length > 0 || horsSession.length > 0}
+                <!-- #173 : signalé par règle, pas seulement quand toute la grille tombe à zéro. -->
+                <p class="jour-ignore" role="note">
+                  {#if illisibles.length > 0}Non reconnu, ignoré : {illisibles.map((j) => `« ${j} »`).join(', ')}.{/if}
+                  {#if horsSession.length > 0}Hors des dates de la session, ignoré : {horsSession.map(dateFr).join(', ')}.{/if}
+                </p>
+              {/if}
             </td>
             <td><input type="time" bind:value={regle.debut} onchange={onInvalider} /></td>
             <td>
@@ -203,3 +227,11 @@
     <button class="ghost" onclick={onAjouterRegle}>+ Ajouter une règle</button>
   </div>
 </details>
+
+<style>
+  .jour-ignore {
+    margin: 2px 0 0;
+    font-size: 0.8em;
+    color: var(--rouge);
+  }
+</style>
