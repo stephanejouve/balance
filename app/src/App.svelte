@@ -1,6 +1,6 @@
 <script lang="ts">
   import { comptageEngagements, estEngage } from './domain/engagement'
-  import { butoirDeGroupe, creneauxAvantButoir, dateFr, diagnostiquerGrille, genererCreneaux, joursDeSession, libelleCreneauxPasses } from './domain/grille'
+  import { butoirDeGroupe, creneauxAvantButoir, dateFr, diagnostiquerGrille, genererCreneaux, joursDeSession, libelleCreneauxPasses, GRILLE_PROPOSEE } from './domain/grille'
   import { parseMaintenantUrlParam, propositionRejouer } from './domain/maintenant'
   import { parseLegacyInscriptions } from './domain/legacy'
   import { migrerInscriptions } from './domain/migrate'
@@ -432,10 +432,8 @@
     session.grille.splice(
       0,
       session.grille.length,
-      // #165 : fins alignées sur le pas — une session neuve ne démarre plus
-      // avec deux règles que l'éditeur marque « hors alignement ».
-      { jours: [], debut: '09:00', fin: '11:59', pas_minutes: 60, salles: [], bloque: false },
-      { jours: [], debut: '14:00', fin: '17:59', pas_minutes: 60, salles: [], bloque: false },
+      // #165 : fins alignées sur le pas, et grille dite « proposée » en 2b.
+      ...GRILLE_PROPOSEE.map((r) => ({ ...r, jours: [], salles: [], bloque: false })),
     )
     // Inscriptions vides (personnes + groupes + imposés)
     inscriptions = { session_id: 'nouvelle-session', personnes: [], groupes: [], imposes: [], refus: [] }

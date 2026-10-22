@@ -2,6 +2,7 @@
   import {
     afficherSaisieJours,
     dateFr,
+    estGrilleProposee,
     joursDeSession,
     joursNonReconnus,
     libelleJoursIgnores,
@@ -164,6 +165,12 @@
       il peut saturer à 100% (moins de tolérance aux imprévus).
     </p>
     <h3>Grille de créneaux</h3>
+    {#if estGrilleProposee(session.grille)}
+      <!-- #165 : la grille d'une session neuve est une proposition, pas une donnée du lieu. -->
+      <p class="hint grille-proposee" role="note">
+        Grille proposée par défaut, 9h-12h et 14h-18h : modifiez-la ou supprimez les règles si vos horaires sont autres.
+      </p>
+    {/if}
     <p class="hint">
       Chaque règle génère des créneaux sur les jours ciblés (colonne <b>Jours</b> —
       vide = tous les jours de la session). Accepte des dates (<code>26/08/2026</code>)

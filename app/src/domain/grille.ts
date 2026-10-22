@@ -780,3 +780,30 @@ export function creneauxAvantButoir<C extends Pick<Creneau, 'date' | 'debut'>>(
   const butoirKey = butoirKeyDeGroupe(session, echeance)
   return creneaux.filter((c) => `${c.date}T${c.debut.replace(':', '')}` < butoirKey)
 }
+
+/**
+ * Grille proposée à une session neuve (#165, CD 2026-10-22) : une
+ * PROPOSITION de l'application, pas une donnée héritée du lieu (le lieu ne
+ * porte aucune grille). L'étape 2b le dit tant que la grille est inchangée.
+ */
+export const GRILLE_PROPOSEE: ReadonlyArray<{ debut: HhMm; fin: HhMm; pas_minutes: number }> = [
+  { debut: '09:00', fin: '11:59', pas_minutes: 60 },
+  { debut: '14:00', fin: '17:59', pas_minutes: 60 },
+]
+
+/** La grille de la session est-elle encore exactement la proposition par défaut ? */
+export function estGrilleProposee(
+  grille: ReadonlyArray<{ jours?: readonly string[]; debut: string; fin?: string; pas_minutes: number; bloque?: boolean }>,
+): boolean {
+  return (
+    grille.length === GRILLE_PROPOSEE.length &&
+    grille.every(
+      (r, i) =>
+        r.debut === GRILLE_PROPOSEE[i].debut &&
+        r.fin === GRILLE_PROPOSEE[i].fin &&
+        r.pas_minutes === GRILLE_PROPOSEE[i].pas_minutes &&
+        (r.jours ?? []).length === 0 &&
+        !r.bloque,
+    )
+  )
+}

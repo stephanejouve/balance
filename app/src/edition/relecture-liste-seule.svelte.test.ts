@@ -34,7 +34,8 @@ it('sans onglet Stagiaires : libellé dédié, pas les trois causes générales'
   expect(t).not.toContain('Faute de frappe')
   // Review Leader #169 : la saisie en 1A ne rattache pas au nom cité.
   expect(t).not.toContain('1A')
-  expect(t).toContain('onglet Stagiaires qui les déclare, puis réimport')
+  // #176 : le remède nomme le bouton qui permet de réimporter
+  expect(t).toContain("onglet Stagiaires qui les déclare, puis « Importer un autre fichier » à l'étape 1 pour le réimporter")
   // Lot 2b : le geste de création est nommé dans le remède
   expect(t).toContain('Personnes citées sans déclaration')
 })
