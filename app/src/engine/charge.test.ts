@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Creneau } from '../domain/grille'
 import type { Inscriptions } from '../domain/model'
-import { chargeParMusicien } from './charge'
+import { chargeParMusicien, musiciensAuDelaDuSeuil, type ChargePersonne } from './charge'
 import type { Assignation } from './types'
 
 function insc(overrides: Partial<Inscriptions> = {}): Inscriptions {
@@ -142,5 +142,19 @@ describe('chargeParMusicien', () => {
     const assignations: Assignation[] = [{ groupe_id: 'g1', creneau_id: 'c1', salle_id: 's1' }]
     const charge = chargeParMusicien(insc1, creneaux, assignations)
     expect(charge.get('prune')?.total).toBe(1)
+  })
+})
+
+describe('musiciensAuDelaDuSeuil (#184 — partagé par Par musicien et le bloc de tête)', () => {
+  const ch = (id: string, max_jour: number): ChargePersonne => ({ personne_id: id, total: max_jour, max_jour, par_jour: [] })
+  const charges = new Map([['a', ch('a', 7)], ['b', ch('b', 4)], ['c', ch('c', 5)]])
+
+  it('strictement au-delà du seuil : 4 au seuil de 4 ne compte pas', () => {
+    expect(musiciensAuDelaDuSeuil(charges, 4).map((c) => c.personne_id)).toEqual(['a', 'c'])
+  })
+
+  it('le seuil réglé change le compte', () => {
+    expect(musiciensAuDelaDuSeuil(charges, 6).map((c) => c.personne_id)).toEqual(['a'])
+    expect(musiciensAuDelaDuSeuil(charges, 12)).toEqual([])
   })
 })

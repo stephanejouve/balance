@@ -3,7 +3,7 @@
   import type { Creneau } from '../domain/grille'
   import type { Groupe, Inscriptions, Personne, Salle } from '../domain/model'
   import { libellePersonne } from '../domain/model'
-  import { chargeParMusicien } from '../engine/charge'
+  import { chargeParMusicien, musiciensAuDelaDuSeuil } from '../engine/charge'
   import type { Assignation } from '../engine/types'
 
   interface Props {
@@ -44,7 +44,7 @@
       l.sort((x, y) => `${x.c.date}T${x.c.debut}`.localeCompare(`${y.c.date}T${y.c.debut}`))
     return m
   })
-  const surcharges = $derived([...chargeMap.values()].filter((c) => c.max_jour > seuilChargeJour))
+  const surcharges = $derived(musiciensAuDelaDuSeuil(chargeMap, seuilChargeJour))
   const personnesTriees = $derived(
     [...inscriptions.personnes].sort((a, b) => libellePersonne(a).localeCompare(libellePersonne(b), 'fr')),
   )

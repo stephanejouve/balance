@@ -15,7 +15,7 @@
     type Inscriptions,
     type Pupitre,
   } from './domain/model'
-  import { chargeParMusicien } from './engine/charge'
+  import { chargeParMusicien, musiciensAuDelaDuSeuil } from './engine/charge'
   import { calculerPool } from './engine/pool'
   import Contraintes from './edition/Contraintes.svelte'
   import ImposesEdit from './edition/Imposes.svelte'
@@ -36,6 +36,7 @@
   import Concert from './vues/Concert.svelte'
   import ParGroupe from './vues/ParGroupe.svelte'
   import ParMusicien from './vues/ParMusicien.svelte'
+  import BilanRepartition from './vues/BilanRepartition.svelte'
   import ParSalle from './vues/ParSalle.svelte'
   import Quotas from './vues/Quotas.svelte'
   import { ordonnerConcert } from './engine/concert'
@@ -271,6 +272,15 @@
    * tous les créneaux du présent, butoir compris (50 annoncés pour 28 ;
    * butoir passé, 19 annoncés pour 0). Même filtre que le solveur.
    */
+  /**
+   * #184 : le dépassement du seuil de charge par jour, relayé dans le bloc
+   * de tête de l'étape 3 — même calcul que l'onglet « Par musicien ».
+   */
+  const musiciensAuDelaSeuil = $derived(
+    solveurStore.solution
+      ? musiciensAuDelaDuSeuil(chargeParMusicien(inscriptions, creneaux, solveurStore.solution.assignations), seuilChargeJour)
+      : [],
+  )
   const nbCreneauxAvantButoirApero = $derived(creneauxAvantButoir(session, 'apero_mercredi', creneaux).length)
   /** #166 : ce que le filtre du présent a écarté, dit dans l'étape Session. */
   const creneauxPasses = $derived.by(() => {
@@ -1439,18 +1449,16 @@
           Ce planning ne tient pas compte de vos dernières modifications — relancer la répartition.
         </div>
       {/if}
-      <div class="stats">
-        <div>
-          <b>{solveurStore.solution.couverture.filter((c) => c.obtenu >= c.cible).length}/{inscriptions.groupes.length}</b>
-          groupes complets
-        </div>
-        <div><b>{solveurStore.solution.assignations.length}</b> répétitions posées</div>
-        <div>
-          <b>{solveurStore.solution.duree_ms} ms</b> de calcul
-          <span class="ink-soft">({solveurStore.solution.essais_executes} essai{solveurStore.solution.essais_executes > 1 ? 's' : ''})</span>
-        </div>
-        <div><b>{solveurStore.solution.problemes.length}</b> problème(s) détecté(s)</div>
-      </div>
+      <BilanRepartition
+        groupesComplets={solveurStore.solution.couverture.filter((c) => c.obtenu >= c.cible).length}
+        groupesTotal={inscriptions.groupes.length}
+        repetitionsPosees={solveurStore.solution.assignations.length}
+        dureeMs={solveurStore.solution.duree_ms}
+        essais={solveurStore.solution.essais_executes}
+        problemes={solveurStore.solution.problemes.length}
+        musiciensAuDelaSeuil={musiciensAuDelaSeuil.length}
+        {seuilChargeJour}
+      />
       {#if !solveurStore.solutionObsolete && solveurStore.dernierChangement !== null}
         <div class="msg ok" role="status">
           {solveurStore.dernierChangement}
@@ -1505,7 +1513,7 @@
         </div>
       {/if}
       {#if solveurStore.solution.problemes.length > 0}
-        <div class="msg err">
+        <div class="msg err" id="controle-independant">
           <b>Contrôle indépendant :</b>
           <ul>
             {#each solveurStore.solution.problemes.slice(0, 8) as pb}<li>{pb.message}</li>{/each}

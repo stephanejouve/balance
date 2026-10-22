@@ -144,6 +144,15 @@ code {
     text-transform: none;
     font-weight: 400;
   }
+  /* #175 : un compteur de problèmes non nul porte sa gravité. */
+  .stats .alerte,
+  .stats .alerte a,
+  .stats .alerte b {
+    color: var(--rouge);
+  }
+  .stats .alerte a {
+    text-decoration: none;
+  }
   .msg {
     padding: 12px 15px;
     border-left: 3px solid;
