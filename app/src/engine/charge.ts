@@ -61,3 +61,13 @@ export function chargeParMusicien(
   }
   return out
 }
+
+/**
+ * Musiciens dont le maximum par jour dépasse le seuil d'affichage. Partagé
+ * par l'onglet « Par musicien » et le bloc de tête de l'étape 3 (#184), pour
+ * que les deux comptent la même chose. Seuil de CONFORT : ni contrainte du
+ * solveur, ni problème au sens de `verify.ts`.
+ */
+export function musiciensAuDelaDuSeuil(charges: ReadonlyMap<string, ChargePersonne>, seuil: number): ChargePersonne[] {
+  return [...charges.values()].filter((c) => c.max_jour > seuil)
+}
