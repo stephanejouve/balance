@@ -140,6 +140,34 @@ export function joursHorsSession(jours: readonly string[], joursSession: readonl
     .filter((j): j is string => j !== null && /^\d{4}-/.test(j) && !session.has(j))
 }
 
+/**
+ * #180 : parmi les jours non reconnus, ceux dont le FORMAT de date est bon
+ * mais la date n'existe pas (« 31/02/2026 », « 25/13/2026 »). Leur dire
+ * « écrivez une date JJ/MM/AAAA » envoie vérifier un format correct.
+ */
+export function estDateInexistante(saisi: string): boolean {
+  const norm = saisi.trim()
+  return (
+    (/^\d{4}-\d{2}-\d{2}$/.test(norm) || /^\d{1,2}[/.-]\d{1,2}[/.-]\d{4}$/.test(norm)) &&
+    normaliserJourSaisi(norm) === null
+  )
+}
+
+/**
+ * Signalement d'éditeur pour des jours non reconnus, avec le remède qui
+ * correspond à chacun : date inexistante → vérifier jour et mois ; texte
+ * illisible → écrire une date ou un nom de jour.
+ */
+export function libelleJoursIgnores(nonReconnus: readonly string[]): string {
+  const cite = (js: readonly string[]) => js.map((j) => `« ${j} »`).join(', ')
+  const inexistantes = nonReconnus.filter(estDateInexistante)
+  const illisibles = nonReconnus.filter((j) => !estDateInexistante(j))
+  const parties: string[] = []
+  if (inexistantes.length > 0) parties.push(`Date inexistante, ignorée : ${cite(inexistantes)}. Vérifiez le jour et le mois.`)
+  if (illisibles.length > 0) parties.push(`Non reconnu, ignoré : ${cite(illisibles)}. Écrivez une date JJ/MM/AAAA ou un nom de jour.`)
+  return parties.join(' ')
+}
+
 /** Jours saisis que `normaliserJourSaisi` ne reconnaît pas, tels que saisis. */
 export function joursNonReconnus(saisi: readonly string[]): string[] {
   return saisi.filter((s) => normaliserJourSaisi(s) === null)

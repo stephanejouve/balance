@@ -4,6 +4,7 @@
     dateFr,
     joursDeSession,
     joursNonReconnus,
+    libelleJoursIgnores,
     joursHorsSession,
     lireSaisieJours,
     optionsFinGrille,
@@ -201,8 +202,8 @@
               {#if illisibles.length > 0 || horsSession.length > 0}
                 <!-- #173 : signalé par règle, pas seulement quand toute la grille tombe à zéro. -->
                 <p class="jour-ignore" role="note">
-                  {#if illisibles.length > 0}Non reconnu, ignoré : {illisibles.map((j) => `« ${j} »`).join(', ')}.{/if}
-                  {#if horsSession.length > 0}Hors des dates de la session, ignoré : {horsSession.map(dateFr).join(', ')}.{/if}
+                  {#if illisibles.length > 0}{libelleJoursIgnores(illisibles)}{/if}
+                  {#if horsSession.length > 0}Hors des dates de la session, ignoré : {horsSession.map(dateFr).join(', ')}. Corrigez la date, ou les dates de la session plus haut.{/if}
                 </p>
               {/if}
             </td>

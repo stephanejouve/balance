@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Personne } from '../domain/model'
   import { libellePersonne } from '../domain/model'
-  import { afficherSaisieJours, dateFr, joursHorsSession, joursNonReconnus, lireSaisieJours, normaliserJourSaisi } from '../domain/grille'
+  import { afficherSaisieJours, dateFr, joursHorsSession, joursNonReconnus, libelleJoursIgnores, lireSaisieJours, normaliserJourSaisi } from '../domain/grille'
   import { descriptionBlocage, raisonIndispoIgnoree } from '../engine/indispo'
   import InputDuree from './InputDuree.svelte'
 
@@ -139,7 +139,7 @@
           {#if !raison && !horsTout && (illisibles.length > 0 || hs.length > 0)}
             <!-- #173 : un jour illisible ou hors session se voit là où il est saisi, même si d'autres jours de la règle comptent. -->
             <p class="indispo-ignoree" role="note">
-              {#if illisibles.length > 0}Jour non reconnu, ignoré : {illisibles.map((j) => `« ${j} »`).join(', ')}. Écrivez une date JJ/MM/AAAA ou un nom de jour.{/if}
+              {#if illisibles.length > 0}{libelleJoursIgnores(illisibles)}{/if}
               {#if hs.length > 0}Hors des dates de la session, ignoré : {hs.map(dateFr).join(', ')}.{/if}
             </p>
           {/if}

@@ -36,7 +36,7 @@ it('1D : « 25/08/2026 » stocké en ISO, réaffiché en JJ/MM/AAAA ; « lundo �
   expect(container.querySelector('.indispo-ignoree')!.textContent).toMatch(/Ignorée dans le calcul\. Jour non reconnu \(« lundo »\)/)
 
   taper(champ(), '25/08/2026, lundo')
-  expect(container.querySelector('.indispo-ignoree')!.textContent).toMatch(/^Jour non reconnu, ignoré : « lundo »/)
+  expect(container.querySelector('.indispo-ignoree')!.textContent).toMatch(/^Non reconnu, ignoré : « lundo »\. Écrivez une date JJ\/MM\/AAAA ou un nom de jour\./)
   unmount(c)
 })
 
@@ -91,7 +91,9 @@ it('2B : règle avec un jour illisible ou hors session — signalé sur la règl
 
   taper(champs[0], '25/13/2026, 30/09/2026')
   const note = container.querySelector('.jour-ignore')!.textContent!.replace(/\s+/g, ' ')
-  expect(note).toContain('Non reconnu, ignoré : « 25/13/2026 »')
-  expect(note).toContain('Hors des dates de la session, ignoré : 30/09/2026')
+  // #180 : format de date correct mais date inexistante → son propre remède
+  expect(note).toContain('Date inexistante, ignorée : « 25/13/2026 ». Vérifiez le jour et le mois.')
+  // #180 : le hors-session de 2B nomme aussi son remède
+  expect(note).toContain('Hors des dates de la session, ignoré : 30/09/2026. Corrigez la date, ou les dates de la session plus haut.')
   unmount(c)
 })
