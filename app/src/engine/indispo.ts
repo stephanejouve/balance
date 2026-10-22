@@ -150,6 +150,17 @@ function citerMotif(motif: string): string {
  * « arrive mardi midi » importé qui se met à bloquer tout le mardi parce
  * qu'on a touché ses rôles ne doit pas le faire en silence.
  */
+/**
+ * Indispo créée par « + règle » (#179, arbitrage CD 2026-10-22) : AUCUN
+ * champ prérempli. L'ancien début 09:00 faisait d'une règle vide une
+ * contrainte active — un clic sans saisie retirait le créneau de 9h toute
+ * la session, sans rien dire. Vide, elle tombe sur la raison « Aucun jour,
+ * horaire ni rôle renseigné — la règle ne bloque rien ».
+ */
+export function indispoVierge(): Indispo {
+  return { jours: [], debut: undefined, fin: undefined, roles: [], motif: '', saisie_editeur: true } as Indispo
+}
+
 export function descriptionBlocage(ind: Indispo, joursSession?: readonly string[]): string {
   // Seuls les jours reconnus ET dans la session bloquent (#173, review
   // Leader #178) : la phrase n'en cite pas d'autres.

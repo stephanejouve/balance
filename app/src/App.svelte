@@ -45,6 +45,7 @@
   import { analyserCapaciteStage, analyserInfaisabilite, capaciteEstEnAlerte } from './engine/diagnostic'
   import { preparerInscriptionsPourSolveur } from './engine/fonctions-activees'
   import { enrichirIndispos, warningsSalleImposeeInconnue } from './engine/imposes'
+  import { indispoVierge } from './engine/indispo'
   import { ciblesValides } from './engine/manuel'
   import { plusGrandeJaugeActive } from './engine/plafond-salle'
   import { suggererRenforts } from './engine/renforts'
@@ -882,14 +883,7 @@
   function ajouterIndispo(pid: string) {
     const p = inscriptions.personnes.find((x) => x.id === pid)
     if (!p) return
-    p.indispos.push({
-      jours: [],
-      debut: '09:00',
-      fin: undefined,
-      roles: [],
-      motif: '',
-      saisie_editeur: true,
-    })
+    p.indispos.push(indispoVierge())
     marquerObsolete()
   }
   function supprimerIndispo(pid: string, i: number) {

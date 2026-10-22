@@ -129,6 +129,11 @@
           {:else if activee}
             <!-- #151 : le pendant — une règle que l'écriture vient d'activer le dit aussi. -->
             <p class="indispo-activee" role="note">Cette règle compte maintenant : elle bloque {descriptionBlocage(ind, joursSession)}.</p>
+          {:else}
+            <!-- #179 : « qu'est-ce que ma règle bloque », pour TOUTE règle active,
+                 neuve ou pas — 160 ne répondait qu'à « qu'est-ce que je viens de
+                 changer ». Registre informatif, pas une alerte. -->
+            <p class="indispo-portee">Bloque : {descriptionBlocage(ind, joursSession)}.</p>
           {/if}
           {@const illisibles = joursNonReconnus(ind.jours)}
           {#if !raison && !horsTout && (illisibles.length > 0 || hs.length > 0)}
@@ -165,6 +170,12 @@
     border-left: 3px solid var(--rouge);
     color: var(--rouge);
     font-size: 0.85em;
+  }
+  .indispo-portee {
+    margin: 2px 0 8px;
+    padding: 2px 8px;
+    font-size: 0.85em;
+    color: var(--ink-soft);
   }
   .indispo-activee {
     margin: 2px 0 8px;
