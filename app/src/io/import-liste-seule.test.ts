@@ -94,4 +94,14 @@ describe('Liste seule — l\'absence d\'onglet Stagiaires est dite (#164)', () =
     expect(avec.length).toBeGreaterThan(0)
     expect(avec.some((a) => a.type === 'nom_cite_absent_stagiaires' && a.aucun_stagiaire_declare)).toBe(false)
   })
+
+  it('le remède annoncé fonctionne : un onglet Stagiaires qui déclare le nom le rattache à la citation', () => {
+    const stagiaires = { sheet: 'Stagiaires', data: [['Nom', 'Pupitre'], ['Yann Le Goff', 'basse']] }
+    const { candidat } = importer([LISTE, stagiaires])
+    expect(candidat.personnes.map((p) => p.id)).toEqual(['yann-le-goff'])
+    const absents = analyserIdentitesCandidat(candidat).alertes_coherence
+      .flatMap((a) => (a.type === 'nom_cite_absent_stagiaires' ? [a.personne] : []))
+    expect(absents).not.toContain('yann-le-goff')
+    expect(absents).toContain('sophie-mercier-lacroix')
+  })
 })

@@ -119,10 +119,13 @@
       case 'nom_cite_absent_stagiaires':
         // #164 : sans aucune personne déclarée, les trois causes du libellé
         // général (faute de frappe, oubli, variante) sont toutes fausses.
+        // Remède EXACT (review Leader #169) : une personne saisie en 1A
+        // reçoit un identifiant neuf et ne se rattache pas au nom cité ;
+        // seul un onglet Stagiaires résout les citations (test dédié).
         if (a.aucun_stagiaire_declare) {
           return {
             titre: `Nom cité, aucune personne créée — « ${a.personne} » sur « ${a.morceau} » (${a.pupitre})`,
-            detail: `Le fichier n'a pas d'onglet Stagiaires : les noms cités dans la Liste ne sont pas créés comme personnes. Ils resteront des noms, sans instruments ni indisponibilités. Pour les créer : ajoutez un onglet Stagiaires au fichier, ou saisissez-les dans l'étape 1A.`,
+            detail: `Le fichier n'a pas d'onglet Stagiaires : les noms cités dans la Liste ne sont pas créés comme personnes. Ils resteront des noms, sans instruments ni indisponibilités. Pour les créer : ajoutez au fichier un onglet Stagiaires qui les déclare, puis réimportez-le.`,
           }
         }
         return {
