@@ -10,7 +10,11 @@ import { flushSync, mount, unmount } from 'svelte'
 import { describe, expect, it } from 'vitest'
 import { genererCreneaux } from '../domain/grille'
 import { Lieu, Session, type Indispo, type Personne } from '../domain/model'
+import { parseLegacyInscriptions } from '../domain/legacy'
+import { migrerInscriptions } from '../domain/migrate'
+import fixture from '../fixtures/apero_mercredi.json'
 import { indispoBloque, indispoVierge, raisonIndispoIgnoree } from '../engine/indispo'
+import { repartir } from '../engine/solver'
 import Indispos from './Indispos.svelte'
 
 const lieu = Lieu.parse({ id: 'l', nom: 'l', salles: [{ id: 's', nom: 's', jauge: 10 }] })
@@ -41,6 +45,34 @@ describe('indispoVierge — un clic sur « + règle » ne bloque rien, et le dit
     const ancienne = { ...indispoVierge(), debut: '09:00' } as Indispo
     const bloques = creneaux.filter((c) => indispoBloque(pers(ancienne), c, []))
     expect(bloques.map((c) => c.debut)).toEqual(Array(5).fill('09:00'))
+  })
+})
+
+describe('une règle vierge ne touche pas au planning (attendu ajouté par CD au smoke de 178)', () => {
+  // Le dommage de l'ancien 09:00 n'était pas une perte (le total restait
+  // à 12, le solveur reportait) : c'était un resserrement invisible — max/jour
+  // de 2 à 4 chez Bertrand, avec « 0 problème ». « Aucun créneau bloqué » ne
+  // l'attrape pas ; seule la comparaison du placement le fait.
+  const demoLieu = Lieu.parse({ id: 'mf', nom: 'MF', salles: ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id, nom: id, jauge: 10 })) })
+  const demoSession = Session.parse({
+    id: 'session-5', nom: 'S5', lieu_id: 'mf', date_debut: '2026-08-24', date_fin: '2026-08-28', date_butoir: '2026-08-26', butoir_heure: '18:30',
+    grille: [{ debut: '09:00', fin: '11:59', pas_minutes: 60 }, { debut: '13:30', fin: '18:29', pas_minutes: 60 }, { debut: '22:00', fin: '23:59', pas_minutes: 60 }],
+    repetitions_visees: 3,
+  })
+  const demoCreneaux = genererCreneaux(demoSession, demoLieu)
+  const placer = (avec?: Indispo) => {
+    const insc = migrerInscriptions(parseLegacyInscriptions(fixture), 'session-5')
+    if (avec) for (const p of insc.personnes) p.indispos.push({ ...avec })
+    const { placement } = repartir(demoSession, demoLieu, insc, demoCreneaux, { seed: 7, maxEssais: 1 })
+    return placement.map((x) => `${x.groupe_id}@${x.creneau_id}`).sort()
+  }
+
+  it('avec une règle vierge sur CHAQUE personne : placement identique, donc aucun max/jour modifié', () => {
+    expect(placer(indispoVierge())).toEqual(placer())
+  })
+
+  it('contre-exemple : l\'ancienne règle neuve (09:00 prérempli) modifie le placement', () => {
+    expect(placer({ ...indispoVierge(), debut: '09:00' } as Indispo)).not.toEqual(placer())
   })
 })
 
