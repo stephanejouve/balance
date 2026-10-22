@@ -65,7 +65,7 @@
     if (
       n > 0 &&
       !confirm(
-        `Vous n'avez rien créé : ${n > 1 ? `les ${n} noms cités resteront de simples noms` : 'le nom cité restera un simple nom'}, sans instruments ni indisponibilités. Valider sans les créer ?`,
+        `Vous n'avez rien créé : ${n > 1 ? `les ${n} noms cités resteront de simples noms` : 'le nom cité restera un simple nom'}, sans instruments ni indisponibilités. Valider sans ${n > 1 ? 'les' : 'le'} créer ?`,
       )
     )
       return
