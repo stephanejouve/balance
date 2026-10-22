@@ -1,5 +1,5 @@
-import { butoirDeGroupe, creneauxAvantButoir, type Creneau } from '../domain/grille'
-import type { Groupe, Inscriptions, Personne, Pupitre, Session } from '../domain/model'
+import { butoirDeGroupe, creneauxAvantButoir, fenetresDeButoir, type Creneau } from '../domain/grille'
+import type { Echeance, Groupe, Inscriptions, Personne, Pupitre, Session } from '../domain/model'
 import { libellePersonne } from '../domain/model'
 import { enrichirIndispos } from './imposes'
 import { indispoBloque } from './indispo'
@@ -43,7 +43,10 @@ export interface DiagCharge {
     seances_imposees: number
     repetitions_visees: number
     creneaux_bloques: number
+    /** Créneaux de la fenêtre retenue : avant `butoir` (#182). */
     creneaux_total: number
+    /** Butoir de la fenêtre retenue, pour le dire à l'écran (#182). */
+    butoir: { date: string; heure: string }
   }
 }
 
@@ -97,6 +100,8 @@ export interface DiagStage {
   demande_stage: number
   capacite_stage: number
   demande_depasse_capacite: boolean
+  /** Butoir de la fenêtre retenue (la plus tendue), pour le dire à l'écran (#182). */
+  butoir: { date: string; heure: string }
 }
 
 /**
@@ -152,7 +157,12 @@ function makeCapaciteCreneau(margePct: number): (c: Creneau) => number {
  * Calcule le signal capacité stage (`DiagStage`) — indépendant des
  * personnes, calculé à partir des créneaux, du lieu et de la session.
  *
- * `capacite_stage` = somme des places-créneau. Reprise stricte de
+ * Fenêtres de butoir (#182) : capacité et demande sont rapportées par
+ * fenêtre emboîtée (`fenetresDeButoir`, même règle que Quotas et le
+ * solveur), et la fenêtre la plus tendue est retenue — son butoir est
+ * renvoyé pour être dit à l'écran.
+ *
+ * `capacite_stage` = somme des places-créneau de la fenêtre. Reprise stricte de
  * `solver.ts::sallesUtilisables(c)` : `c.salles.length` réduit par la
  * marge d'occupation (`session.marge_pct`), garantit ≥ 1 tant qu'il y a
  * des salles. La duplication est contrôlée par des tests — un extract
@@ -173,27 +183,39 @@ export function analyserCapaciteStage(
   const cible = session.repetitions_visees
   const margePct = session.marge_pct || 0
   const capaciteCreneau = makeCapaciteCreneau(margePct)
-  const capacite_stage = creneaux.reduce((acc, c) => acc + capaciteCreneau(c), 0)
 
   // Demande = séances de groupes + séances imposées.
   // Une séance de groupe = un couple (groupe, créneau) — la cardinalité
   // du groupe n'entre PAS (on compte des occupations de slot, chaque
   // slot accueille un groupe entier). Défensif : max(0, cible - déjà).
-  const demandeGroupes = inscriptions.groupes.reduce((acc, g) => {
-    const restant = Math.max(0, cible - (g.repetitions_deja_faites || 0))
-    return acc + restant
-  }, 0)
-  const demandeImposes = inscriptions.imposes.reduce(
-    (acc, im) => acc + im.seances.length,
-    0,
-  )
-  const demande_stage = demandeGroupes + demandeImposes
+  // Les imposés sont implicitement `restitution_vendredi` (model.ts).
+  const demandeParEcheance = (echeance: Echeance): number =>
+    inscriptions.groupes
+      .filter((g) => g.echeance === echeance)
+      .reduce((acc, g) => acc + Math.max(0, cible - (g.repetitions_deja_faites || 0)), 0) +
+    (echeance === 'restitution_vendredi' ? inscriptions.imposes.reduce((acc, im) => acc + im.seances.length, 0) : 0)
 
-  return {
-    demande_stage,
-    capacite_stage,
-    demande_depasse_capacite: demande_stage > capacite_stage,
+  // #182 : capacité comptée AVANT le butoir, par fenêtres emboîtées comme
+  // Quotas. Sans ce filtre, un butoir passé laissait 100 places à une
+  // demande qui n'en avait plus aucune, et le bandeau se taisait.
+  let retenue: DiagStage | null = null
+  let ratioRetenu = -1
+  let demandeCumulee = 0
+  for (const f of fenetresDeButoir(session, creneaux)) {
+    demandeCumulee += demandeParEcheance(f.echeance)
+    const capacite = f.creneaux.reduce((acc, c) => acc + capaciteCreneau(c), 0)
+    const ratio = capacite > 0 ? demandeCumulee / capacite : demandeCumulee > 0 ? Infinity : 0
+    if (ratio >= ratioRetenu) {
+      ratioRetenu = ratio
+      retenue = {
+        demande_stage: demandeCumulee,
+        capacite_stage: capacite,
+        demande_depasse_capacite: demandeCumulee > capacite,
+        butoir: f.butoir,
+      }
+    }
   }
+  return retenue!
 }
 
 export function analyserInfaisabilite(
@@ -205,12 +227,14 @@ export function analyserInfaisabilite(
   const enrichies = enrichirIndispos(inscriptions)
   const parId = new Map(enrichies.personnes.map((p) => [p.id, p]))
 
-  const nbGroupesPar = new Map<string, number>()
+  const nbGroupesPar = new Map<string, Map<Echeance, number>>()
   const pupitresDeParPar = new Map<string, Set<Pupitre>>()
   for (const g of enrichies.groupes) {
     const membres = new Set(g.membres.map((m) => m.personne_id))
     for (const pid of membres) {
-      nbGroupesPar.set(pid, (nbGroupesPar.get(pid) ?? 0) + 1)
+      if (!nbGroupesPar.has(pid)) nbGroupesPar.set(pid, new Map())
+      const parEch = nbGroupesPar.get(pid)!
+      parEch.set(g.echeance, (parEch.get(g.echeance) ?? 0) + 1)
       const pupitres = pupitresDePersonneDansGroupe(g, pid)
       if (!pupitresDeParPar.has(pid)) pupitresDeParPar.set(pid, new Set())
       for (const p of pupitres) pupitresDeParPar.get(pid)!.add(p)
@@ -223,31 +247,46 @@ export function analyserInfaisabilite(
     }
   }
 
+  // #182 : offre et demande par fenêtre de butoir emboîtée (comme Quotas),
+  // la fenêtre retenue est celle du plus grand manque. Sans ce filtre, les
+  // créneaux après le butoir gonflaient l'offre : butoir passé, aucun
+  // musicien n'était signalé alors qu'aucun n'avait plus un seul créneau.
+  const fenetres = fenetresDeButoir(session, creneaux)
   const out: DiagCharge[] = []
   for (const p of enrichies.personnes) {
-    const nbGroupes = nbGroupesPar.get(p.id) ?? 0
-    if (nbGroupes === 0) continue
+    const parEch = nbGroupesPar.get(p.id)
+    if (!parEch) continue
     const nbImposes = nbImposesPar.get(p.id) ?? 0
-    const demande = nbGroupes * cible + nbImposes
     const pupitres = [...(pupitresDeParPar.get(p.id) ?? new Set())]
-    const bloques = creneaux.filter((c) => indispoBloque(p, c, pupitres)).length
-    const offre = creneaux.length - bloques
-    if (demande > offre) {
-      out.push({
-        personne_id: p.id,
-        nom: libellePersonne(p),
-        demande,
-        offre,
-        type: offre === 0 ? 'exclusion' : 'surcharge',
-        detail: {
-          groupes: nbGroupes,
-          seances_imposees: nbImposes,
-          repetitions_visees: cible,
-          creneaux_bloques: bloques,
-          creneaux_total: creneaux.length,
-        },
-      })
+    let groupes = 0
+    let imposes = 0
+    let pire: DiagCharge | null = null
+    for (const f of fenetres) {
+      groupes += parEch.get(f.echeance) ?? 0
+      if (f.echeance === 'restitution_vendredi') imposes += nbImposes
+      const demande = groupes * cible + imposes
+      if (demande === 0) continue
+      const bloques = f.creneaux.filter((c) => indispoBloque(p, c, pupitres)).length
+      const offre = f.creneaux.length - bloques
+      if (demande > offre && (!pire || demande - offre > pire.demande - pire.offre)) {
+        pire = {
+          personne_id: p.id,
+          nom: libellePersonne(p),
+          demande,
+          offre,
+          type: offre === 0 ? 'exclusion' : 'surcharge',
+          detail: {
+            groupes,
+            seances_imposees: imposes,
+            repetitions_visees: cible,
+            creneaux_bloques: bloques,
+            creneaux_total: f.creneaux.length,
+            butoir: f.butoir,
+          },
+        }
+      }
     }
+    if (pire) out.push(pire)
   }
   return out.sort((a, b) => b.demande - b.offre - (a.demande - a.offre))
 }

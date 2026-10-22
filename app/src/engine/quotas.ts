@@ -1,5 +1,5 @@
-import { butoirKeyDeGroupe, type Creneau } from '../domain/grille'
-import { Echeance, type Inscriptions, type Pupitre, type Session } from '../domain/model'
+import { fenetresDeButoir, type Creneau } from '../domain/grille'
+import { type Inscriptions, type Pupitre, type Session } from '../domain/model'
 import { indispoBloque } from './indispo'
 
 /**
@@ -56,8 +56,6 @@ export const LIBELLE_CAPACITE_NULLE: Record<CapaciteNulle, string> = {
   'tous-indisponibles': 'musiciens tous indisponibles avant le butoir',
 }
 
-const cleCreneau = (c: Creneau): string => `${c.date}T${c.debut.replace(':', '')}`
-
 export function analyseQuotas(
   session: Session,
   inscriptions: Inscriptions,
@@ -81,12 +79,7 @@ export function analyseQuotas(
   // Fenêtres de butoir triées de la plus courte à la plus longue. Même
   // règle que `solver.ts::estLibre` : un créneau dont la clé est >= butoir
   // est exclu.
-  const fenetres = Echeance.options
-    .map((echeance) => {
-      const butoir = butoirKeyDeGroupe(session, echeance)
-      return { echeance, butoir, creneaux: creneaux.filter((c) => cleCreneau(c) < butoir) }
-    })
-    .sort((a, b) => a.butoir.localeCompare(b.butoir))
+  const fenetres = fenetresDeButoir(session, creneaux)
 
   const out: QuotaPupitre[] = []
   for (const pup of pupitresPresents) {
