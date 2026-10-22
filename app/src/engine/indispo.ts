@@ -1,5 +1,5 @@
 import type { Creneau } from '../domain/grille'
-import { dateFr, finMinutesDe, joursNonReconnus, normaliserJourSaisi } from '../domain/grille'
+import { dateFr, estDateInexistante, finMinutesDe, joursNonReconnus, normaliserJourSaisi } from '../domain/grille'
 import type { Indispo, Personne, Pupitre } from '../domain/model'
 
 /** Helper local — `toMinutes` de `domain/grille.ts` est privé au module. */
@@ -106,7 +106,12 @@ export function raisonIndispoIgnoree(ind: Indispo): string | null {
   const aHoraire = Boolean(ind.debut || ind.fin || ind.duree_minutes !== undefined)
   const illisibles = joursNonReconnus(ind.jours)
   if (ind.jours.length > 0 && illisibles.length === ind.jours.length) {
-    return `Jour non reconnu (${illisibles.map((j) => `« ${j} »`).join(', ')}) — la règle ne bloque rien. Pour que la règle compte : écrivez une date JJ/MM/AAAA ou un nom de jour.`
+    // #180 : une date au bon format mais inexistante n'appelle pas le même remède.
+    const cite = illisibles.map((j) => `« ${j} »`).join(', ')
+    if (illisibles.every(estDateInexistante)) {
+      return `Date inexistante (${cite}) — la règle ne bloque rien. Pour que la règle compte : vérifiez le jour et le mois.`
+    }
+    return `Jour non reconnu (${cite}) — la règle ne bloque rien. Pour que la règle compte : écrivez une date JJ/MM/AAAA ou un nom de jour.`
   }
   if (!aHoraire && ind.jours.length === 0 && ind.roles.length === 0) {
     return 'Aucun jour, horaire ni rôle renseigné — la règle ne bloque rien. Pour que la règle compte : renseignez une date ou un horaire.'
@@ -138,6 +143,17 @@ function citerMotif(motif: string): string {
   const coupe = m.slice(0, CITATION_MAX + 1)
   const dernierEspace = coupe.lastIndexOf(' ')
   return `${(dernierEspace > 0 ? coupe.slice(0, dernierEspace) : m.slice(0, CITATION_MAX)).trimEnd()}…`
+}
+
+/**
+ * Indispo créée par « + règle » (#179, arbitrage CD 2026-10-22) : AUCUN
+ * champ prérempli. L'ancien début 09:00 faisait d'une règle vide une
+ * contrainte active — un clic sans saisie retirait le créneau de 9h toute
+ * la session, sans rien dire. Vide, elle tombe sur la raison « Aucun jour,
+ * horaire ni rôle renseigné — la règle ne bloque rien ».
+ */
+export function indispoVierge(): Indispo {
+  return { jours: [], debut: undefined, fin: undefined, roles: [], motif: '', saisie_editeur: true } as Indispo
 }
 
 /**

@@ -91,9 +91,13 @@ describe('indispo 1D — la phrase affichée confrontée à indispoBloque (garde
     expect(indispoBloque(pers(ind), le('2026-08-26'), [])).toBe(false)
   })
 
-  it.each(['25/13/2026', 'lundo'])('« %s » : jamais « compte maintenant » — ignorée, raison dite, ne bloque rien', (saisi) => {
+  it.each([
+    ['25/13/2026', 'Date inexistante (« 25/13/2026 ») — la règle ne bloque rien. Pour que la règle compte : vérifiez le jour et le mois.'],
+    ['31/02/2026', 'Date inexistante (« 31/02/2026 ») — la règle ne bloque rien. Pour que la règle compte : vérifiez le jour et le mois.'],
+    ['lundo', 'Jour non reconnu (« lundo ») — la règle ne bloque rien. Pour que la règle compte : écrivez une date JJ/MM/AAAA ou un nom de jour.'],
+  ])('« %s » : jamais « compte maintenant » — ignorée, raison et remède justes (#180), ne bloque rien', (saisi, raison) => {
     const ind = regle([saisi])
-    expect(raisonIndispoIgnoree(ind)).toMatch(new RegExp(`^Jour non reconnu \\(« ${saisi.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')} »\\)`))
+    expect(raisonIndispoIgnoree(ind)).toBe(raison)
     expect(creneaux.some((c) => indispoBloque(pers(ind), c, []))).toBe(false)
   })
 
