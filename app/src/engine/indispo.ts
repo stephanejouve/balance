@@ -146,16 +146,6 @@ function citerMotif(motif: string): string {
 }
 
 /**
- * Ce que bloque une indispo, en clair — « mardi, toute la journée »,
- * « mardi, 12:00 pendant 1h30, pour chant ». Même lecture que
- * `indispoBloque` (journée entière, créneau pile, plage).
- *
- * Issue #151 (CD 2026-10-22) : quand une écriture dans l'éditeur rend
- * active une règle jusque-là ignorée, l'éditeur le dit et dit quoi — un
- * « arrive mardi midi » importé qui se met à bloquer tout le mardi parce
- * qu'on a touché ses rôles ne doit pas le faire en silence.
- */
-/**
  * Indispo créée par « + règle » (#179, arbitrage CD 2026-10-22) : AUCUN
  * champ prérempli. L'ancien début 09:00 faisait d'une règle vide une
  * contrainte active — un clic sans saisie retirait le créneau de 9h toute
@@ -166,6 +156,16 @@ export function indispoVierge(): Indispo {
   return { jours: [], debut: undefined, fin: undefined, roles: [], motif: '', saisie_editeur: true } as Indispo
 }
 
+/**
+ * Ce que bloque une indispo, en clair — « mardi, toute la journée »,
+ * « mardi, 12:00 pendant 1h30, pour chant ». Même lecture que
+ * `indispoBloque` (journée entière, créneau pile, plage).
+ *
+ * Issue #151 (CD 2026-10-22) : quand une écriture dans l'éditeur rend
+ * active une règle jusque-là ignorée, l'éditeur le dit et dit quoi — un
+ * « arrive mardi midi » importé qui se met à bloquer tout le mardi parce
+ * qu'on a touché ses rôles ne doit pas le faire en silence.
+ */
 export function descriptionBlocage(ind: Indispo, joursSession?: readonly string[]): string {
   // Seuls les jours reconnus ET dans la session bloquent (#173, review
   // Leader #178) : la phrase n'en cite pas d'autres.

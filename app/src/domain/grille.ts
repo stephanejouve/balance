@@ -378,16 +378,6 @@ function parseHhMmToMinutes(s: string | undefined): number | null {
   return h * 60 + m
 }
 
-/**
- * Énumère les dates ISO entre `debut` et `fin` (inclus des deux côtés).
- * Utilise Date.UTC pour éviter les décalages de fuseau.
- */
-/**
- * Date ISO (`2026-10-28`) affichée au format JJ/MM/AAAA (`28/10/2026`) —
- * le format lisible par l'organisateur (demande Stéphane 2026-10-22). Le
- * modèle reste en ISO : seul l'affichage change. Une valeur qui n'est pas
- * une date ISO (champ vide, saisie libre) est rendue telle quelle.
- */
 /** Date ISO en JJ/MM, pour les plannings où l'année est implicite (#172).
  *  Remplace les gabarits `date.slice(5).replace('-', '/')` qui donnaient
  *  MM/JJ — « 11/03 » lu 11 mars pour le 3 novembre. */
@@ -396,6 +386,12 @@ export function dateCourteFr(iso: string): string {
   return m ? `${m[2]}/${m[1]}` : iso
 }
 
+/**
+ * Date ISO (`2026-10-28`) affichée au format JJ/MM/AAAA (`28/10/2026`) —
+ * le format lisible par l'organisateur (demande Stéphane 2026-10-22). Le
+ * modèle reste en ISO : seul l'affichage change. Une valeur qui n'est pas
+ * une date ISO (champ vide, saisie libre) est rendue telle quelle.
+ */
 export function dateFr(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso
@@ -417,6 +413,10 @@ export function libelleCreneauxPasses(tous: readonly Creneau[], retenus: readonl
   return n === 1 ? `le créneau ${quand} est déjà passé` : `les ${n} créneaux ${quand} sont déjà passés`
 }
 
+/**
+ * Énumère les dates ISO entre `debut` et `fin` (inclus des deux côtés).
+ * Utilise Date.UTC pour éviter les décalages de fuseau.
+ */
 export function joursDeSession(debut: IsoDate, fin: IsoDate): IsoDate[] {
   const [dy, dm, dd] = debut.split('-').map(Number)
   const [fy, fm, fd] = fin.split('-').map(Number)
