@@ -84,3 +84,25 @@ it('triangle de noms proches, trois noms gardés différents : l\'écran annonce
   expect(container.querySelectorAll('.noms li.fusionne')).toHaveLength(2)
   unmount(c)
 })
+
+it('#186 : le compteur du titre suit les rapprochements tranchés, comme le bouton', () => {
+  const a = p('karim-belhadj', 'Karim Belhadj', 'guitare')
+  const b = p('karim-belhadi', 'Karim Belhadi', 'guitare')
+  const s = p('sophie', 'Sophie', 'chant')
+  const { container, c, bouton, cliquer } = rendre({ a_creer: [a, b, s], rapprochements: [{ cite: a, proche: b, proche_declaree: false }] })
+  const titre = () => container.querySelector('h3')!.textContent!.replace(/\s+/g, ' ')
+  expect(titre()).toContain('(3 à créer)')
+  cliquer('Même personne, garder « Karim Belhadj »')
+  expect(titre()).toContain('(2 à créer, 1 rattachée)')
+  expect(bouton().textContent).toContain('Créer 2 personnes et rattacher 1 orthographe')
+  unmount(c)
+})
+
+it('#186 : la liste affiche le pupitre annoncé, la précision en complément (forme de 1B)', () => {
+  const olivier = Personne.parse({ id: 'olivier', nom: 'Olivier Rouanet', instruments: [{ pupitre: 'vents', precision: 'saxophone' }] })
+  const victor = p('victor', 'Victor Alonso', 'vents')
+  const { container, c } = rendre({ a_creer: [olivier, victor], rapprochements: [] })
+  const lignes = [...container.querySelectorAll('.noms li')].map((li) => li.textContent!.replace(/\s+/g, ' ').trim())
+  expect(lignes).toEqual(['Olivier Rouanet — vents · saxophone', 'Victor Alonso — vents'])
+  unmount(c)
+})

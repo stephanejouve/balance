@@ -4,7 +4,8 @@
  * mais dit que les noms cités ne sont pas créés et comment les créer.
  */
 import { flushSync, mount, unmount } from 'svelte'
-import { expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Personne } from '../domain/model'
 import type { AnalyseIdentitesImport } from '../io/alertes-import'
 import EcranRelectureIdentites from './EcranRelectureIdentites.svelte'
 
@@ -44,4 +45,41 @@ it('avec des stagiaires déclarés : libellé général inchangé', () => {
   const t = rendre(false)
   expect(t).toContain('Faute de frappe')
   expect(t).not.toContain("pas d'onglet Stagiaires")
+})
+
+describe('#186 point 3 : valider sans avoir créé se confirme', () => {
+  const analyse: AnalyseIdentitesImport = { alertes_identite: [], alertes_coherence: [], personnes_relecture: [] }
+  const creation = { a_creer: [Personne.parse({ id: 'yann', nom: 'Yann Le Goff', instruments: [{ pupitre: 'basse' }] })], rapprochements: [] }
+  function monter(props: Record<string, unknown>) {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    let valide = 0
+    const c = mount(EcranRelectureIdentites, { target: container, props: { analyse, onValider: () => valide++, onAnnuler: () => {}, ...props } })
+    flushSync()
+    container.querySelector<HTMLButtonElement>('.bouton-valider')!.click()
+    unmount(c)
+    container.remove()
+    return valide
+  }
+  afterEach(() => vi.restoreAllMocks())
+
+  it('des noms restent à créer : confirmation qui nomme la conséquence ; refus = on reste', () => {
+    const spy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    expect(monter({ creation, onCreerPersonnes: () => {} })).toBe(0)
+    expect(spy).toHaveBeenCalledOnce()
+    expect(spy.mock.calls[0][0]).toContain('1 nom cité n\'a pas été créé')
+    expect(spy.mock.calls[0][0]).toContain('Valider sans les créer ?')
+  })
+
+  it('accepter la confirmation valide', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    expect(monter({ creation, onCreerPersonnes: () => {} })).toBe(1)
+  })
+
+  it('rien à créer (ou déjà créé) : pas de confirmation', () => {
+    const spy = vi.spyOn(window, 'confirm')
+    expect(monter({ creation: { a_creer: [], rapprochements: [] }, onCreerPersonnes: () => {} })).toBe(1)
+    expect(monter({})).toBe(1)
+    expect(spy).not.toHaveBeenCalled()
+  })
 })
