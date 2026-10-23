@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { accord } from '../domain/accord'
   /**
    * Bloc de tête de l'étape 3 : les compteurs de la répartition, et
    * l'avertissement de charge par jour.
@@ -36,9 +37,9 @@
 <div class="stats">
   <div>
     <b>{groupesComplets}/{groupesTotal}</b>
-    groupes complets
+    {accord(groupesTotal, 'groupe complet', 'groupes complets')}
   </div>
-  <div><b>{repetitionsPosees}</b> répétitions posées</div>
+  <div><b>{repetitionsPosees}</b> {accord(repetitionsPosees, 'répétition posée', 'répétitions posées')}</div>
   <div>
     <b>{dureeMs} ms</b> de calcul
     <span class="ink-soft">({essais} essai{essais > 1 ? 's' : ''})</span>

@@ -1,3 +1,4 @@
+import { accord } from '../domain/accord'
 import type { Creneau } from '../domain/grille'
 import { dateFr, finMinutesDe } from '../domain/grille'
 import type { Groupe, Inscriptions, Lieu, Personne, Pupitre, Salle, Session } from '../domain/model'
@@ -273,7 +274,7 @@ export function verifier(
         if (effectif > s.jauge) {
           problemes.push({
             type: 'jauge-depassee',
-            message: `${g.titre} (${effectif} musiciens) dépasse la jauge de ${s.nom} (${s.jauge})`,
+            message: `${g.titre} (${effectif} ${accord(effectif, 'musicien')}) dépasse la jauge de ${s.nom} (${s.jauge})`,
             creneau_id,
             groupe_id: a.groupe_id,
             salle_id: a.salle_id,

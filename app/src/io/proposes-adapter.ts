@@ -1,3 +1,4 @@
+import { accord } from '../domain/accord'
 import { toFinMinutes } from '../domain/grille'
 import { detacherNomInstrument } from '../domain/legacy'
 import type { HhMm, Impose, Personne, Seance } from '../domain/model'
@@ -160,7 +161,7 @@ export function extraireProposes(
   if (rows.length <= ligneEnTete) {
     return {
       imposes: [],
-      warnings: [`classeur vide (${rows.length} lignes, en-tête ligne ${ligneEnTete})`],
+      warnings: [`classeur vide (${rows.length} ${accord(rows.length, 'ligne')}, en-tête ligne ${ligneEnTete})`],
     }
   }
   const cols = indexerColonnes(rows[ligneEnTete])

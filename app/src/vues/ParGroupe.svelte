@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { accord } from '../domain/accord'
   import { dateCourteFr } from '../domain/grille'
   import type { Creneau } from '../domain/grille'
   import type { Groupe, Inscriptions, Salle } from '../domain/model'
@@ -75,7 +76,7 @@
                     <span
                       class="chip"
                       class:libre={s.nb_engagements === 0}
-                      title="{s.creneaux_compatibles}/{s.creneaux_du_groupe} créneaux compatibles · {s.nb_engagements} engagement(s) existant(s)"
+                      title="{s.creneaux_compatibles}/{s.creneaux_du_groupe} {accord(s.creneaux_du_groupe, 'créneau compatible', 'créneaux compatibles')} · {s.nb_engagements} engagement(s) existant(s)"
                     >
                       <b>{s.nom}</b>
                       {#if s.nb_engagements === 0}

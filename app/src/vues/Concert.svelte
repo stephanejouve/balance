@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { accord } from '../domain/accord'
   import type { EtapeConcert } from '../engine/concert'
 
   interface EtapeMinutee extends EtapeConcert {
@@ -111,7 +112,7 @@
       <ul>
         {#each repartitionStyles.runs as r}
           <li>
-            <b>{r.style}</b> — {r.fin - r.debut + 1} morceaux d'affilée
+            <b>{r.style}</b> — {r.fin - r.debut + 1} {accord(r.fin - r.debut + 1, 'morceau', 'morceaux')} d'affilée
             (positions {r.debut + 1} à {r.fin + 1})
           </li>
         {/each}
