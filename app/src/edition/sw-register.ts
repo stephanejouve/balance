@@ -39,3 +39,42 @@ export async function enregistrer(
     return null
   }
 }
+
+/**
+ * #205 : avant de recharger, s'assurer que le rechargement servira bien la
+ * nouvelle version. La navigation passe par le cache du SW : un clic fait
+ * pendant que le nouveau SW s'installe ressert l'ancienne version, et le
+ * bandeau revient (review Leader). On demande donc la mise à jour, puis on
+ * attend que le nouveau SW prenne le contrôle (`skipWaiting` +
+ * `clients.claim` émettent `controllerchange`).
+ *
+ * Retourne `true` quand recharger servira la nouvelle version : pas de SW
+ * (le document est revalidé au réseau), aucun SW en cours d'installation,
+ * ou nouveau SW aux commandes. Retourne `false` si la mise à jour échoue
+ * ou n'aboutit pas dans le délai : l'appelant ne doit pas recharger.
+ */
+export async function preparerRechargement(
+  sw: ServiceWorkerContainer | undefined = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined,
+  delaiMs: number = 15000,
+): Promise<boolean> {
+  if (!sw) return true
+  const reg = await sw.getRegistration()
+  if (!reg) return true
+  try {
+    await reg.update()
+  } catch {
+    return false
+  }
+  if (!reg.installing && !reg.waiting) return true
+  return new Promise((resolve) => {
+    const prise = () => {
+      clearTimeout(minuteur)
+      resolve(true)
+    }
+    const minuteur = setTimeout(() => {
+      sw.removeEventListener('controllerchange', prise)
+      resolve(false)
+    }, delaiMs)
+    sw.addEventListener('controllerchange', prise, { once: true })
+  })
+}

@@ -7,10 +7,24 @@
     preparerEtatMaJPathSW,
     type EtatMiseAJour,
   } from './mise-a-jour'
-  import { enregistrer } from './sw-register'
+  import { enregistrer, preparerRechargement } from './sw-register'
 
-  let etat: EtatMiseAJour | null = $state(null)
+  let etat = $state<EtatMiseAJour | null>(null)
   let masque = $state(false)
+  /** #205 : « Recharger » cliqué, nouveau SW pas encore aux commandes. */
+  let installation: 'en-cours' | 'inachevee' | null = $state(null)
+
+  // #205 : sur le web, recharger suffit. Le SW installe la nouvelle
+  // version (skipWaiting + clients.claim) et la sert au chargement
+  // suivant ; c'est ce qu'a constaté CD au 2ᵉ chargement. Avant, seul le
+  // path SW proposait « Recharger » : quand le path fetch arrivait le
+  // premier, le bandeau n'offrait que « Télécharger », qui dépose un
+  // fichier et laisse l'onglet sur l'ancienne version. Sur `file://`,
+  // recharger rouvre le même fichier : seul le téléchargement aide.
+  const surLeWeb = typeof location !== 'undefined' && /^https?:$/.test(location.protocol)
+  const peutRecharger = $derived(
+    etat?.statut === 'nouvelle-version' && (etat.installee_en_tache_de_fond === true || surLeWeb),
+  )
 
   function afficher(e: EtatMiseAJour) {
     // Premier qui trigger l'emporte : SW updatefound et fetch fallback
@@ -61,8 +75,13 @@
     masque = true
   }
 
-  function recharger() {
-    window.location.reload()
+  async function recharger() {
+    installation = 'en-cours'
+    if (await preparerRechargement()) {
+      window.location.reload()
+    } else {
+      installation = 'inachevee'
+    }
   }
 </script>
 
@@ -77,12 +96,28 @@
         {/if}
         — tu utilises v{etat.version_locale}
       </span>
+      {#if peutRecharger}
+        <!-- Rien ne survit au rechargement (aucun état en localStorage,
+             cf PR #140) : le dire avant le clic, pas après. -->
+        <span class="details">
+          Le rechargement repart d'une page vierge : sauvegarde d'abord ton travail
+          (« Sauvegarder l'état .json »).
+        </span>
+      {/if}
+      {#if installation === 'inachevee'}
+        <span class="details">
+          La nouvelle version n'est pas encore installée : réessaie dans un instant.
+        </span>
+      {/if}
     </div>
     <div class="actions">
-      {#if etat.installee_en_tache_de_fond}
-        <button type="button" class="btn-principal" onclick={recharger}>Recharger</button>
-      {:else}
-        <a class="btn-principal" href={etat.url_telechargement} download>Télécharger</a>
+      {#if peutRecharger}
+        <button type="button" class="btn-principal" onclick={recharger} disabled={installation === 'en-cours'}>
+          {installation === 'en-cours' ? 'Installation…' : 'Recharger'}
+        </button>
+      {/if}
+      {#if !etat.installee_en_tache_de_fond}
+        <a class={peutRecharger ? 'btn-secondaire' : 'btn-principal'} href={etat.url_telechargement} download>Télécharger</a>
       {/if}
       <button type="button" class="btn-fermer" onclick={fermer} aria-label="Fermer">×</button>
     </div>
@@ -139,6 +174,12 @@
   }
   .btn-principal:hover {
     filter: brightness(1.08);
+  }
+  .btn-secondaire {
+    color: var(--paper);
+    text-decoration: underline;
+    padding: 6px 8px;
+    font-size: 13px;
   }
   .btn-fermer {
     background: transparent;

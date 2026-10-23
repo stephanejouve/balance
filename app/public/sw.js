@@ -22,7 +22,12 @@ self.addEventListener('install', (evt) => {
     caches.open(CACHE_NOM).then((cache) =>
       Promise.all(
         RESSOURCES.map((r) =>
-          cache.add(r).catch(() => {
+          // #205 : `cache: 'reload'` contourne le cache HTTP. GitHub Pages
+          // sert balance.html en `max-age=600` : sans ce contournement, un
+          // nouveau SW installé moins de 10 min après le dernier fetch de
+          // l'ancienne page pouvait la remettre en cache sous le nouveau
+          // nom, et le rechargement servait encore l'ancienne version.
+          cache.add(new Request(r, { cache: 'reload' })).catch(() => {
             // ressource optionnelle : on tolère l'échec (ex. balance.html
             // absent en dev, index.html seule en pages)
           }),
