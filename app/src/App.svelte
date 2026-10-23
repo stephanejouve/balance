@@ -1418,7 +1418,7 @@
             <div class="msg warn">
               <b>Contrôle en amont : plus aucun créneau avant le butoir du {dateFr(b.date)} {b.heure}.</b>
               <p class="mini-h">
-                {parCalendrier.length} musicien(s) engagé(s) sont sans place : la cause est le calendrier.
+                {parCalendrier.length > 1 ? `${parCalendrier.length} musiciens engagés sont` : '1 musicien engagé est'} sans place : la cause est le calendrier.
                 Corrigez le butoir ou les dates à l'<b>étape 2b Session</b>.
               </p>
             </div>

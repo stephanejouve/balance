@@ -138,7 +138,9 @@ function membresNonResolus(ctx: Contexte, assignations: Assignation[]): Probleme
     if (inconnus.length === 0) continue
     out.push({
       type: 'membre-inconnu',
-      message: `« ${g.titre} » : ${inconnus.length} membre(s) absent(s) des personnes (${inconnus.join(', ')}) — ni leurs indisponibilités ni leur planning individuel ne sont vérifiés`,
+      message: inconnus.length > 1
+        ? `« ${g.titre} » : ${inconnus.length} membres absents des personnes (${inconnus.join(', ')}) — ni leurs indisponibilités ni leur planning individuel ne sont vérifiés`
+        : `« ${g.titre} » : 1 membre absent des personnes (${inconnus[0]}) — ni ses indisponibilités ni son planning individuel ne sont vérifiés`,
       groupe_id: g.id,
     })
   }
