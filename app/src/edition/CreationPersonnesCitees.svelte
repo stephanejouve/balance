@@ -50,9 +50,15 @@
     Personnes citées sans déclaration ({nbCreees} à créer{#if fusionnes.size > 0}{`, ${fusionnes.size} rattachée${fusionnes.size > 1 ? 's' : ''}`}{/if})
   </h3>
   <p class="hint">
-    Ces noms sont cités dans la Liste mais ne correspondent à aucune personne déclarée. Les créer les
-    rend utilisables : instruments, indisponibilités, planning individuel. Le pupitre vient de la
-    colonne où le nom apparaît.
+    {#if creation.a_creer.length > 1}
+      Ces noms sont cités dans la Liste mais ne correspondent à aucune personne déclarée. Les créer les
+      rend utilisables : instruments, indisponibilités, planning individuel. Le pupitre vient de la
+      colonne où le nom apparaît.
+    {:else}
+      Ce nom est cité dans la Liste mais ne correspond à aucune personne déclarée. Le créer le rend
+      utilisable : instruments, indisponibilités, planning individuel. Le pupitre vient de la colonne
+      où le nom apparaît.
+    {/if}
   </p>
 
   {#if creation.rapprochements.length > 0}

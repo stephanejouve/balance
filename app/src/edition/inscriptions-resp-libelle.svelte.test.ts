@@ -143,4 +143,11 @@ describe('Inscriptions.svelte — colonne Resp. affiche libellé (CD 6990 #8)', 
 
     unmount(app)
   })
+
+  it('#193 : l\'en-tête 1B s\'accorde au singulier (« 1 groupe », pas « 1 groupes »)', () => {
+    const app = mountInscriptions('fanny-a')
+    flushSync()
+    expect(container.querySelector('h2')!.textContent).toBe('1 groupe, 2 musiciens')
+    unmount(app)
+  })
 })
