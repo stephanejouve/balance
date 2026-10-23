@@ -50,3 +50,12 @@ it('update() en échec : on ne recharge pas', async () => {
   const c = conteneur({ update: async () => { throw new Error('offline') } } as never)
   expect(await preparerRechargement(c as never)).toBe(false)
 })
+
+it('update() qui ne répond jamais : le délai le couvre, on ne recharge pas', async () => {
+  vi.useFakeTimers()
+  const c = conteneur({ update: () => new Promise<never>(() => {}) } as never)
+  const p = preparerRechargement(c as never, 1000)
+  await vi.advanceTimersByTimeAsync(1001)
+  expect(await p).toBe(false)
+  vi.useRealTimers()
+})

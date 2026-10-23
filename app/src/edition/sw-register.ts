@@ -51,30 +51,40 @@ export async function enregistrer(
  * Retourne `true` quand recharger servira la nouvelle version : pas de SW
  * (le document est revalidé au réseau), aucun SW en cours d'installation,
  * ou nouveau SW aux commandes. Retourne `false` si la mise à jour échoue
- * ou n'aboutit pas dans le délai : l'appelant ne doit pas recharger.
+ * ou si la séquence entière, update() compris, dépasse le délai :
+ * l'appelant ne doit pas recharger.
  */
 export async function preparerRechargement(
   sw: ServiceWorkerContainer | undefined = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined,
   delaiMs: number = 15000,
 ): Promise<boolean> {
   if (!sw) return true
-  const reg = await sw.getRegistration()
-  if (!reg) return true
-  try {
-    await reg.update()
-  } catch {
-    return false
-  }
-  if (!reg.installing && !reg.waiting) return true
-  return new Promise((resolve) => {
-    const prise = () => {
-      clearTimeout(minuteur)
-      resolve(true)
-    }
-    const minuteur = setTimeout(() => {
-      sw.removeEventListener('controllerchange', prise)
-      resolve(false)
-    }, delaiMs)
-    sw.addEventListener('controllerchange', prise, { once: true })
+  // Un seul délai pour toute la séquence, update() compris : sur un réseau
+  // qui ne répond plus, le fetch de sw.js peut pendre bien au-delà de 15 s,
+  // et le bouton resterait « Installation… » (review Leader #209).
+  let minuteur: ReturnType<typeof setTimeout> | undefined
+  let prise: (() => void) | undefined
+  const delai = new Promise<boolean>((resolve) => {
+    minuteur = setTimeout(() => resolve(false), delaiMs)
   })
+  const attente = (async (): Promise<boolean> => {
+    const reg = await sw.getRegistration()
+    if (!reg) return true
+    try {
+      await reg.update()
+    } catch {
+      return false
+    }
+    if (!reg.installing && !reg.waiting) return true
+    return new Promise<boolean>((resolve) => {
+      prise = () => resolve(true)
+      sw.addEventListener('controllerchange', prise, { once: true })
+    })
+  })()
+  try {
+    return await Promise.race([attente, delai])
+  } finally {
+    clearTimeout(minuteur)
+    if (prise) sw.removeEventListener('controllerchange', prise)
+  }
 }
