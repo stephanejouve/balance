@@ -175,7 +175,7 @@ describe('non-régression défaut #1 (smoke Stéphane 2026-09-03 16h — balance
     expect(res.groupesPerdus).toHaveLength(1)
     expect(res.groupesPerdus[0].groupe_id).toBe('caravan')
     expect(res.groupesPerdus[0].effectif).toBe(6)
-    expect(res.groupesPerdus[0].raison).toContain('trop petite')
+    expect(res.groupesPerdus[0].raison).toContain("aucune salle du lieu n'accueille 6 musiciens (la plus grande a 4 places)")
 
     // Filet ceinture : si un jour attribuerSalles régresse et laisse passer,
     // verifier() doit tenir. On simule ce cas en injectant l'assignation

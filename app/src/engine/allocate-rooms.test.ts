@@ -99,7 +99,7 @@ describe('attribuerSalles — cas de groupe perdu (fix bug audit Leader)', () =>
     // Un groupe est perdu (celui qui passe en second)
     expect(res.groupesPerdus).toHaveLength(1)
     expect(res.groupesPerdus[0].effectif).toBe(10)
-    expect(res.groupesPerdus[0].raison).toContain('trop petite')
+    expect(res.groupesPerdus[0].raison).toContain('grande (12 places) est prise par g1 ; l\'autre salle libre a moins de 10 places')
     expect(res.warnings).toHaveLength(1)
     expect(res.warnings[0]).toContain('Groupe non logé')
   })
@@ -123,7 +123,7 @@ describe('attribuerSalles — cas de groupe perdu (fix bug audit Leader)', () =>
     expect(res.assignations).toHaveLength(2)
     expect(res.groupesPerdus).toHaveLength(1)
     expect(res.groupesPerdus[0].creneau_id).toBe('c1')
-    expect(res.groupesPerdus[0].raison).toContain('aucune salle disponible')
+    expect(res.groupesPerdus[0].raison).toContain('s1 (10 places) est prise par g1 ; s2 (10 places) est prise par g2')
   })
 
   it('ne signale rien quand toutes les attributions passent', () => {
