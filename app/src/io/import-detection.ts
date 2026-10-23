@@ -1,3 +1,4 @@
+import { accord } from '../domain/accord'
 import readXlsxFile from 'read-excel-file/browser'
 import type { Impose, Inscriptions, Personne } from '../domain/model'
 import { migrerInscriptions } from '../domain/migrate'
@@ -486,7 +487,7 @@ export async function preparerImportJson(file: File): Promise<DetectionJson> {
     payload.legacy = true
     payload.inscriptions = brut
     warningsGlobaux.push(
-      `Format legacy détecté (${(brut.groupes as unknown[]).length} groupes) — sera migré vers le modèle canonique.`,
+      `Format legacy détecté (${(brut.groupes as unknown[]).length} ${accord((brut.groupes as unknown[]).length, 'groupe')}) — sera migré vers le modèle canonique.`,
     )
   } else if (rien) {
     throw new Error(

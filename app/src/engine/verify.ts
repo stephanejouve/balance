@@ -1,3 +1,4 @@
+import { accord } from '../domain/accord'
 import type { Creneau } from '../domain/grille'
 import { dateFr, finMinutesDe } from '../domain/grille'
 import type { Groupe, Inscriptions, Lieu, Personne, Pupitre, Salle, Session } from '../domain/model'
@@ -137,7 +138,9 @@ function membresNonResolus(ctx: Contexte, assignations: Assignation[]): Probleme
     if (inconnus.length === 0) continue
     out.push({
       type: 'membre-inconnu',
-      message: `« ${g.titre} » : ${inconnus.length} membre(s) absent(s) des personnes (${inconnus.join(', ')}) — ni leurs indisponibilités ni leur planning individuel ne sont vérifiés`,
+      message: inconnus.length > 1
+        ? `« ${g.titre} » : ${inconnus.length} membres absents des personnes (${inconnus.join(', ')}) — ni leurs indisponibilités ni leur planning individuel ne sont vérifiés`
+        : `« ${g.titre} » : 1 membre absent des personnes (${inconnus[0]}) — ni ses indisponibilités ni son planning individuel ne sont vérifiés`,
       groupe_id: g.id,
     })
   }
@@ -273,7 +276,7 @@ export function verifier(
         if (effectif > s.jauge) {
           problemes.push({
             type: 'jauge-depassee',
-            message: `${g.titre} (${effectif} musiciens) dépasse la jauge de ${s.nom} (${s.jauge})`,
+            message: `${g.titre} (${effectif} ${accord(effectif, 'musicien')}) dépasse la jauge de ${s.nom} (${s.jauge})`,
             creneau_id,
             groupe_id: a.groupe_id,
             salle_id: a.salle_id,

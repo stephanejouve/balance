@@ -1,3 +1,4 @@
+import { accord } from '../domain/accord'
 import { toFinMinutes } from '../domain/grille'
 import { pupitreDe } from '../domain/migrate'
 import { estIndispoInterpretable } from '../engine/indispo'
@@ -220,7 +221,7 @@ export function extraireStagiaires(
   const warnings: string[] = []
   const ligneEnTete = mapping.ligneEnTete ?? 0
   if (rows.length <= ligneEnTete) {
-    return { personnes: [], warnings: [`classeur vide (${rows.length} lignes, en-tête ligne ${ligneEnTete})`] }
+    return { personnes: [], warnings: [`classeur vide (${rows.length} ${accord(rows.length, 'ligne')}, en-tête ligne ${ligneEnTete})`] }
   }
   const cols = indexerColonnes(rows[ligneEnTete])
   const iNom = cols.get(mapping.colonneNom)

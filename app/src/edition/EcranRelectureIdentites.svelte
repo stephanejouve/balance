@@ -24,6 +24,7 @@
    * Le composant est présentation pure — la logique (tri, filtre,
    * groupement) vit dans `relecture-identites-vm.ts` pour testabilité.
    */
+  import { accord } from '../domain/accord'
   import type { AnalyseIdentitesImport } from '../io/alertes-import'
   import type { AlerteIdentite } from '../domain/identites'
   import type { AlerteCoherence } from '../domain/coherence'
@@ -270,7 +271,7 @@
               >
                 <span class="titre-alerte">
                   {orphelinsDeplies ? '▼' : '▶'}
-                  {nb} stagiaires ne figurent dans aucun morceau
+                  {nb} {accord(nb, 'stagiaire ne figure', 'stagiaires ne figurent')} dans aucun morceau
                 </span>
               </button>
               <div class="detail-alerte">

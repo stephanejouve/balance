@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { accord } from './domain/accord'
   import { comptageEngagements, estEngage } from './domain/engagement'
   import { butoirDeGroupe, creneauxAvantButoir, dateFr, diagnostiquerGrille, genererCreneaux, joursDeSession, libelleCreneauxPasses, GRILLE_PROPOSEE } from './domain/grille'
   import { parseMaintenantUrlParam, propositionRejouer } from './domain/maintenant'
@@ -1336,10 +1337,9 @@
           <ul>
             {#each surcharges.slice(0, 8) as d}
               <li>
-                <b>{d.nom}</b> — demande <b>{d.demande}</b> créneaux
-                ({d.detail.groupes} groupe{d.detail.groupes > 1 ? 's' : ''} × {d.detail.repetitions_visees}
-                {#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} imposés{/if})
-                mais seulement <b>{d.offre}</b> lui sont ouverts
+                <b>{d.nom}</b> — demande <b>{d.demande}</b> {accord(d.demande, 'créneau', 'créneaux')}
+                ({d.detail.groupes} groupe{d.detail.groupes > 1 ? 's' : ''} × {d.detail.repetitions_visees}{#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} {accord(d.detail.seances_imposees, 'imposé')}{/if})
+                {#if d.offre === 0}mais aucun ne lui est ouvert{:else}mais seulement <b>{d.offre}</b> {accord(d.offre, 'lui est ouvert', 'lui sont ouverts')}{/if}
                 (sur {d.detail.creneaux_total} avant le butoir du {dateFr(d.detail.butoir.date)} {d.detail.butoir.heure}).
                 <!--
                   Remède adapté selon `d.detail.groupes` (feedback Stéphane
@@ -1356,7 +1356,7 @@
               </li>
             {/each}
             {#if surcharges.length > 8}
-              <li>… et {surcharges.length - 8} autres</li>
+              <li>… et {surcharges.length - 8} {accord(surcharges.length - 8, 'autre')}</li>
             {/if}
           </ul>
         </div>
@@ -1395,8 +1395,9 @@
             <div class="msg warn">
               <b>Session non configurable — aucun créneau généré.</b>
               <p class="mini-h">
-                La grille de la session ne produit aucun créneau : les {exclusions.length} musicien(s)
-                engagé(s) sont mécaniquement sans place. La cause est globale, pas
+                La grille de la session ne produit aucun créneau : {exclusions.length > 1
+                  ? `les ${exclusions.length} musiciens engagés sont`
+                  : 'le musicien engagé est'} mécaniquement sans place. La cause est globale, pas
                 individuelle — voir <b>Étape 2b Session</b> ci-dessus pour le
                 détail des règles pathologiques.
               </p>
@@ -1416,7 +1417,7 @@
             <div class="msg warn">
               <b>Contrôle en amont : plus aucun créneau avant le butoir du {dateFr(b.date)} {b.heure}.</b>
               <p class="mini-h">
-                {parCalendrier.length} musicien(s) engagé(s) sont sans place : la cause est le calendrier.
+                {parCalendrier.length > 1 ? `${parCalendrier.length} musiciens engagés sont` : '1 musicien engagé est'} sans place : la cause est le calendrier.
                 Corrigez le butoir ou les dates à l'<b>étape 2b Session</b>.
               </p>
             </div>
@@ -1433,15 +1434,15 @@
               <ul>
                 {#each parPersonne.slice(0, 8) as d}
                   <li>
-                    <b>{d.nom}</b> — n'a accès à aucun des
-                    {d.detail.creneaux_total} créneaux avant le butoir du {dateFr(d.detail.butoir.date)} {d.detail.butoir.heure}
+                    <b>{d.nom}</b> — {d.detail.creneaux_total > 1
+                      ? `n'a accès à aucun des ${d.detail.creneaux_total} créneaux`
+                      : "n'a pas accès au seul créneau"} avant le butoir du {dateFr(d.detail.butoir.date)} {d.detail.butoir.heure}
                     (demande <b>{d.demande}</b> :
-                    {d.detail.groupes} groupes × {d.detail.repetitions_visees}
-                    {#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} imposés{/if}).
+                    {d.detail.groupes} {accord(d.detail.groupes, 'groupe')} × {d.detail.repetitions_visees}{#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} {accord(d.detail.seances_imposees, 'imposé')}{/if}).
                   </li>
                 {/each}
                 {#if parPersonne.length > 8}
-                  <li>… et {parPersonne.length - 8} autres</li>
+                  <li>… et {parPersonne.length - 8} {accord(parPersonne.length - 8, 'autre')}</li>
                 {/if}
               </ul>
             </div>
@@ -1488,11 +1489,11 @@
                  synchronisation (le cas B « saturation capacité » manquait).
                  Ne PAS affirmer l'optimalité (« maximum atteignable ») —
                  le solveur s'arrête, pas nécessairement à l'optimum. -->
-            <b>Placement heuristique : {nComplets}/{nTotal} groupes complets.</b>
+            <b>Placement heuristique : {nComplets}/{nTotal} {accord(nTotal, 'groupe complet', 'groupes complets')}.</b>
             Voir « Pourquoi ça bloque » ci-dessous pour la cause identifiée par groupe.
           {:else if solveurStore.solution.arret_precoce === 'budget'}
             <b>Calcul interrompu à {Math.round(solveurStore.budgetMsCourant / 1000)} s pour ne pas geler l'écran.</b>
-            {nComplets}/{nTotal} groupes complets après {solveurStore.solution.essais_executes}
+            {nComplets}/{nTotal} {accord(nTotal, 'groupe complet', 'groupes complets')} après {solveurStore.solution.essais_executes}
             essai{solveurStore.solution.essais_executes > 1 ? 's' : ''}. Le solveur n'a pas exploré
             toutes les combinaisons.
             <button
@@ -1504,7 +1505,7 @@
             </button>
           {:else if solveurStore.solution.arret_precoce === 'stagnation'}
             <b>{nManquants > 0 ? `${nManquants} groupe${nManquants > 1 ? 's non placés' : ' non placé'}` : 'Optimum atteint'}
-              après {solveurStore.solution.essais_executes} essais sans progrès.</b>
+              après {solveurStore.solution.essais_executes} {accord(solveurStore.solution.essais_executes, 'essai')} sans progrès.</b>
             {#if nManquants > 0}
               <!-- Idem heuristique : renvoi neutre vers « Pourquoi ça bloque »,
                    pas d'énumération de causes potentielles à côté du canal
@@ -1515,7 +1516,7 @@
             {/if}
           {:else if solveurStore.solution.arret_precoce === 'max-essais'}
             <b>{nManquants} groupe{nManquants > 1 ? 's non placés' : ' non placé'}
-              après épuisement des {solveurStore.solution.essais_executes} essais.</b>
+              {solveurStore.solution.essais_executes > 1 ? `après épuisement des ${solveurStore.solution.essais_executes} essais` : 'après un seul essai'}.</b>
             Le solveur a plafonné à {nComplets}/{nTotal} — voir le diagnostic
             « Pourquoi ça bloque » ci-dessous pour identifier ce qui bloque.
           {/if}
@@ -1527,7 +1528,7 @@
           <ul>
             {#each solveurStore.solution.problemes.slice(0, 8) as pb}<li>{pb.message}</li>{/each}
             {#if solveurStore.solution.problemes.length > 8}
-              <li>… et {solveurStore.solution.problemes.length - 8} autres</li>
+              <li>… et {solveurStore.solution.problemes.length - 8} {accord(solveurStore.solution.problemes.length - 8, 'autre')}</li>
             {/if}
           </ul>
         </div>
@@ -1541,7 +1542,7 @@
           <ul>
             {#each solveurStore.solution.groupesPerdus.slice(0, 8) as gp}<li>{gp.raison}</li>{/each}
             {#if solveurStore.solution.groupesPerdus.length > 8}
-              <li>… et {solveurStore.solution.groupesPerdus.length - 8} autres</li>
+              <li>… et {solveurStore.solution.groupesPerdus.length - 8} {accord(solveurStore.solution.groupesPerdus.length - 8, 'autre')}</li>
             {/if}
           </ul>
         </div>
@@ -1550,7 +1551,7 @@
         <div class="msg warn">
           <b>Pourquoi ça bloque</b>
           <p class="mini-h">
-            Ces groupes n'ont pas atteint la cible ({session.repetitions_visees} répétitions).
+            Ces groupes n'ont pas atteint la cible ({session.repetitions_visees} {accord(session.repetitions_visees, 'répétition')}).
             Voici sur quoi agir.
           </p>
           {#each solveurStore.solution.diagnostics as d}
@@ -1599,7 +1600,7 @@
                      d'autres groupes » était faux pour les groupes
                      partiellement servis qui occupent aussi un des slots. -->
                 <br /><span class="ink-soft">
-                  {d.creneaux_ouverts} créneaux ouverts, aucun exploitable — la capacité est atteinte sur ces créneaux.
+                  {d.creneaux_ouverts} {accord(d.creneaux_ouverts, 'créneau ouvert', 'créneaux ouverts')}, aucun exploitable — la capacité est atteinte sur {accord(d.creneaux_ouverts, 'ce créneau', 'ces créneaux')}.
                 </span>
               {:else if d.partages.length > 0}
                 <!-- Cas C1 : capacité libre, musiciens partagés avec d'autres groupes.
@@ -1608,7 +1609,7 @@
                      énumère la piste sans la présenter comme conclusion. Troncature
                      au-delà de 3 groupes. -->
                 <br /><span class="ink-soft">
-                  {d.creneaux_ouverts} créneaux ouverts et de la place en salle : ce n'est pas la capacité qui bloque.
+                  {d.creneaux_ouverts} {accord(d.creneaux_ouverts, 'créneau ouvert', 'créneaux ouverts')} et de la place en salle : ce n'est pas la capacité qui bloque.
                 </span>
                 <br /><span class="ink-soft">
                   Musiciens en commun :
@@ -1624,14 +1625,15 @@
                      arrêté sans cause identifiable par le diagnostic simplifié —
                      on le dit franchement plutôt que d'inventer une cause plausible. -->
                 <br /><span class="ink-soft">
-                  {d.creneaux_ouverts} créneaux ouverts, de la place en salle, aucun musicien en commun avec un autre groupe. Le placement s'est arrêté sans cause identifiable ici.
+                  {d.creneaux_ouverts} {accord(d.creneaux_ouverts, 'créneau ouvert', 'créneaux ouverts')}, de la place en salle, aucun musicien en commun avec un autre groupe. Le placement s'est arrêté sans cause identifiable ici.
                 </span>
               {/if}
               {#if d.repetitions_deja_faites > 0}
                 <br /><span class="ink-soft">
                   Ce groupe a déjà commencé ses répétitions — modifier sa composition
-                  n'est plus une option. Leviers possibles : accepter que les {d.cible} répétitions
-                  restantes ne soient pas toutes placées (voir le minimum acceptable), libérer
+                  n'est plus une option. Leviers possibles : accepter que {d.cible > 1
+                    ? `les ${d.cible} répétitions restantes ne soient pas toutes placées`
+                    : 'la répétition restante ne soit pas placée'} (voir le minimum acceptable), libérer
                   des créneaux ailleurs (dégeler des figées, retirer un imposé), ou insérer un
                   nouveau créneau dans la grille.
                 </span>

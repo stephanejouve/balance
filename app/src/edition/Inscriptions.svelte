@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { accord } from '../domain/accord'
   import type { Inscriptions, Personne, Session } from '../domain/model'
   import { formatPosteCherche, formatPostesCherches, libellePersonne } from '../domain/model'
   import { analyserPlafondSalle } from '../engine/plafond-salle'
@@ -112,7 +113,7 @@
                   {#if plafond.etat === 'ne_loge_pas'}
                     <span
                       class="badge alerte"
-                      title="Effectif actuel {plafond.effectif_actuel} personnes > plus grande jauge active {plafond.plus_grande_jauge_active}"
+                      title="Effectif actuel {plafond.effectif_actuel} {accord(plafond.effectif_actuel, 'personne')} > plus grande jauge active {plafond.plus_grande_jauge_active}"
                     >
                       ne loge pas · {plafond.effectif_actuel} pers. > {plafond.plus_grande_jauge_active}
                     </span>

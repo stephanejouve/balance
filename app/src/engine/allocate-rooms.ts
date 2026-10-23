@@ -1,3 +1,4 @@
+import { accord } from '../domain/accord'
 import type { Creneau } from '../domain/grille'
 import type { Inscriptions, Lieu, Pupitre } from '../domain/model'
 import type { RegistreContraintes } from './contraintes'
@@ -212,7 +213,7 @@ export function attribuerSalles(
           groupe_id: gid,
           creneau_id: cid,
           effectif: eff,
-          raison: g ? `${g.titre} (${eff} musiciens) : ${raison}` : raison,
+          raison: g ? `${g.titre} (${eff} ${accord(eff, 'musicien')}) : ${raison}` : raison,
         })
         continue
       }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { accord } from '../domain/accord'
   import type { Inscriptions, Personne } from '../domain/model'
   import { libellePersonne } from '../domain/model'
   import InputDuree from './InputDuree.svelte'
@@ -40,7 +41,7 @@
       <div class="impose-bloc">
         <div class="impose-titre">
           <input bind:value={imp.morceau} onchange={onInvalider} class="strong" />
-          <span class="mono ink-soft">{imp.membres.length} membres</span>
+          <span class="mono ink-soft">{imp.membres.length} {accord(imp.membres.length, 'membre')}</span>
           <button class="mini" onclick={() => onSupprimerImpose(i)}>×</button>
         </div>
         <div class="chips">

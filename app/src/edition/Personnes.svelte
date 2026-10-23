@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { accord } from '../domain/accord'
   import { comptageEngagements } from '../domain/engagement'
   import type { Inscriptions, Lieu, Personne } from '../domain/model'
   import { libellePersonne } from '../domain/model'
@@ -177,8 +178,8 @@
           qui cherchent le pupitre.
           {#if compteursClasses.distinct !== compteursClasses.apparences}
             <span class="ink-soft">
-              — {compteursClasses.distinct} stagiaires distincts,
-              {compteursClasses.apparences} apparences (multi-pupitres).
+              — {compteursClasses.distinct} {accord(compteursClasses.distinct, 'stagiaire distinct', 'stagiaires distincts')},
+              {compteursClasses.apparences} {accord(compteursClasses.apparences, 'apparence')} (multi-pupitres).
             </span>
           {/if}
         </p>

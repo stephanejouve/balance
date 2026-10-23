@@ -75,6 +75,26 @@ describe('verifier — membres absents du modèle (#163)', () => {
     expect(pbs).toEqual([
       expect.objectContaining({ type: 'membre-inconnu', groupe_id: 'g1', message: expect.stringContaining('olivier-rouanet') }),
     ])
+    // #202 : accord au singulier pour un seul membre absent.
+    expect(pbs[0].message).toBe(
+      '« Blue Bossa » : 1 membre absent des personnes (olivier-rouanet) — ni ses indisponibilités ni son planning individuel ne sont vérifiés',
+    )
+  })
+
+  it('#202 : deux membres absents dans un groupe, au pluriel', () => {
+    const insc = Inscriptions.parse({
+      session_id: 's',
+      personnes: [{ id: 'alice', nom: 'Alice', instruments: [{ pupitre: 'chant' }] }],
+      groupes: [{ id: 'g1', titre: 'Blue Bossa', membres: [
+        { personne_id: 'alice', pupitre: 'chant' },
+        { personne_id: 'olivier-rouanet', pupitre: 'vents' },
+        { personne_id: 'ines-tabet', pupitre: 'vents' },
+      ] }],
+    })
+    const pbs = verifier(session, lieu, insc, creneaux, [{ groupe_id: 'g1', creneau_id: creneaux[0].id, salle_id: 'a' }])
+    expect(pbs[0].message).toBe(
+      '« Blue Bossa » : 2 membres absents des personnes (olivier-rouanet, ines-tabet) — ni leurs indisponibilités ni leur planning individuel ne sont vérifiés',
+    )
   })
 
   it('rien de placé : rien à signaler', () => {

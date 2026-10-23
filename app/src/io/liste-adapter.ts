@@ -1,3 +1,4 @@
+import { accord } from '../domain/accord'
 import { detacherNomInstrument } from '../domain/legacy'
 import type { LegacyGroupe } from '../domain/legacy'
 import type { PosteCherche, Pupitre, RoleChant } from '../domain/model'
@@ -182,7 +183,7 @@ export function extraireListe(rows: Cellule[][], mapping: MappingListe): Extract
   const warnings: string[] = []
   const ligneEnTete = mapping.ligneEnTete ?? 0
   if (rows.length <= ligneEnTete) {
-    return { groupes: [], warnings: [`classeur vide (${rows.length} lignes, en-tête ligne ${ligneEnTete})`] }
+    return { groupes: [], warnings: [`classeur vide (${rows.length} ${accord(rows.length, 'ligne')}, en-tête ligne ${ligneEnTete})`] }
   }
   const cols = indexerColonnes(rows[ligneEnTete])
 
