@@ -1340,7 +1340,7 @@
                 <b>{d.nom}</b> — demande <b>{d.demande}</b> {accord(d.demande, 'créneau', 'créneaux')}
                 ({d.detail.groupes} groupe{d.detail.groupes > 1 ? 's' : ''} × {d.detail.repetitions_visees}
                 {#if d.detail.seances_imposees > 0} + {d.detail.seances_imposees} {accord(d.detail.seances_imposees, 'imposé')}{/if})
-                mais seulement <b>{d.offre}</b> {accord(d.offre, 'lui est ouvert', 'lui sont ouverts')}
+                {#if d.offre === 0}mais aucun ne lui est ouvert{:else}mais seulement <b>{d.offre}</b> {accord(d.offre, 'lui est ouvert', 'lui sont ouverts')}{/if}
                 (sur {d.detail.creneaux_total} avant le butoir du {dateFr(d.detail.butoir.date)} {d.detail.butoir.heure}).
                 <!--
                   Remède adapté selon `d.detail.groupes` (feedback Stéphane
