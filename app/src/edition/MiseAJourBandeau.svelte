@@ -98,10 +98,13 @@
       </span>
       {#if peutRecharger}
         <!-- Rien ne survit au rechargement (aucun état en localStorage,
-             cf PR #140) : le dire avant le clic, pas après. -->
+             cf PR #140) : le dire avant le clic, pas après. Et ne pas
+             promettre plus que le bouton cité : exporterEtat écrit lieu,
+             session, inscriptions et contraintes, pas le planning (#209). -->
         <span class="details">
           Le rechargement repart d'une page vierge : sauvegarde d'abord ton travail
-          (« Sauvegarder l'état .json »).
+          (« Sauvegarder l'état .json »). Le .json garde les données, pas le planning :
+          les séances figées ou déplacées à la main seront à refaire.
         </span>
       {/if}
       {#if installation === 'inachevee'}

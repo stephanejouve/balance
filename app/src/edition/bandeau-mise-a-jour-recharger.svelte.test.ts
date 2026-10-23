@@ -37,7 +37,7 @@ it('sur le web (http:), path fetch : « Recharger » en principal, « Téléchar
 it('le bandeau prévient avant le clic que le rechargement repart d\'une page vierge', async () => {
   const r = await rendre()
   expect(r.container.textContent!.replace(/\s+/g, ' ')).toContain(
-    "Le rechargement repart d'une page vierge : sauvegarde d'abord ton travail (« Sauvegarder l'état .json »).",
+    "Le rechargement repart d'une page vierge : sauvegarde d'abord ton travail (« Sauvegarder l'état .json »). Le .json garde les données, pas le planning : les séances figées ou déplacées à la main seront à refaire.",
   )
   r.fin()
 })
