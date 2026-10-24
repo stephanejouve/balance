@@ -101,7 +101,9 @@
       case 'session-terminee':
         // CD msg 6839 : ne pas envoyer chercher un défaut inexistant. La
         // grille est saine, seule la date_fin passée écrase les créneaux.
-        return "la session est terminée (date de fin dans le passé) — utilisez le bandeau « Rejouer à cette date » en tête de page pour re-simuler"
+        // #203 : sans l'emplacement du bandeau (il est en bas de page, pas
+        // en tête) et avec la sortie vers le présent.
+        return 'la session est terminée (date de fin dans le passé) — changez ses dates ci-dessous pour une session à venir'
       default:
         return categorie
     }

@@ -32,6 +32,7 @@
   import { analyserIdentitesCandidat, type AnalyseIdentitesImport } from './io/alertes-import'
   import BandeauMaintenantFixe from './edition/BandeauMaintenantFixe.svelte'
   import BandeauSessionTerminee from './edition/BandeauSessionTerminee.svelte'
+  import MessageSessionTerminee from './edition/MessageSessionTerminee.svelte'
   import MiseAJourBandeau from './edition/MiseAJourBandeau.svelte'
   import PiedDePage from './edition/PiedDePage.svelte'
   import Carte from './vues/Carte.svelte'
@@ -1379,18 +1380,13 @@
               Cas spécifique CD msg 6839 : quand la grille est saine mais que
               date_fin est passée, ne pas envoyer chercher des règles
               pathologiques inexistantes. Pointer vers le bandeau Rejouer
-              en tête de page (livré PR #124) qui est le vrai remède.
+              (livré PR #124), le remède vers le passé — et, depuis #203, la
+              sortie vers le présent (voir MessageSessionTerminee).
             -->
-            <div class="msg warn">
-              <b>Session terminée — aucun créneau à placer aujourd'hui.</b>
-              <p class="mini-h">
-                Les dates de cette session sont dans le passé, aucun créneau ne
-                peut donc être proposé au présent. Les règles de grille sont
-                saines — c'est le calendrier qui écrase les créneaux. Utilisez
-                le bandeau <b>« Rejouer à cette date »</b> en tête de page pour
-                re-simuler la session à sa date d'origine.
-              </p>
-            </div>
+            <MessageSessionTerminee
+              maintenantFixe={maintenantFixe !== null}
+              rejouerAffiche={propositionRejouerCourante !== null}
+            />
           {:else}
             <div class="msg warn">
               <b>Session non configurable — aucun créneau généré.</b>
