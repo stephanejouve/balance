@@ -17,13 +17,13 @@ function conteneur(reg: Partial<ServiceWorkerRegistration> | undefined) {
 }
 
 it('sans service worker : on peut recharger', async () => {
-  expect(await preparerRechargement(undefined)).toBe(true)
-  expect(await preparerRechargement(conteneur(undefined) as never)).toBe(true)
+  expect(await preparerRechargement(undefined)).toBe('pret')
+  expect(await preparerRechargement(conteneur(undefined) as never)).toBe('pret')
 })
 
 it('aucun SW en installation après update() : on peut recharger', async () => {
   const update = vi.fn(async () => undefined)
-  expect(await preparerRechargement(conteneur({ update, installing: null, waiting: null } as never) as never)).toBe(true)
+  expect(await preparerRechargement(conteneur({ update, installing: null, waiting: null } as never) as never)).toBe('pret')
   expect(update).toHaveBeenCalledOnce()
 })
 
@@ -34,7 +34,7 @@ it('SW en installation : on attend qu\'il prenne le contrôle', async () => {
   await Promise.resolve(); await Promise.resolve()
   expect(fini).toBe(false)
   c.prendreControle()
-  expect(await p).toBe(true)
+  expect(await p).toBe('pret')
 })
 
 it('SW en installation qui n\'aboutit pas dans le délai : on ne recharge pas', async () => {
@@ -42,13 +42,13 @@ it('SW en installation qui n\'aboutit pas dans le délai : on ne recharge pas', 
   const c = conteneur({ update: async () => undefined, installing: {} as ServiceWorker, waiting: null } as never)
   const p = preparerRechargement(c as never, 1000)
   await vi.advanceTimersByTimeAsync(1001)
-  expect(await p).toBe(false)
+  expect(await p).toBe('delai')
   vi.useRealTimers()
 })
 
 it('update() en échec : on ne recharge pas', async () => {
   const c = conteneur({ update: async () => { throw new Error('offline') } } as never)
-  expect(await preparerRechargement(c as never)).toBe(false)
+  expect(await preparerRechargement(c as never)).toBe('echec')
 })
 
 it('update() qui ne répond jamais : le délai le couvre, on ne recharge pas', async () => {
@@ -56,6 +56,6 @@ it('update() qui ne répond jamais : le délai le couvre, on ne recharge pas', a
   const c = conteneur({ update: () => new Promise<never>(() => {}) } as never)
   const p = preparerRechargement(c as never, 1000)
   await vi.advanceTimersByTimeAsync(1001)
-  expect(await p).toBe(false)
+  expect(await p).toBe('delai')
   vi.useRealTimers()
 })

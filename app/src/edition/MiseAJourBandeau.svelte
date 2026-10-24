@@ -7,12 +7,18 @@
     preparerEtatMaJPathSW,
     type EtatMiseAJour,
   } from './mise-a-jour'
+  import { rechargerPage } from './recharger-page'
   import { enregistrer, preparerRechargement } from './sw-register'
 
   let etat = $state<EtatMiseAJour | null>(null)
   let masque = $state(false)
-  /** #205 : « Recharger » cliqué, nouveau SW pas encore aux commandes. */
-  let installation: 'en-cours' | 'inachevee' | null = $state(null)
+  /**
+   * #205 : « Recharger » cliqué, nouveau SW pas encore aux commandes.
+   * #216 : passé le délai, `attente` jusqu'au `controllerchange`, puis
+   * `prete` : la page ne se recharge pas d'elle-même, un nouveau clic le
+   * fait (arbitrage CD 59806). `echec` si la vérification n'a pas eu lieu.
+   */
+  let installation: 'en-cours' | 'attente' | 'prete' | 'echec' | null = $state(null)
 
   // #205 : sur le web, recharger suffit. Le SW installe la nouvelle
   // version (skipWaiting + clients.claim) et la sert au chargement
@@ -36,6 +42,19 @@
   }
 
   onMount(() => {
+    // #216 : le nouveau SW peut prendre la main APRÈS le délai (30 s
+    // mesurées en production pour 15 s). Pas de rechargement tardif : un
+    // clic vaut accord pour recharger tout de suite, pas trente secondes
+    // plus tard. Le bandeau annonce la version prête, et un message
+    // d'échec qui nierait la prise de main disparaît. `en-cours` : c'est
+    // `preparerRechargement` qui écoute et recharge.
+    const sw = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined
+    const surPriseDeMain = () => {
+      if (installation === 'attente') installation = 'prete'
+      else if (installation === 'echec') installation = null
+    }
+    sw?.addEventListener('controllerchange', surPriseDeMain)
+
     // 1. Path SW (usage web, http(s)://) — le SW détecte push et notifie.
     //    Le SW ne connaît pas le numéro de version cible (juste qu'une
     //    nouvelle est prête). On fetch le manifest pour l'afficher —
@@ -66,6 +85,8 @@
         afficher(e)
       }
     })
+
+    return () => sw?.removeEventListener('controllerchange', surPriseDeMain)
   })
 
   function fermer() {
@@ -77,12 +98,11 @@
 
   async function recharger() {
     installation = 'en-cours'
-    if (await preparerRechargement()) {
-      window.location.reload()
-    } else {
-      installation = 'inachevee'
-    }
+    const issue = await preparerRechargement()
+    if (issue === 'pret') rechargerPage()
+    else installation = issue === 'delai' ? 'attente' : 'echec'
   }
+
 </script>
 
 {#if etat?.statut === 'nouvelle-version' && !masque}
@@ -107,9 +127,21 @@
           les séances figées ou déplacées à la main seront à refaire.
         </span>
       {/if}
-      {#if installation === 'inachevee'}
+      {#if installation === 'attente'}
+        <!-- #216 : vrai tant que l'écoute tient ; au controllerchange le
+             bandeau passe à `prete`, sans recharger. -->
         <span class="details">
-          La nouvelle version n'est pas encore installée : réessaie dans un instant.
+          L'installation prend plus de temps que prévu. La page ne se rechargera pas d'elle-même :
+          ce message changera quand la nouvelle version sera prête.
+        </span>
+      {:else if installation === 'prete'}
+        <span class="details">
+          La nouvelle version est prête : clique sur « Recharger » pour l'utiliser.
+        </span>
+      {:else if installation === 'echec'}
+        <!-- #216 : retiré au controllerchange, qui le rendrait faux. -->
+        <span class="details">
+          La vérification de la nouvelle version a échoué : réessaie dans un instant.
         </span>
       {/if}
     </div>
