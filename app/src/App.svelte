@@ -1536,9 +1536,18 @@
         <div class="msg ok">Aucun conflit détecté par la vérification indépendante.</div>
       {/if}
       {#if solveurStore.solution.groupesPerdus && solveurStore.solution.groupesPerdus.length > 0}
+        {@const perdus = solveurStore.solution.groupesPerdus}
+        {@const nGroupesPerdus = new Set(perdus.map((gp) => gp.groupe_id)).size}
+        <!--
+          #208 : le bloc dénombre des séances (une par groupe et par créneau),
+          pas des groupes — 39 séances pour 13 groupes sur la démo. Il le dit,
+          avec le nombre de groupes à côté. La cause est donnée ligne par ligne.
+        -->
         <div class="msg warn">
-          <b>Groupes non logés :</b> {solveurStore.solution.groupesPerdus.length} groupe(s) placé(s) horairement
-          mais l'attribution des salles n'a pas trouvé de place — jauge ou concurrence.
+          <b>Séances sans salle :</b> {perdus.length > 1
+            ? `${perdus.length} séances placées dans l'emploi du temps n'ont pas reçu de salle`
+            : "1 séance placée dans l'emploi du temps n'a pas reçu de salle"}
+          ({nGroupesPerdus} {accord(nGroupesPerdus, 'groupe concerné', 'groupes concernés')}). Cause, séance par séance :
           <ul>
             {#each solveurStore.solution.groupesPerdus.slice(0, 8) as gp}<li>{gp.raison}</li>{/each}
             {#if solveurStore.solution.groupesPerdus.length > 8}

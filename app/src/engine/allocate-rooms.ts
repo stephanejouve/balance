@@ -1,5 +1,5 @@
 import { accord } from '../domain/accord'
-import type { Creneau } from '../domain/grille'
+import { dateFr, type Creneau } from '../domain/grille'
 import type { Inscriptions, Lieu, Pupitre } from '../domain/model'
 import type { RegistreContraintes } from './contraintes'
 import { actif } from './contraintes'
@@ -162,6 +162,11 @@ export function attribuerSalles(
       }),
     )
     const groupesIci = [...(parCreneau.get(cid) ?? [])]
+    // Qui occupe quelle salle sur ce créneau : sert à nommer la cause d'un
+    // groupe perdu (#208), « prise par tel groupe » plutôt que « jauge ou
+    // concurrence ».
+    const occupant = new Map<string, string>()
+    for (const f of options.figees ?? []) if (f.creneau_id === cid) occupant.set(f.salle_id, f.groupe_id)
 
     // Ordre : ceux qui enchaînent d'abord, puis les grands
     groupesIci.sort((a, b) => {
@@ -183,6 +188,7 @@ export function attribuerSalles(
       if (enchaine && restant.has(d.salle)) {
         assignations.push({ groupe_id: gid, creneau_id: cid, salle_id: d.salle })
         restant.delete(d.salle)
+        occupant.set(d.salle, gid)
         if (!dejaVues.has(gid)) dejaVues.set(gid, new Set())
         dejaVues.get(gid)!.add(d.salle)
         dernier.set(gid, { date: creneau.date, fin: creneau.fin, salle: d.salle })
@@ -199,21 +205,12 @@ export function attribuerSalles(
         // Groupe perdu : le solveur l'a placé à ce créneau mais aucune salle
         // active n'accueille son effectif ici. On signale au lieu de swallow
         // (bug identifié à l'audit Leader — auparavant silent `continue`).
-        const sallesOuvertes = restant.size
-        const sallesTropPetites = [...restant].filter((sid) => {
-          const s = sallesParId.get(sid)
-          return s != null && s.jauge < eff
-        }).length
-        const raison =
-          sallesOuvertes === 0
-            ? 'aucune salle disponible sur ce créneau (toutes prises par des groupes précédents)'
-            : `effectif ${eff} > jauge de toutes les salles restantes (${sallesTropPetites} salle(s) trop petite(s))`
         const g = groupesParId.get(gid)
         groupesPerdus.push({
           groupe_id: gid,
           creneau_id: cid,
           effectif: eff,
-          raison: g ? `${g.titre} (${eff} ${accord(eff, 'musicien')}) : ${raison}` : raison,
+          raison: `${g ? g.titre : gid} (${eff} ${accord(eff, 'musicien')}), ${dateFr(creneau.date)} ${creneau.debut} : ${causeSansSalle(eff, creneau, restant, occupant)}`,
         })
         continue
       }
@@ -245,11 +242,42 @@ export function attribuerSalles(
 
       assignations.push({ groupe_id: gid, creneau_id: cid, salle_id: chosen })
       restant.delete(chosen)
+      occupant.set(chosen, gid)
       if (!dejaVues.has(gid)) dejaVues.set(gid, new Set())
       dejaVues.get(gid)!.add(chosen)
       dernier.set(gid, { date: creneau.date, fin: creneau.fin, salle: chosen })
       marquerLourdsSurSalle(gid, chosen)
     }
+  }
+
+  /**
+   * #208 : la cause nommée salle par salle. Les deux causes commandent des
+   * gestes opposés (agrandir une jauge, ou libérer une salle) : la phrase
+   * ne doit pas laisser deviner laquelle. Pour chaque salle assez grande,
+   * ce qui l'empêche ; puis le compte des salles trop petites.
+   */
+  function causeSansSalle(eff: number, creneau: Creneau, restant: Set<string>, occupant: Map<string, string>): string {
+    const grandes = lieu.salles.filter((s) => s.jauge >= eff)
+    if (grandes.length === 0) {
+      const plusGrande = Math.max(0, ...lieu.salles.map((s) => s.jauge))
+      return `aucune salle du lieu n'accueille ${eff} ${accord(eff, 'musicien')} (la plus grande a ${plusGrande} ${accord(plusGrande, 'place')})`
+    }
+    const empeches = grandes.map((s) => {
+      const nom = `${s.nom} (${s.jauge} ${accord(s.jauge, 'place')})`
+      const gid = occupant.get(s.id)
+      if (gid !== undefined) return `${nom} est prise par ${groupesParId.get(gid)?.titre ?? gid}`
+      if (!s.actif) return `${nom} est désactivée`
+      return `${nom} est fermée à ce créneau`
+    })
+    // Tout ce qui reste libre est trop petit, sinon le groupe aurait sa salle.
+    const petites = restant.size
+    const suite =
+      petites === 0
+        ? ''
+        : petites === 1
+          ? ` ; l'autre salle libre a moins de ${eff} ${accord(eff, 'place')}`
+          : ` ; les ${petites} autres salles libres ont moins de ${eff} ${accord(eff, 'place')}`
+    return `${empeches.join(' ; ')}${suite}`
   }
 
   const warnings = groupesPerdus.map((gp) => `Groupe non logé : ${gp.raison}`)
