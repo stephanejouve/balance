@@ -41,6 +41,16 @@ export async function enregistrer(
 }
 
 /**
+ * Issue de `preparerRechargement` :
+ * - `pret`  : recharger servira la nouvelle version ;
+ * - `delai` : le nouveau SW n'a pas pris la main dans le délai. Il peut
+ *   encore la prendre : l'appelant garde l'écoute de `controllerchange`
+ *   (#216, mesuré en production à 30 s pour un délai de 15 s) ;
+ * - `echec` : `update()` a levé, la vérification n'a pas eu lieu.
+ */
+export type IssueRechargement = 'pret' | 'delai' | 'echec'
+
+/**
  * #205 : avant de recharger, s'assurer que le rechargement servira bien la
  * nouvelle version. La navigation passe par le cache du SW : un clic fait
  * pendant que le nouveau SW s'installe ressert l'ancienne version, et le
@@ -48,36 +58,36 @@ export async function enregistrer(
  * attend que le nouveau SW prenne le contrôle (`skipWaiting` +
  * `clients.claim` émettent `controllerchange`).
  *
- * Retourne `true` quand recharger servira la nouvelle version : pas de SW
- * (le document est revalidé au réseau), aucun SW en cours d'installation,
- * ou nouveau SW aux commandes. Retourne `false` si la mise à jour échoue
- * ou si la séquence entière, update() compris, dépasse le délai :
- * l'appelant ne doit pas recharger.
+ * `pret` quand recharger servira la nouvelle version : pas de SW (le
+ * document est revalidé au réseau), aucun SW en cours d'installation, ou
+ * nouveau SW aux commandes. `echec` si la mise à jour lève, `delai` si la
+ * séquence entière, update() compris, dépasse le délai. Dans ces deux cas
+ * l'appelant ne doit pas recharger tout de suite.
  */
 export async function preparerRechargement(
   sw: ServiceWorkerContainer | undefined = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined,
   delaiMs: number = 15000,
-): Promise<boolean> {
-  if (!sw) return true
+): Promise<IssueRechargement> {
+  if (!sw) return 'pret'
   // Un seul délai pour toute la séquence, update() compris : sur un réseau
   // qui ne répond plus, le fetch de sw.js peut pendre bien au-delà de 15 s,
   // et le bouton resterait « Installation… » (review Leader #209).
   let minuteur: ReturnType<typeof setTimeout> | undefined
   let prise: (() => void) | undefined
-  const delai = new Promise<boolean>((resolve) => {
-    minuteur = setTimeout(() => resolve(false), delaiMs)
+  const delai = new Promise<IssueRechargement>((resolve) => {
+    minuteur = setTimeout(() => resolve('delai'), delaiMs)
   })
-  const attente = (async (): Promise<boolean> => {
+  const attente = (async (): Promise<IssueRechargement> => {
     const reg = await sw.getRegistration()
-    if (!reg) return true
+    if (!reg) return 'pret'
     try {
       await reg.update()
     } catch {
-      return false
+      return 'echec'
     }
-    if (!reg.installing && !reg.waiting) return true
-    return new Promise<boolean>((resolve) => {
-      prise = () => resolve(true)
+    if (!reg.installing && !reg.waiting) return 'pret'
+    return new Promise<IssueRechargement>((resolve) => {
+      prise = () => resolve('pret')
       sw.addEventListener('controllerchange', prise, { once: true })
     })
   })()
